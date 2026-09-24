@@ -82,7 +82,8 @@ SyncBatchResult SyncProcessor::process(const QByteArray& body, const QByteArray&
         // opId the exactly-once journal key (device_id, op_id) is meaningless.
         const QString identityError = validateOpIdentity(op);
         if (!identityError.isEmpty()) {
-            result.errors.append({ op.value(QStringLiteral("opId")).toInt(), identityError });
+            result.errors.append({ op.value(QStringLiteral("opId")).toInt(),
+                                   SyncErrorClass::Permanent, identityError });
             continue;
         }
 
@@ -115,6 +116,7 @@ SyncBatchResult SyncProcessor::process(const QByteArray& body, const QByteArray&
         case static_cast<int>(app::core::SyncOpType::Sale): {
             if (!open.has_value()) {
                 result.errors.append({ op.value(QStringLiteral("opId")).toInt(),
+                                       SyncErrorClass::Retry,
                                        QStringLiteral("no open cash session") });
                 continue;
             }
@@ -128,6 +130,7 @@ SyncBatchResult SyncProcessor::process(const QByteArray& body, const QByteArray&
         case static_cast<int>(app::core::SyncOpType::CustomerPayment): {
             if (!open.has_value()) {
                 result.errors.append({ op.value(QStringLiteral("opId")).toInt(),
+                                       SyncErrorClass::Retry,
                                        QStringLiteral("no open cash session") });
                 continue;
             }
@@ -140,7 +143,9 @@ SyncBatchResult SyncProcessor::process(const QByteArray& body, const QByteArray&
         }
 
         if (!error.isEmpty()) {
-            result.errors.append({ applied.opId, error });
+            result.errors.append({ applied.opId == 0 ? op.value(QStringLiteral("opId")).toInt()
+                                                     : applied.opId,
+                                   SyncErrorClass::Permanent, error });
         } else {
             result.applied.append(applied);
         }
@@ -161,14 +166,16 @@ SyncBatchResult SyncProcessor::processJson(const QJsonArray& ops)
 
     for (const QJsonValue& value : ops) {
         if (!value.isObject()) {
-            result.errors.append({ 0, QStringLiteral("operation is not a JSON object") });
+            result.errors.append({ 0, SyncErrorClass::Permanent,
+                                   QStringLiteral("operation is not a JSON object") });
             continue;
         }
         const QJsonObject op = value.toObject();
 
         const QString identityError = validateOpIdentity(op);
         if (!identityError.isEmpty()) {
-            result.errors.append({ op.value(QStringLiteral("opId")).toInt(), identityError });
+            result.errors.append({ op.value(QStringLiteral("opId")).toInt(),
+                                   SyncErrorClass::Permanent, identityError });
             continue;
         }
 
@@ -196,7 +203,8 @@ SyncBatchResult SyncProcessor::processJson(const QJsonArray& ops)
         switch (type) {
         case static_cast<int>(app::core::SyncOpType::Sale): {
             if (!open.has_value()) {
-                result.errors.append({ opId, QStringLiteral("no open cash session") });
+                result.errors.append({ opId, SyncErrorClass::Retry,
+                                       QStringLiteral("no open cash session") });
                 continue;
             }
             applied = applySale(op, open->id, &error);
@@ -208,7 +216,8 @@ SyncBatchResult SyncProcessor::processJson(const QJsonArray& ops)
         }
         case static_cast<int>(app::core::SyncOpType::CustomerPayment): {
             if (!open.has_value()) {
-                result.errors.append({ opId, QStringLiteral("no open cash session") });
+                result.errors.append({ opId, SyncErrorClass::Retry,
+                                       QStringLiteral("no open cash session") });
                 continue;
             }
             applied = applyPayment(op, open->id, &error);
@@ -219,7 +228,8 @@ SyncBatchResult SyncProcessor::processJson(const QJsonArray& ops)
             break;
         }
         if (!error.isEmpty()) {
-            result.errors.append({ applied.opId == 0 ? opId : applied.opId, error });
+            result.errors.append({ applied.opId == 0 ? opId : applied.opId,
+                                   SyncErrorClass::Permanent, error });
         } else {
             result.applied.append(applied);
         }

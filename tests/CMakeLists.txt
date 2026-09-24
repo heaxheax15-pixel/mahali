@@ -28,6 +28,17 @@ target_link_libraries(tst_device
 
 add_test(NAME device COMMAND tst_device)
 
+add_executable(tst_coordinator tst_coordinator.cpp)
+target_link_libraries(tst_coordinator
+    PRIVATE
+        mahali-core
+        mahali-data
+        mahali-network
+        Qt${QT_VERSION_MAJOR}::Network
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME coordinator COMMAND tst_coordinator)
+
 add_executable(tst_finance tst_finance.cpp)
 target_link_libraries(tst_finance
     PRIVATE

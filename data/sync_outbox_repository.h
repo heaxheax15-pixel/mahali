@@ -24,6 +24,10 @@ public:
     bool markApplied(int id);
     bool markPermanentFailed(int id, const QString& error);
 
+    // Bumps the delivery-attempt counter so the operator can see how many LAN
+    // tries each still-pending operation has survived.
+    bool recordAttempt(int id);
+
 private:
     Database& m_db;
 };

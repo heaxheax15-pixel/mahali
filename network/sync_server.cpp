@@ -47,13 +47,18 @@ ack.insert(QStringLiteral("totalCents"),
                        }
                        payload.insert(QStringLiteral("applied"), applied);
 
-                       QJsonArray errors;
-                       for (const SyncOpError& op : result.errors) {
-                           QJsonObject error;
-                           error.insert(QStringLiteral("opId"), op.opId);
-                           error.insert(QStringLiteral("message"), op.message);
-                           errors.append(error);
-                       }
+QJsonArray errors;
+                        for (const SyncOpError& op : result.errors) {
+                            QJsonObject error;
+                            error.insert(QStringLiteral("opId"), op.opId);
+                            // Per-op error class travels with the ACK so the
+                            // device treats transient gaps ("no open cash
+                            // session") as retryable, unlike hard rejections.
+                            error.insert(QStringLiteral("errorClass"),
+                                         static_cast<int>(op.errorClass));
+                            error.insert(QStringLiteral("message"), op.message);
+                            errors.append(error);
+                        }
                        payload.insert(QStringLiteral("errors"), errors);
 
                        if (!result.hmacValid) {

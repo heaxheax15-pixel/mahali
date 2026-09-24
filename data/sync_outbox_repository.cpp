@@ -130,4 +130,12 @@ bool SyncOutboxRepository::markPermanentFailed(int id, const QString& error)
     return query.exec();
 }
 
+bool SyncOutboxRepository::recordAttempt(int id)
+{
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral("UPDATE sync_outbox SET attempts = attempts + 1 WHERE id = ?"));
+    query.addBindValue(id);
+    return query.exec() && query.numRowsAffected() == 1;
+}
+
 } // namespace app::data

@@ -9,6 +9,7 @@
 #include "data/database.h"
 #include "data/payment_service.h"
 #include "data/sale_service.h"
+#include "sync_protocol.h"
 
 namespace app::network {
 
@@ -23,6 +24,7 @@ struct SyncAppliedOp {
 
 struct SyncOpError {
     int opId = 0;
+    SyncErrorClass errorClass = SyncErrorClass::Permanent; // per-op verdict
     QString message;
 };
 

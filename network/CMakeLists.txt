@@ -17,6 +17,8 @@ target_link_libraries(mahali-network
 target_sources(mahali-network PRIVATE
     sync_client.cpp
     sync_client.h
+    sync_coordinator.cpp
+    sync_coordinator.h
     sync_protocol.cpp
     sync_protocol.h
     sync_server.cpp

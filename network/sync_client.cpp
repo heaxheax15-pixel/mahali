@@ -79,7 +79,14 @@ SyncSendResult SyncClient::sendBatch(const QUrl& endpoint, const QByteArray& hma
             SyncAck ack;
             ack.ok = false;
             ack.appliedOpId = value.toObject().value(QStringLiteral("opId")).toInt();
-            ack.errorClass = result.errorClass;
+
+            // Prefer the per-op error class the server attached (so, e.g., "no
+            // open cash session" is retried rather than canned), falling back to
+            // the batch-level class for older/terser responses.
+            const QJsonValue perOpClass = value.toObject().value(QStringLiteral("errorClass"));
+            ack.errorClass = perOpClass.isDouble()
+                ? static_cast<SyncErrorClass>(perOpClass.toInt())
+                : result.errorClass;
             ack.message = value.toObject().value(QStringLiteral("message")).toString();
             result.acks.append(ack);
         }
