@@ -10,3 +10,11 @@ target_link_libraries(tst_smoke
         Qt${QT_VERSION_MAJOR}::Test)
 
 add_test(NAME smoke COMMAND tst_smoke)
+
+add_executable(tst_data tst_data.cpp)
+target_link_libraries(tst_data
+    PRIVATE
+        mahali-data
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME data COMMAND tst_data)
