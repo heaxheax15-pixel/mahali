@@ -1,0 +1,6 @@
+add_executable(mahali-desktop main.cpp)
+
+target_link_libraries(mahali-desktop
+    PRIVATE
+        mahali-ui
+        Qt${QT_VERSION_MAJOR}::Widgets)
