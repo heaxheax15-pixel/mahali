@@ -35,3 +35,14 @@ target_link_libraries(tst_sync
         Qt${QT_VERSION_MAJOR}::Test)
 
 add_test(NAME sync COMMAND tst_sync)
+
+add_executable(tst_sync_server tst_sync_server.cpp)
+target_link_libraries(tst_sync_server
+    PRIVATE
+        mahali-core
+        mahali-data
+        mahali-network
+        Qt${QT_VERSION_MAJOR}::Network
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME sync_server COMMAND tst_sync_server)

@@ -22,6 +22,16 @@ QByteArray SyncProtocol::serializeOp(const app::core::SyncOperation& op)
     json["occurredAt"] = op.occurredAt.toUTC().toString(Qt::ISODateWithMs);
     json["note"] = op.note;
     json["deviceId"] = op.deviceId;
+
+    QJsonArray items;
+    for (const app::core::SyncItem& item : op.items) {
+        QJsonObject itemJson;
+        itemJson["productId"] = item.productId;
+        itemJson["quantity"] = QJsonValue(static_cast<double>(item.quantity));
+        itemJson["unitPriceCents"] = QJsonValue(static_cast<double>(item.unitPriceCents));
+        items.append(itemJson);
+    }
+    json["items"] = items;
     return QJsonDocument(json).toJson(QJsonDocument::Compact);
 }
 
@@ -40,6 +50,20 @@ std::optional<app::core::SyncOperation> SyncProtocol::deserializeOp(const QJsonO
     op.occurredAt = QDateTime::fromString(json.value(QStringLiteral("occurredAt")).toString(), Qt::ISODateWithMs);
     op.note = json.value(QStringLiteral("note")).toString();
     op.deviceId = json.value(QStringLiteral("deviceId")).toString();
+
+    const QJsonArray items = json.value(QStringLiteral("items")).toArray();
+    for (const QJsonValue& value : items) {
+        if (!value.isObject()) {
+            return std::nullopt;
+        }
+        const QJsonObject itemJson = value.toObject();
+        app::core::SyncItem item;
+        item.productId = itemJson.value(QStringLiteral("productId")).toInt();
+        item.quantity = static_cast<long long>(itemJson.value(QStringLiteral("quantity")).toDouble());
+        item.unitPriceCents =
+            static_cast<long long>(itemJson.value(QStringLiteral("unitPriceCents")).toDouble());
+        op.items.append(item);
+    }
     return op;
 }
 
