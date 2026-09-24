@@ -3,7 +3,8 @@ add_library(mahali-network STATIC)
 
 target_include_directories(mahali-network
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<INSTALL_INTERFACE:include>)
 
 target_link_libraries(mahali-network
