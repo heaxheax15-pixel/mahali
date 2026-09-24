@@ -38,7 +38,11 @@ struct DeviceOpResult {
 // server rejects them, so a device and the central DB can never diverge.
 class DeviceLedgerService {
 public:
+    // Explicit identity override (used by tests with fixed device ids).
     DeviceLedgerService(Database& db, const QString& deviceId);
+
+    // Derives the device's identity from its own persistent settings store.
+    explicit DeviceLedgerService(Database& db);
 
     DeviceOpResult recordSale(const QVector<core::SaleItem>& items, int cashSessionId);
     DeviceOpResult recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items);

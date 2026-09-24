@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 
+#include "device_identity.h"
 #include "sale_rules.h"
 
 namespace app::data {
@@ -20,6 +21,11 @@ DeviceLedgerService::DeviceLedgerService(Database& db, const QString& deviceId)
     , m_payments(db)
     , m_syncSequence(db)
     , m_outbox(db)
+{
+}
+
+DeviceLedgerService::DeviceLedgerService(Database& db)
+    : DeviceLedgerService(db, DeviceIdentity::ensure(db))
 {
 }
 

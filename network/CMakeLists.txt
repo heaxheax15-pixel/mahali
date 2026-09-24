@@ -24,7 +24,9 @@ target_sources(mahali-network PRIVATE
     sync_server.cpp
     sync_server.h
     sync_processor.cpp
-    sync_processor.h)
+    sync_processor.h
+    sync_scheduler.cpp
+    sync_scheduler.h)
 
 set_target_properties(mahali-network PROPERTIES
     POSITION_INDEPENDENT_CODE ON)

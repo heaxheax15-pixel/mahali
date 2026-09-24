@@ -22,6 +22,7 @@ target_sources(mahali-data PRIVATE
     customer_transaction_item_repository.cpp
     customer_transaction_repository.cpp
     device_ledger_service.cpp
+    device_identity.cpp
     device_repository.cpp
     expense_repository.cpp
     owner_drawing_repository.cpp
