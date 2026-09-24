@@ -128,7 +128,7 @@ void SyncCoordinatorTest::sendsAndReconcilesOneSale()
     QCOMPARE(outbox.countPending(), 1);
 
     // Bring up the central Windows server on localhost.
-    data::Database server(m_serverDbPath);
+    data::Database server(m_serverDbPath, data::DatabaseMode::Server);
     network::SyncServer syncServer(server, m_key);
     const quint16 port = syncServer.server().listen(QHostAddress::LocalHost, 0);
     QVERIFY(port != 0);
@@ -199,7 +199,7 @@ void SyncCoordinatorTest::networkLossKeepsPendingThenRecovers()
     QCOMPARE(afterLoss[0].attempts, 1);
 
     // LAN comes back: the very same coordinator resumes and reconciles.
-    data::Database server(m_serverDbPath);
+    data::Database server(m_serverDbPath, data::DatabaseMode::Server);
     network::SyncServer syncServer(server, m_key);
     const quint16 port = syncServer.server().listen(QHostAddress::LocalHost, 0);
     QVERIFY(port != 0);
@@ -230,7 +230,7 @@ void SyncCoordinatorTest::permanentRejectCansTheRow()
     outbox.enqueue(bad);
     QCOMPARE(outbox.countPending(), 1);
 
-    data::Database server(m_serverDbPath);
+    data::Database server(m_serverDbPath, data::DatabaseMode::Server);
     network::SyncServer syncServer(server, m_key);
     const quint16 port = syncServer.server().listen(QHostAddress::LocalHost, 0);
     QVERIFY(port != 0);

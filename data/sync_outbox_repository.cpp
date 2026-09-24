@@ -138,4 +138,18 @@ bool SyncOutboxRepository::recordAttempt(int id)
     return query.exec() && query.numRowsAffected() == 1;
 }
 
+int SyncOutboxRepository::pruneAppliedOlderThan(const QDateTime& cutoff, int maxRows)
+{
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral(
+        "DELETE FROM sync_outbox WHERE id IN ("
+        "SELECT id FROM sync_outbox WHERE status = 'applied' AND created_at < ? ORDER BY id LIMIT ?)"));
+    query.addBindValue(toIso(cutoff));
+    query.addBindValue(maxRows);
+    if (!query.exec()) {
+        return 0;
+    }
+    return query.numRowsAffected();
+}
+
 } // namespace app::data

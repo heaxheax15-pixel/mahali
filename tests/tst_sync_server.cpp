@@ -74,7 +74,7 @@ void SyncServerTest::seedDatabase()
 {
     QFile::remove(m_dbPath);
 
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     data::CashSessionRepository sessions(db);
     m_openSessionId = sessions.open(5000);
     QVERIFY(m_openSessionId > 0);
@@ -167,7 +167,7 @@ QJsonObject SyncServerTest::paymentOp(int opId, int customerId, long long amount
 
 void SyncServerTest::hmacValidProcessesBatch()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -188,7 +188,7 @@ void SyncServerTest::hmacValidProcessesBatch()
 
 void SyncServerTest::hmacInvalidRejected()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -204,7 +204,7 @@ void SyncServerTest::hmacInvalidRejected()
 
 void SyncServerTest::emptyBatchRejected()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     const QByteArray body = QByteArrayLiteral("[]");
@@ -217,7 +217,7 @@ void SyncServerTest::emptyBatchRejected()
 
 void SyncServerTest::oversizedBatchRejected()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -234,7 +234,7 @@ void SyncServerTest::oversizedBatchRejected()
 
 void SyncServerTest::saleAppliesSingleTransaction()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -263,7 +263,7 @@ void SyncServerTest::saleAppliesSingleTransaction()
 
 void SyncServerTest::debtAppliesWithoutCashSession()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -284,7 +284,7 @@ void SyncServerTest::debtAppliesWithoutCashSession()
 
 void SyncServerTest::paymentRequiresOpenSession()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -307,7 +307,7 @@ void SyncServerTest::paymentRequiresOpenSession()
 
 void SyncServerTest::zeroOpIdRejected()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -331,7 +331,7 @@ void SyncServerTest::zeroOpIdRejected()
 
 void SyncServerTest::emptyDeviceIdRejected()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -353,7 +353,7 @@ void SyncServerTest::emptyDeviceIdRejected()
 
 void SyncServerTest::processJsonReplayAlreadyApplied()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     // Apply once via the wire path.
@@ -385,7 +385,7 @@ void SyncServerTest::processJsonReplayAlreadyApplied()
 
 void SyncServerTest::httpPostAppliesBatch()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncServer server(db, m_key);
     const quint16 port = server.server().listen(QHostAddress::LocalHost, 0);
     QVERIFY(port != 0);
@@ -423,7 +423,7 @@ void SyncServerTest::httpPostAppliesBatch()
 
 void SyncServerTest::duplicateBatchAppliedOnce()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     QJsonArray ops;
@@ -462,7 +462,7 @@ void SyncServerTest::duplicateBatchAppliedOnce()
 
 void SyncServerTest::duplicateAcrossBatchAndReplayAppliesOnce()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     // op 1 then op 2 in one batch...
@@ -495,7 +495,7 @@ void SyncServerTest::duplicateAcrossBatchAndReplayAppliesOnce()
 
 void SyncServerTest::duplicateInsideSingleBatchAppliesOnce()
 {
-    data::Database db(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
     network::SyncProcessor processor(db);
 
     // The SAME opId twice inside one batch: the second reference must be

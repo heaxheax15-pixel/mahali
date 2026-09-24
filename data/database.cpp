@@ -17,7 +17,8 @@ QString uniqueConnectionName()
 
 } // namespace
 
-Database::Database(const QString& filePath)
+Database::Database(const QString& filePath, DatabaseMode mode)
+    : m_mode(mode)
 {
     const QString connectionName = uniqueConnectionName();
     m_db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
@@ -78,15 +79,19 @@ QString Database::lastError() const
 
 void Database::applyPragmas()
 {
-    execStatements(QStringList{
-                       QStringLiteral("PRAGMA journal_mode = WAL;"),
-                       // FULL: fsync every committed transaction so a sudden power
-                       // cut cannot lose committed money/stock even after days offline.
-                       QStringLiteral("PRAGMA synchronous = FULL;"),
-                       QStringLiteral("PRAGMA foreign_keys = ON;"),
-                       QStringLiteral("PRAGMA busy_timeout = 5000;"),
-                   },
-                   QStringLiteral("pragma"));
+    QStringList pragmas = {
+        // The server DB switched to WAL: concurrent phone syncs read without
+        // blocking the writer. The device keeps the plain rollback journal so a
+        // power cut never leaves a partially committed page on disk.
+        m_mode == DatabaseMode::Server ? QStringLiteral("PRAGMA journal_mode = WAL;")
+                                       : QStringLiteral("PRAGMA journal_mode = DELETE;"),
+        // FULL: fsync every committed transaction so a sudden power cut cannot
+        // lose committed money/stock even after days offline.
+        QStringLiteral("PRAGMA synchronous = FULL;"),
+        QStringLiteral("PRAGMA foreign_keys = ON;"),
+        QStringLiteral("PRAGMA busy_timeout = 5000;"),
+    };
+    execStatements(pragmas, QStringLiteral("pragma"));
 }
 
 void Database::createSchema()

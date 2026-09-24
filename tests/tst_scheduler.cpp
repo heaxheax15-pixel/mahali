@@ -155,7 +155,7 @@ void SyncSchedulerTest::autoSyncDrainsOutboxAndAppliesServerSide()
     data::SyncOutboxRepository outbox(device);
     QCOMPARE(outbox.countPending(), 1);
 
-    data::Database server(m_serverDbPath);
+    data::Database server(m_serverDbPath, data::DatabaseMode::Server);
     network::SyncServer syncServer(server, m_key);
     const quint16 port = syncServer.server().listen(QHostAddress::LocalHost, 0);
     QVERIFY(port != 0);
@@ -223,7 +223,7 @@ void SyncSchedulerTest::backoffRetriesWhileOfflineThenRecovers()
 
     // The server comes back: the loop catches up by itself.
     seed(m_serverDbPath, &productId, &sessionId);
-    data::Database server(m_serverDbPath);
+    data::Database server(m_serverDbPath, data::DatabaseMode::Server);
     network::SyncServer syncServer(server, m_key);
     const quint16 port = syncServer.server().listen(QHostAddress::LocalHost, 0);
     QVERIFY(port != 0);

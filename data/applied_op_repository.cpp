@@ -76,4 +76,18 @@ int AppliedOpRepository::count() const
     return query.value(0).toInt();
 }
 
+int AppliedOpRepository::pruneOlderThan(const QDateTime& cutoff, int maxRows)
+{
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral(
+        "DELETE FROM applied_ops WHERE id IN ("
+        "SELECT id FROM applied_ops WHERE applied_at < ? ORDER BY id LIMIT ?)"));
+    query.addBindValue(toIso(cutoff));
+    query.addBindValue(maxRows);
+    if (!query.exec()) {
+        return 0;
+    }
+    return query.numRowsAffected();
+}
+
 } // namespace app::data

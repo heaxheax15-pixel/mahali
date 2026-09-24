@@ -4,6 +4,7 @@
 #include <QSqlQuery>
 
 #include "database.h"
+#include "applied_op_repository.h"
 #include "product_repository.h"
 #include "sale_repository.h"
 #include "sale_item_repository.h"
@@ -23,6 +24,8 @@
 #include "audit_log_repository.h"
 #include "zakat_setting_repository.h"
 #include "setting_repository.h"
+#include "sync_outbox_repository.h"
+#include "date_utils.h"
 
 using namespace app;
 
@@ -43,6 +46,9 @@ private slots:
     void cashSessionLifecycle();
     void settingsRoundTrip();
     void appendOnlyGuard();
+    void journalModeMatchesDatabaseRole();
+    void pruneOnlyExpiredAcknowledgedOutboxRows();
+    void appliedOpsJournalPrunesBoundedly();
 
 private:
     QTemporaryDir m_dir;
@@ -350,6 +356,116 @@ void DataLayerTest::appendOnlyGuard()
     QCOMPARE(payments.size(), 2);
     QCOMPARE(payments[1].amountCents, -10000LL);
     QCOMPARE(payments[1].reversedId, paymentId);
+}
+
+void DataLayerTest::journalModeMatchesDatabaseRole()
+{
+    // WAL belongs to the central server so concurrent phone syncs never block;
+    // the device (the default) keeps the plain journal.
+    const QString serverPath = m_dir.filePath(QStringLiteral("server-role.sqlite"));
+    const QString devicePath = m_dir.filePath(QStringLiteral("device-role.sqlite"));
+
+    {
+        data::Database serverDb(serverPath, data::DatabaseMode::Server);
+        QSqlQuery query(serverDb.handle());
+        QVERIFY(query.exec(QStringLiteral("PRAGMA journal_mode")));
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toString().toLower(), QStringLiteral("wal"));
+    }
+    {
+        data::Database deviceDb(devicePath);
+        QSqlQuery query(deviceDb.handle());
+        QVERIFY(query.exec(QStringLiteral("PRAGMA journal_mode")));
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toString().toLower(), QStringLiteral("delete"));
+    }
+}
+
+void DataLayerTest::pruneOnlyExpiredAcknowledgedOutboxRows()
+{
+    const QString path = m_dir.filePath(QStringLiteral("outbox-prune.sqlite"));
+    data::Database db(path);
+    data::SyncOutboxRepository outbox(db);
+
+    const auto makeOp = [](int opId) {
+        core::SyncOperation op;
+        op.opId = opId;
+        op.type = core::SyncOpType::Sale;
+        op.amountCents = 0;
+        op.occurredAt = QDateTime::currentDateTime();
+        op.deviceId = QStringLiteral("dev-prune");
+        return op;
+    };
+
+    const int ackedOld = outbox.enqueue(makeOp(1));
+    const int ackedFresh = outbox.enqueue(makeOp(2));
+    const int refused = outbox.enqueue(makeOp(3));
+    const int stillPending = outbox.enqueue(makeOp(4));
+    QVERIFY(ackedOld > 0 && ackedFresh > 0 && refused > 0 && stillPending > 0);
+    QVERIFY(outbox.markApplied(ackedOld));
+    QVERIFY(outbox.markApplied(ackedFresh));
+    QVERIFY(outbox.markPermanentFailed(refused, QStringLiteral("server refused")));
+
+    const QDateTime now = QDateTime::currentDateTime();
+    const auto backdate = [&](int id, const QDateTime& when) {
+        QSqlQuery update(db.handle());
+        update.prepare(QStringLiteral("UPDATE sync_outbox SET created_at = ? WHERE id = ?"));
+        update.addBindValue(data::toIso(when));
+        update.addBindValue(id);
+        QVERIFY(update.exec());
+    };
+    backdate(ackedOld, now.addDays(-40));
+    backdate(refused, now.addDays(-40));
+    backdate(stillPending, now.addDays(-40));
+
+    QCOMPARE(outbox.pruneAppliedOlderThan(now.addDays(-30)), 1);
+
+    QVERIFY(!outbox.findById(ackedOld).has_value());
+    QVERIFY(outbox.findById(ackedFresh).has_value());    // fresh, kept
+    QVERIFY(outbox.findById(refused).has_value());       // anomaly, kept for the owner
+    const auto pending = outbox.findById(stillPending);
+    QVERIFY(pending.has_value());
+    QCOMPARE(pending->status, core::SyncOutboxStatus::Pending);
+}
+
+void DataLayerTest::appliedOpsJournalPrunesBoundedly()
+{
+    const QString path = m_dir.filePath(QStringLiteral("applied-prune.sqlite"));
+    data::Database db(path, data::DatabaseMode::Server);
+    data::AppliedOpRepository journal(db);
+
+    const QDateTime old = QDateTime::currentDateTime().addDays(-500);
+    const auto insertOld = [&](int opId) {
+        core::AppliedOpRecord r;
+        r.deviceId = QStringLiteral("dev-A");
+        r.opId = opId;
+        r.opType = static_cast<int>(core::SyncOpType::Sale);
+        r.appliedAt = old;
+        r.totalCents = 1000;
+        QVERIFY(journal.insert(r) > 0);
+    };
+    for (int i = 0; i < 5; ++i) {
+        insertOld(i + 1);
+    }
+
+    // Cleanup runs in bounded batches so a live sync never waits on it.
+    QCOMPARE(journal.pruneOlderThan(QDateTime::currentDateTime(), 2), 2);
+    QCOMPARE(journal.count(), 3);
+    QCOMPARE(journal.pruneOlderThan(QDateTime::currentDateTime(), 2), 2);
+    QCOMPARE(journal.count(), 1);
+
+    core::AppliedOpRecord fresh;
+    fresh.deviceId = QStringLiteral("dev-B");
+    fresh.opId = 9;
+    fresh.opType = static_cast<int>(core::SyncOpType::CustomerDebt);
+    // Timestamped slightly in the future (clock skew happens in the field), so
+    // it is guaranteed newer than any "now" cutoff in this test.
+    fresh.appliedAt = QDateTime::currentDateTime().addSecs(3600);
+    fresh.totalCents = 5000;
+    QVERIFY(journal.insert(fresh) > 0);
+    QCOMPARE(journal.count(), 2);
+    QCOMPARE(journal.pruneOlderThan(QDateTime::currentDateTime(), 10), 1);
+    QCOMPARE(journal.count(), 1);
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

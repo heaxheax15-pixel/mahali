@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDateTime>
 #include <QString>
 #include <optional>
 #include <vector>
@@ -27,6 +28,13 @@ public:
     // Bumps the delivery-attempt counter so the operator can see how many LAN
     // tries each still-pending operation has survived.
     bool recordAttempt(int id);
+
+    // Deletes rows the server already acknowledged (status = 'applied') older
+    // than cutoff, in bounded batches so a years-long cleanup pass never blocks
+    // a live write. Pending rows are of course never touched, and permanently
+    // failed rows are kept too: they are money the server refused, exactly the
+    // anomalies an owner must still see and act on. Returns rows removed.
+    int pruneAppliedOlderThan(const QDateTime& cutoff, int maxRows = 1000);
 
 private:
     Database& m_db;
