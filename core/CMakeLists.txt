@@ -15,6 +15,8 @@ target_sources(mahali-core PRIVATE
     audit_log_entry.h
     cash_movement.h
     cash_session.h
+    cash_session_calculator.cpp
+    cash_session_calculator.h
     customer.h
     customer_transaction.h
     customer_transaction_item.h
@@ -23,6 +25,8 @@ target_sources(mahali-core PRIVATE
     owner_drawing.h
     payment.h
     product.h
+    profit_loss_calculator.cpp
+    profit_loss_calculator.h
     sale.h
     sale_item.h
     setting.h
@@ -30,6 +34,8 @@ target_sources(mahali-core PRIVATE
     supplier.h
     supplier_transaction.h
     user.h
+    zakat_calculator.cpp
+    zakat_calculator.h
     zakat_setting.h)
 
 set_target_properties(mahali-core PROPERTIES

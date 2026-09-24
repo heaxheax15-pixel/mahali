@@ -18,3 +18,11 @@ target_link_libraries(tst_data
         Qt${QT_VERSION_MAJOR}::Test)
 
 add_test(NAME data COMMAND tst_data)
+
+add_executable(tst_finance tst_finance.cpp)
+target_link_libraries(tst_finance
+    PRIVATE
+        mahali-core
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME finance COMMAND tst_finance)
