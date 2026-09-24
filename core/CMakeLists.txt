@@ -12,6 +12,7 @@ target_link_libraries(mahali-core
         Qt${QT_VERSION_MAJOR}::Core)
 
 target_sources(mahali-core PRIVATE
+    applied_op.h
     audit_log_entry.h
     cash_movement.h
     cash_session.h

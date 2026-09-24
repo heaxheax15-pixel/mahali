@@ -16,6 +16,7 @@ public:
     std::optional<core::Sale> findById(int id) const;
     std::vector<core::Sale> findBetween(const QDateTime& from, const QDateTime& to) const;
     std::vector<core::Sale> findAll() const;
+    int countByDeviceId(const QString& deviceId) const;
 
     int insert(const core::Sale& sale);
 

@@ -72,6 +72,17 @@ std::vector<core::Sale> SaleRepository::findAll() const
     return sales;
 }
 
+int SaleRepository::countByDeviceId(const QString& deviceId) const
+{
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral("SELECT COUNT(*) FROM sales WHERE device_id = ?"));
+    query.addBindValue(deviceId);
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toInt();
+}
+
 int SaleRepository::insert(const core::Sale& sale)
 {
     QSqlQuery query(m_db.handle());

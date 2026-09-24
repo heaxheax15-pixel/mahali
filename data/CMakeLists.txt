@@ -15,11 +15,13 @@ target_link_libraries(mahali-data
 target_sources(mahali-data PRIVATE
     database.cpp
     audit_log_repository.cpp
+    applied_op_repository.cpp
     cash_movement_repository.cpp
     cash_session_repository.cpp
     customer_repository.cpp
     customer_transaction_item_repository.cpp
     customer_transaction_repository.cpp
+    device_ledger_service.cpp
     device_repository.cpp
     expense_repository.cpp
     owner_drawing_repository.cpp
@@ -34,6 +36,7 @@ target_sources(mahali-data PRIVATE
     supplier_repository.cpp
     supplier_transaction_repository.cpp
     sync_outbox_repository.cpp
+    sync_sequence_repository.cpp
     user_repository.cpp
     zakat_setting_repository.cpp)
 

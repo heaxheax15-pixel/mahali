@@ -19,6 +19,15 @@ target_link_libraries(tst_data
 
 add_test(NAME data COMMAND tst_data)
 
+add_executable(tst_device tst_device.cpp)
+target_link_libraries(tst_device
+    PRIVATE
+        mahali-core
+        mahali-data
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME device COMMAND tst_device)
+
 add_executable(tst_finance tst_finance.cpp)
 target_link_libraries(tst_finance
     PRIVATE

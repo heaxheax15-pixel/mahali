@@ -3,6 +3,7 @@
 #include <QDateTime>
 
 #include "date_utils.h"
+#include "sale_rules.h"
 
 namespace app::data {
 
@@ -16,61 +17,44 @@ SaleService::SaleService(Database& db)
     , m_stockMovements(db)
     , m_cashSessions(db)
     , m_cashMovements(db)
+    , m_appliedOps(db)
 {
 }
 
-long long SaleService::cogsCentsFor(const QVector<core::SaleItem>& items) const
+SaleRecordResult SaleService::alreadyAppliedResult(const core::AppliedOpRecord& record)
 {
-    long long cogs = 0;
-    for (const core::SaleItem& item : items) {
-        cogs += item.unitCostCents * item.quantity;
-    }
-    return cogs;
+    SaleRecordResult result;
+    result.ok = true;
+    result.alreadyApplied = true;
+    result.saleId = record.entityId;
+    result.totalCents = record.totalCents;
+    result.cogsCents = record.cogsCents;
+    return result;
 }
 
-bool SaleService::insertStockMovements(const QVector<core::SaleItem>& items)
+bool SaleService::insertAppliedOp(const core::SyncApplyToken& token, core::SyncOpType opType, int entityId,
+                                  long long totalCents, long long cogsCents, QString* error)
 {
-    for (const core::SaleItem& item : items) {
-        core::StockMovement movement;
-        movement.productId = item.productId;
-        movement.delta = -item.quantity;
-        movement.reason = QStringLiteral("sale");
-        movement.createdAt = QDateTime::currentDateTime();
-        if (m_stockMovements.insert(movement) == 0) {
-            return false;
+    core::AppliedOpRecord record;
+    record.opId = token.opId;
+    record.deviceId = token.deviceId;
+    record.opType = static_cast<int>(opType);
+    record.entityId = entityId;
+    record.totalCents = totalCents;
+    record.cogsCents = cogsCents;
+    record.appliedAt = QDateTime::currentDateTime();
+    if (m_appliedOps.insert(record) == 0) {
+        if (error) {
+            *error = m_db.lastError();
         }
+        return false;
     }
     return true;
 }
 
-QVector<core::SaleItem> SaleService::resolveItems(const QVector<core::SaleItem>& items, bool allowOversold,
-                                                  QString* error)
-{
-    QVector<core::SaleItem> resolved = items;
-    for (core::SaleItem& item : resolved) {
-        const auto product = m_products.findById(item.productId);
-        if (!product.has_value()) {
-            if (error) {
-                *error = QStringLiteral("unknown product id %1").arg(item.productId);
-            }
-            return {};
-        }
-        if (item.unitPriceCents <= 0) {
-            item.unitPriceCents = product->salePriceCents;
-        }
-        item.unitCostCents = product->costPriceCents;
-        if (!allowOversold && product->quantity < item.quantity) {
-            if (error) {
-                *error = QStringLiteral("insufficient stock for product %1").arg(product->name);
-            }
-            return {};
-        }
-    }
-    return resolved;
-}
-
 SaleRecordResult SaleService::recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
-                                                 const QString& deviceId, bool allowOversold)
+                                                 const QString& deviceId, bool allowOversold,
+                                                 const core::SyncApplyToken* applyToken)
 {
     SaleRecordResult result;
     if (items.isEmpty()) {
@@ -78,8 +62,14 @@ SaleRecordResult SaleService::recordCustomerDebt(int customerId, const QVector<c
         return result;
     }
 
-    QString error;
-    const QVector<core::SaleItem> resolved = resolveItems(items, allowOversold, &error);
+    if (applyToken) {
+        if (const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId)) {
+            return alreadyAppliedResult(*existing);
+        }
+    }
+
+QString error;
+    const QVector<core::SaleItem> resolved = resolveSaleItems(m_products, items, allowOversold, &error);
     if (resolved.isEmpty()) {
         result.error = error;
         return result;
@@ -90,10 +80,7 @@ SaleRecordResult SaleService::recordCustomerDebt(int customerId, const QVector<c
         return result;
     }
 
-    long long total = 0;
-    for (const core::SaleItem& item : resolved) {
-        total += item.unitPriceCents * item.quantity;
-    }
+    long long total = totalCentsFor(resolved);
 
     core::CustomerTransaction transaction;
     transaction.customerId = customerId;
@@ -120,10 +107,22 @@ SaleRecordResult SaleService::recordCustomerDebt(int customerId, const QVector<c
         }
     }
 
-    if (!insertStockMovements(resolved)) {
+    if (!insertSaleStockMovements(m_stockMovements, resolved)) {
         m_db.rollback();
         result.error = m_db.lastError();
         return result;
+    }
+
+    if (applyToken) {
+        if (!insertAppliedOp(*applyToken, core::SyncOpType::CustomerDebt, transactionId, total,
+                             cogsCentsFor(resolved), &result.error)) {
+            m_db.rollback();
+            const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId);
+            if (existing.has_value()) {
+                return alreadyAppliedResult(*existing);
+            }
+            return result;
+        }
     }
 
     if (!m_db.commit()) {
@@ -139,12 +138,19 @@ SaleRecordResult SaleService::recordCustomerDebt(int customerId, const QVector<c
 }
 
 SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, int cashSessionId,
-                                         const QString& deviceId, bool allowOversold)
+                                         const QString& deviceId, bool allowOversold,
+                                         const core::SyncApplyToken* applyToken)
 {
     SaleRecordResult result;
     if (items.isEmpty()) {
         result.error = QStringLiteral("sale items are empty");
         return result;
+    }
+
+    if (applyToken) {
+        if (const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId)) {
+            return alreadyAppliedResult(*existing);
+        }
     }
 
     if (!m_db.beginTransaction()) {
@@ -160,17 +166,14 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
     }
 
     QString error;
-    const QVector<core::SaleItem> resolved = resolveItems(items, allowOversold, &error);
+    const QVector<core::SaleItem> resolved = resolveSaleItems(m_products, items, allowOversold, &error);
     if (resolved.isEmpty()) {
         m_db.rollback();
         result.error = error;
         return result;
     }
 
-    long long total = 0;
-    for (const core::SaleItem& item : resolved) {
-        total += item.unitPriceCents * item.quantity;
-    }
+    long long total = totalCentsFor(resolved);
 
     core::Sale sale;
     sale.createdAt = QDateTime::currentDateTime();
@@ -194,7 +197,7 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
         }
     }
 
-    if (!insertStockMovements(resolved)) {
+    if (!insertSaleStockMovements(m_stockMovements, resolved)) {
         m_db.rollback();
         result.error = m_db.lastError();
         return result;
@@ -209,6 +212,18 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
         m_db.rollback();
         result.error = m_db.lastError();
         return result;
+    }
+
+    if (applyToken) {
+        if (!insertAppliedOp(*applyToken, core::SyncOpType::Sale, saleId, total, cogsCentsFor(resolved),
+                             &result.error)) {
+            m_db.rollback();
+            const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId);
+            if (existing.has_value()) {
+                return alreadyAppliedResult(*existing);
+            }
+            return result;
+        }
     }
 
     if (!m_db.commit()) {

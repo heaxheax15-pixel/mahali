@@ -3,6 +3,7 @@
 #include <QString>
 #include <QVector>
 
+#include "applied_op_repository.h"
 #include "database.h"
 #include "customer_transaction_item_repository.h"
 #include "customer_transaction_repository.h"
@@ -17,6 +18,7 @@ namespace app::data {
 
 struct SaleRecordResult {
     bool ok = false;
+    bool alreadyApplied = false;
     int saleId = 0;
     long long totalCents = 0;
     long long cogsCents = 0;
@@ -28,17 +30,18 @@ public:
     explicit SaleService(Database& db);
 
     SaleRecordResult recordSale(const QVector<core::SaleItem>& items, int cashSessionId, const QString& deviceId,
-                                bool allowOversold);
+                                bool allowOversold, const core::SyncApplyToken* applyToken = nullptr);
 
     SaleRecordResult recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
-                                        const QString& deviceId, bool allowOversold);
+                                        const QString& deviceId, bool allowOversold,
+                                        const core::SyncApplyToken* applyToken = nullptr);
 
     int reverseSale(int saleId, int cashSessionId);
 
 private:
-    bool insertStockMovements(const QVector<core::SaleItem>& items);
-    QVector<core::SaleItem> resolveItems(const QVector<core::SaleItem>& items, bool allowOversold, QString* error);
-    long long cogsCentsFor(const QVector<core::SaleItem>& items) const;
+    bool insertAppliedOp(const core::SyncApplyToken& token, core::SyncOpType opType, int entityId,
+                         long long totalCents, long long cogsCents, QString* error);
+    SaleRecordResult alreadyAppliedResult(const core::AppliedOpRecord& record);
 
     Database& m_db;
     ProductRepository m_products;
@@ -49,6 +52,7 @@ private:
     StockMovementRepository m_stockMovements;
     CashSessionRepository m_cashSessions;
     CashMovementRepository m_cashMovements;
+    AppliedOpRepository m_appliedOps;
 };
 
 } // namespace app::data

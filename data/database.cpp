@@ -80,7 +80,9 @@ void Database::applyPragmas()
 {
     execStatements(QStringList{
                        QStringLiteral("PRAGMA journal_mode = WAL;"),
-                       QStringLiteral("PRAGMA synchronous = NORMAL;"),
+                       // FULL: fsync every committed transaction so a sudden power
+                       // cut cannot lose committed money/stock even after days offline.
+                       QStringLiteral("PRAGMA synchronous = FULL;"),
                        QStringLiteral("PRAGMA foreign_keys = ON;"),
                        QStringLiteral("PRAGMA busy_timeout = 5000;"),
                    },
@@ -256,6 +258,28 @@ void Database::createSchema()
             "created_at TEXT NOT NULL);"),
 
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS applied_ops ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "device_id TEXT NOT NULL,"
+            "op_id INTEGER NOT NULL,"
+            "op_type INTEGER NOT NULL,"
+            "entity_id INTEGER NOT NULL,"
+            "total_cents INTEGER NOT NULL,"
+            "cogs_cents INTEGER NOT NULL DEFAULT 0,"
+            "applied_at TEXT NOT NULL,"
+            "UNIQUE(device_id, op_id));"),
+
+        // Single-row durable per-device sequence used to mint opIds whose values
+        // are never reused, even after days of power cuts or outbox clearing.
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS sync_sequence ("
+            "id INTEGER PRIMARY KEY CHECK (id = 1),"
+            "value INTEGER NOT NULL DEFAULT 0);"),
+
+        QStringLiteral(
+            "INSERT OR IGNORE INTO sync_sequence (id, value) VALUES (1, 0);"),
+
+        QStringLiteral(
             "CREATE TRIGGER IF NOT EXISTS trg_stock_after_insert "
             "AFTER INSERT ON stock_movements "
             "BEGIN "
@@ -270,6 +294,8 @@ void Database::createSchema()
             "CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(product_id);"),
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_cash_movements_session_id ON cash_movements(session_id);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_applied_ops_device_op ON applied_ops(device_id, op_id);"),
     };
 
     if (!execStatements(schema, QStringLiteral("schema"))) {

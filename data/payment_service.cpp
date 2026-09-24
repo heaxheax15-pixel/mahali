@@ -10,11 +10,13 @@ namespace app::data {
 PaymentService::PaymentService(Database& db)
     : m_db(db)
     , m_payments(db)
+    , m_appliedOps(db)
 {
 }
 
 PaymentResult PaymentService::recordCustomerPayment(int customerId, long long amountCents, int cashSessionId,
-                                                   const QString& note)
+                                                    const QString& note,
+                                                    const core::SyncApplyToken* applyToken)
 {
     PaymentResult result;
     if (amountCents <= 0) {
@@ -24,6 +26,16 @@ PaymentResult PaymentService::recordCustomerPayment(int customerId, long long am
     if (customerId <= 0) {
         result.error = QStringLiteral("customer id is invalid");
         return result;
+    }
+
+    if (applyToken) {
+        if (const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId)) {
+            result.ok = true;
+            result.alreadyApplied = true;
+            result.paymentId = existing->entityId;
+            result.amountCents = existing->totalCents;
+            return result;
+        }
     }
 
     if (!m_db.beginTransaction()) {
@@ -64,6 +76,29 @@ PaymentResult PaymentService::recordCustomerPayment(int customerId, long long am
         return result;
     }
 
+    if (applyToken) {
+        core::AppliedOpRecord record;
+        record.opId = applyToken->opId;
+        record.deviceId = applyToken->deviceId;
+        record.opType = static_cast<int>(core::SyncOpType::CustomerPayment);
+        record.entityId = paymentId;
+        record.totalCents = amountCents;
+        record.appliedAt = QDateTime::currentDateTime();
+        if (m_appliedOps.insert(record) == 0) {
+            m_db.rollback();
+            const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId);
+            if (existing.has_value()) {
+                result.ok = true;
+                result.alreadyApplied = true;
+                result.paymentId = existing->entityId;
+                result.amountCents = existing->totalCents;
+                return result;
+            }
+            result.error = m_db.lastError();
+            return result;
+        }
+    }
+
     if (!m_db.commit()) {
         result.error = m_db.lastError();
         return result;
@@ -71,6 +106,7 @@ PaymentResult PaymentService::recordCustomerPayment(int customerId, long long am
 
     result.ok = true;
     result.paymentId = paymentId;
+    result.amountCents = amountCents;
     return result;
 }
 

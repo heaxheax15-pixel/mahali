@@ -36,11 +36,14 @@ SyncServer::SyncServer(app::data::Database& db, const QByteArray& hmacKey)
                            ack.insert(QStringLiteral("opId"), op.opId);
                            ack.insert(QStringLiteral("type"), op.type);
                            ack.insert(QStringLiteral("entityId"), op.entityId);
-                           ack.insert(QStringLiteral("totalCents"),
-                                     QJsonValue(static_cast<double>(op.totalCents)));
-                           ack.insert(QStringLiteral("cogsCents"),
-                                     QJsonValue(static_cast<double>(op.cogsCents)));
-                           applied.append(ack);
+ack.insert(QStringLiteral("totalCents"),
+                                      QJsonValue(static_cast<double>(op.totalCents)));
+                            ack.insert(QStringLiteral("cogsCents"),
+                                      QJsonValue(static_cast<double>(op.cogsCents)));
+                            if (op.alreadyApplied) {
+                                ack.insert(QStringLiteral("alreadyApplied"), true);
+                            }
+                            applied.append(ack);
                        }
                        payload.insert(QStringLiteral("applied"), applied);
 

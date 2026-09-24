@@ -11,6 +11,7 @@
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
+#include "data/customer_transaction_repository.h"
 #include "data/product_repository.h"
 #include "data/sale_repository.h"
 #include "data/stock_movement_repository.h"
@@ -33,6 +34,12 @@ private slots:
     void saleAppliesSingleTransaction();
     void debtAppliesWithoutCashSession();
     void paymentRequiresOpenSession();
+    void duplicateBatchAppliedOnce();
+    void duplicateAcrossBatchAndReplayAppliesOnce();
+    void duplicateInsideSingleBatchAppliesOnce();
+    void zeroOpIdRejected();
+    void emptyDeviceIdRejected();
+    void processJsonReplayAlreadyApplied();
     void httpPostAppliesBatch();
     void cleanup();
 
@@ -153,8 +160,8 @@ QJsonObject SyncServerTest::paymentOp(int opId, int customerId, long long amount
     op.insert(QStringLiteral("amountCents"), QJsonValue(static_cast<double>(amountCents)));
     op.insert(QStringLiteral("occurredAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
     op.insert(QStringLiteral("note"), QString::fromUtf8(note));
+    op.insert(QStringLiteral("deviceId"), QString::fromUtf8(deviceId));
     op.insert(QStringLiteral("items"), QJsonArray{});
-    Q_UNUSED(deviceId)
     return op;
 }
 
@@ -298,6 +305,84 @@ void SyncServerTest::paymentRequiresOpenSession()
     QCOMPARE(cash.sumBySessionId(m_openSessionId), 3000);
 }
 
+void SyncServerTest::zeroOpIdRejected()
+{
+    data::Database db(m_dbPath);
+    network::SyncProcessor processor(db);
+
+    QJsonArray ops;
+    QJsonObject bad = saleOp(0, m_deviceId, m_productId, 1, 12000);
+    ops.append(bad);
+
+    const QByteArray body = QJsonDocument(ops).toJson(QJsonDocument::Compact);
+    const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
+
+    const network::SyncBatchResult result = processor.process(body, signature, m_key);
+    QVERIFY(result.hmacValid);
+    QVERIFY(result.applied.isEmpty());
+    QCOMPARE(result.errors.size(), 1);
+    QVERIFY(result.errors[0].message.contains(QStringLiteral("opId")));
+
+    // Nothing was applied, including via processJson.
+    const network::SyncBatchResult direct = processor.processJson(ops);
+    QVERIFY(direct.applied.isEmpty());
+    QCOMPARE(direct.errors.size(), 1);
+}
+
+void SyncServerTest::emptyDeviceIdRejected()
+{
+    data::Database db(m_dbPath);
+    network::SyncProcessor processor(db);
+
+    QJsonArray ops;
+    ops.append(saleOp(1, QByteArray(), m_productId, 1, 12000));
+
+    const QByteArray body = QJsonDocument(ops).toJson(QJsonDocument::Compact);
+    const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
+
+    const network::SyncBatchResult result = processor.process(body, signature, m_key);
+    QVERIFY(result.hmacValid);
+    QVERIFY(result.applied.isEmpty());
+    QCOMPARE(result.errors.size(), 1);
+    QVERIFY(result.errors[0].message.contains(QStringLiteral("deviceId")));
+
+    const network::SyncBatchResult direct = processor.processJson(ops);
+    QVERIFY(direct.applied.isEmpty());
+    QCOMPARE(direct.errors.size(), 1);
+}
+
+void SyncServerTest::processJsonReplayAlreadyApplied()
+{
+    data::Database db(m_dbPath);
+    network::SyncProcessor processor(db);
+
+    // Apply once via the wire path.
+    QJsonArray first;
+    first.append(debtOp(5, m_customerId, m_deviceId, m_productId, 1, 12000));
+    const QByteArray body = QJsonDocument(first).toJson(QJsonDocument::Compact);
+    const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
+    const network::SyncBatchResult applied = processor.process(body, signature, m_key);
+    QVERIFY(applied.hmacValid);
+    QCOMPARE(applied.applied.size(), 1);
+    QVERIFY(!applied.applied[0].alreadyApplied);
+
+    // Replay the exact same op through processJson (test-only entry point):
+    // must be reported alreadyApplied, not applied twice. This closes the
+    // idempotency gap between the two application paths.
+    const network::SyncBatchResult replay = processor.processJson(first);
+    QVERIFY(replay.batchValid);
+    QCOMPARE(replay.applied.size(), 1);
+    QVERIFY(replay.applied[0].alreadyApplied);
+    QCOMPARE(replay.applied[0].entityId, applied.applied[0].entityId);
+    QCOMPARE(replay.applied[0].totalCents, 12000);
+
+    // Total across both paths: exactly one customer transaction, one stock move.
+    data::CustomerTransactionRepository txs(db);
+    QCOMPARE(txs.findByCustomerId(m_customerId).size(), 1);
+    data::StockMovementRepository movements(db);
+    QCOMPARE(movements.sumByProductId(m_productId), 99);
+}
+
 void SyncServerTest::httpPostAppliesBatch()
 {
     data::Database db(m_dbPath);
@@ -334,6 +419,108 @@ void SyncServerTest::httpPostAppliesBatch()
     QCOMPARE(replyDoc.object().value(QStringLiteral("applied")).toArray().size(), 1);
 
     reply->deleteLater();
+}
+
+void SyncServerTest::duplicateBatchAppliedOnce()
+{
+    data::Database db(m_dbPath);
+    network::SyncProcessor processor(db);
+
+    QJsonArray ops;
+    ops.append(saleOp(1, m_deviceId, m_productId, 2, 12000));
+
+    const QByteArray body = QJsonDocument(ops).toJson(QJsonDocument::Compact);
+    const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
+
+    // First delivery: applied for real.
+    const network::SyncBatchResult first = processor.process(body, signature, m_key);
+    QVERIFY(first.hmacValid);
+    QVERIFY(first.batchValid);
+    QCOMPARE(first.applied.size(), 1);
+    QVERIFY(!first.applied[0].alreadyApplied);
+
+    const int originalEntityId = first.applied[0].entityId;
+
+    // ACK lost on the device, so the same batch is re-sent with the same opId.
+    const network::SyncBatchResult second = processor.process(body, signature, m_key);
+    QVERIFY(second.hmacValid);
+    QVERIFY(second.batchValid);
+    QCOMPARE(second.applied.size(), 1);
+    QVERIFY(second.applied[0].alreadyApplied);
+    QCOMPARE(second.applied[0].entityId, originalEntityId);
+    QCOMPARE(second.applied[0].totalCents, first.applied[0].totalCents);
+    QCOMPARE(second.applied[0].cogsCents, first.applied[0].cogsCents);
+
+    // Exactly-once: sale row exists exactly once, stock deducted only once.
+    data::SaleRepository sales(db);
+    QCOMPARE(sales.countByDeviceId(m_deviceId), 1);
+    data::StockMovementRepository movements(db);
+    QCOMPARE(movements.sumByProductId(m_productId), 100 - 2);
+    data::CashMovementRepository cash(db);
+    QCOMPARE(cash.sumBySessionId(m_openSessionId), 24000);
+}
+
+void SyncServerTest::duplicateAcrossBatchAndReplayAppliesOnce()
+{
+    data::Database db(m_dbPath);
+    network::SyncProcessor processor(db);
+
+    // op 1 then op 2 in one batch...
+    QJsonArray firstBatch;
+    firstBatch.append(saleOp(1, m_deviceId, m_productId, 1, 12000));
+    firstBatch.append(paymentOp(2, m_customerId, 3000, "دفعة", m_deviceId));
+    const QByteArray firstBody = QJsonDocument(firstBatch).toJson(QJsonDocument::Compact);
+    const QByteArray firstSig = network::SyncProtocol::hmacSha256(firstBody, m_key);
+    const network::SyncBatchResult first = processor.process(firstBody, firstSig, m_key);
+    QVERIFY(first.hmacValid);
+    QCOMPARE(first.applied.size(), 2);
+
+    // ...the device only got the ACK for op 1 and replays op 2 alone.
+    QJsonArray replay;
+    replay.append(paymentOp(2, m_customerId, 3000, "دفعة", m_deviceId));
+    const QByteArray replayBody = QJsonDocument(replay).toJson(QJsonDocument::Compact);
+    const QByteArray replaySig = network::SyncProtocol::hmacSha256(replayBody, m_key);
+    const network::SyncBatchResult replayResult = processor.process(replayBody, replaySig, m_key);
+    QVERIFY(replayResult.hmacValid);
+    QVERIFY(replayResult.batchValid);
+    QCOMPARE(replayResult.applied.size(), 1);
+    QVERIFY(replayResult.applied[0].alreadyApplied);
+    QCOMPARE(replayResult.applied[0].entityId, first.applied[1].entityId);
+    QCOMPARE(replayResult.applied[0].totalCents, 3000);
+
+    // Exactly-once for the payment too: only one cash movement of +3000.
+    data::CashMovementRepository cash(db);
+    QCOMPARE(cash.sumBySessionId(m_openSessionId), 15000);
+}
+
+void SyncServerTest::duplicateInsideSingleBatchAppliesOnce()
+{
+    data::Database db(m_dbPath);
+    network::SyncProcessor processor(db);
+
+    // The SAME opId twice inside one batch: the second reference must be
+    // deduplicated against the first within the same request.
+    QJsonArray ops;
+    ops.append(saleOp(9, m_deviceId, m_productId, 1, 12000));
+    ops.append(saleOp(9, m_deviceId, m_productId, 1, 12000));
+
+    const QByteArray body = QJsonDocument(ops).toJson(QJsonDocument::Compact);
+    const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
+    const network::SyncBatchResult result = processor.process(body, signature, m_key);
+    QVERIFY(result.hmacValid);
+    QCOMPARE(result.applied.size(), 2);
+
+    QVERIFY(!result.applied[0].alreadyApplied);
+    QVERIFY(result.applied[1].alreadyApplied);
+    QCOMPARE(result.applied[1].entityId, result.applied[0].entityId);
+
+    // Sale row exists exactly once; stock deducted exactly once.
+    data::SaleRepository sales(db);
+    QCOMPARE(sales.countByDeviceId(m_deviceId), 1);
+    data::StockMovementRepository movements(db);
+    QCOMPARE(movements.sumByProductId(m_productId), 99);
+    data::CashMovementRepository cash(db);
+    QCOMPARE(cash.sumBySessionId(m_openSessionId), 12000);
 }
 
 QTEST_GUILESS_MAIN(SyncServerTest)

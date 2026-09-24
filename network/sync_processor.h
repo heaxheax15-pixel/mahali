@@ -5,6 +5,7 @@
 #include <QString>
 #include <QVector>
 
+#include "data/applied_op_repository.h"
 #include "data/database.h"
 #include "data/payment_service.h"
 #include "data/sale_service.h"
@@ -17,6 +18,7 @@ struct SyncAppliedOp {
     int entityId = 0;
     long long totalCents = 0;
     long long cogsCents = 0;
+    bool alreadyApplied = false;
 };
 
 struct SyncOpError {
@@ -51,6 +53,7 @@ private:
     app::data::Database& m_db;
     app::data::SaleService m_sales;
     app::data::PaymentService m_payments;
+    app::data::AppliedOpRepository m_appliedOps;
 };
 
 } // namespace app::network
