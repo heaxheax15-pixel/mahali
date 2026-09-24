@@ -78,6 +78,14 @@ target_link_libraries(tst_scheduler
 
 add_test(NAME scheduler COMMAND tst_scheduler)
 
+add_executable(tst_ui tst_ui.cpp)
+target_link_libraries(tst_ui
+    PRIVATE
+        mahali-ui
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME ui COMMAND tst_ui)
+
 add_executable(tst_sync_client tst_sync_client.cpp)
 target_link_libraries(tst_sync_client
     PRIVATE
