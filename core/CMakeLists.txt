@@ -34,6 +34,9 @@ target_sources(mahali-core PRIVATE
     supplier.h
     supplier_transaction.h
     sync_operation.h
+    sync_operation_codec.cpp
+    sync_operation_codec.h
+    sync_outbox_entry.h
     user.h
     zakat_calculator.cpp
     zakat_calculator.h

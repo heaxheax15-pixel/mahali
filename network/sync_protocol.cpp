@@ -1,9 +1,9 @@
 #include "sync_protocol.h"
 
-#include <QJsonDocument>
-#include <QJsonValue>
-#include <QMessageAuthenticationCode>
 #include <QCryptographicHash>
+#include <QMessageAuthenticationCode>
+
+#include "core/sync_operation_codec.h"
 
 namespace app::network {
 
@@ -14,57 +14,12 @@ QByteArray SyncProtocol::hmacSha256(const QByteArray& payload, const QByteArray&
 
 QByteArray SyncProtocol::serializeOp(const app::core::SyncOperation& op)
 {
-    QJsonObject json;
-    json["opId"] = op.opId;
-    json["type"] = static_cast<int>(op.type);
-    json["entityId"] = op.entityId;
-    json["amountCents"] = QJsonValue(static_cast<double>(op.amountCents));
-    json["occurredAt"] = op.occurredAt.toUTC().toString(Qt::ISODateWithMs);
-    json["note"] = op.note;
-    json["deviceId"] = op.deviceId;
-
-    QJsonArray items;
-    for (const app::core::SyncItem& item : op.items) {
-        QJsonObject itemJson;
-        itemJson["productId"] = item.productId;
-        itemJson["quantity"] = QJsonValue(static_cast<double>(item.quantity));
-        itemJson["unitPriceCents"] = QJsonValue(static_cast<double>(item.unitPriceCents));
-        items.append(itemJson);
-    }
-    json["items"] = items;
-    return QJsonDocument(json).toJson(QJsonDocument::Compact);
+    return app::core::SyncOpCodec::serialize(op);
 }
 
 std::optional<app::core::SyncOperation> SyncProtocol::deserializeOp(const QJsonObject& json)
 {
-    if (!json.contains(QStringLiteral("opId")) || !json.contains(QStringLiteral("type"))
-        || !json.contains(QStringLiteral("amountCents"))) {
-        return std::nullopt;
-    }
-
-    app::core::SyncOperation op;
-    op.opId = json.value(QStringLiteral("opId")).toInt();
-    op.type = static_cast<app::core::SyncOpType>(json.value(QStringLiteral("type")).toInt());
-    op.entityId = json.value(QStringLiteral("entityId")).toInt();
-    op.amountCents = static_cast<long long>(json.value(QStringLiteral("amountCents")).toDouble());
-    op.occurredAt = QDateTime::fromString(json.value(QStringLiteral("occurredAt")).toString(), Qt::ISODateWithMs);
-    op.note = json.value(QStringLiteral("note")).toString();
-    op.deviceId = json.value(QStringLiteral("deviceId")).toString();
-
-    const QJsonArray items = json.value(QStringLiteral("items")).toArray();
-    for (const QJsonValue& value : items) {
-        if (!value.isObject()) {
-            return std::nullopt;
-        }
-        const QJsonObject itemJson = value.toObject();
-        app::core::SyncItem item;
-        item.productId = itemJson.value(QStringLiteral("productId")).toInt();
-        item.quantity = static_cast<long long>(itemJson.value(QStringLiteral("quantity")).toDouble());
-        item.unitPriceCents =
-            static_cast<long long>(itemJson.value(QStringLiteral("unitPriceCents")).toDouble());
-        op.items.append(item);
-    }
-    return op;
+    return app::core::SyncOpCodec::deserialize(json);
 }
 
 bool SyncProtocol::batchSizeValid(int count)

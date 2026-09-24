@@ -15,6 +15,8 @@ target_link_libraries(mahali-network
         Qt${QT_VERSION_MAJOR}::HttpServer)
 
 target_sources(mahali-network PRIVATE
+    sync_client.cpp
+    sync_client.h
     sync_protocol.cpp
     sync_protocol.h
     sync_server.cpp

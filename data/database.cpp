@@ -247,6 +247,15 @@ void Database::createSchema()
             "value TEXT NOT NULL);"),
 
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS sync_outbox ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "op_json TEXT NOT NULL,"
+            "status TEXT NOT NULL DEFAULT 'pending',"
+            "attempts INTEGER NOT NULL DEFAULT 0,"
+            "last_error TEXT NOT NULL DEFAULT '',"
+            "created_at TEXT NOT NULL);"),
+
+        QStringLiteral(
             "CREATE TRIGGER IF NOT EXISTS trg_stock_after_insert "
             "AFTER INSERT ON stock_movements "
             "BEGIN "

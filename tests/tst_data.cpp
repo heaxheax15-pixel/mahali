@@ -66,6 +66,7 @@ void DataLayerTest::schemaContainsAllTables()
         QStringLiteral("stock_movements"), QStringLiteral("cash_sessions"),
         QStringLiteral("cash_movements"), QStringLiteral("users"), QStringLiteral("devices"),
         QStringLiteral("audit_log"), QStringLiteral("zakat_settings"), QStringLiteral("settings"),
+        QStringLiteral("sync_outbox"),
     };
 
     QSqlQuery query(m_db->handle());
