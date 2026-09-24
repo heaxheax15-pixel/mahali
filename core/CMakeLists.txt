@@ -33,6 +33,7 @@ target_sources(mahali-core PRIVATE
     stock_movement.h
     supplier.h
     supplier_transaction.h
+    sync_operation.h
     user.h
     zakat_calculator.cpp
     zakat_calculator.h

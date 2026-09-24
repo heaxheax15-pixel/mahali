@@ -26,3 +26,12 @@ target_link_libraries(tst_finance
         Qt${QT_VERSION_MAJOR}::Test)
 
 add_test(NAME finance COMMAND tst_finance)
+
+add_executable(tst_sync tst_sync.cpp)
+target_link_libraries(tst_sync
+    PRIVATE
+        mahali-core
+        mahali-network
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME sync COMMAND tst_sync)
