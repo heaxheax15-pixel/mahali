@@ -24,9 +24,11 @@ target_sources(mahali-data PRIVATE
     expense_repository.cpp
     owner_drawing_repository.cpp
     payment_repository.cpp
+    payment_service.cpp
     product_repository.cpp
     sale_item_repository.cpp
     sale_repository.cpp
+    sale_service.cpp
     setting_repository.cpp
     stock_movement_repository.cpp
     supplier_repository.cpp
