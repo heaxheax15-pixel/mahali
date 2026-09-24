@@ -7,26 +7,35 @@
 
 #include "core/sync_operation.h"
 #include "data/applied_op_repository.h"
+#include "data/audit_log_repository.h"
+#include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/customer_transaction_repository.h"
 #include "data/payment_repository.h"
 #include "data/product_repository.h"
+#include "data/sale_item_repository.h"
 #include "data/sale_repository.h"
+#include "data/sale_service.h"
 #include "data/stock_movement_repository.h"
 #include "data/supplier_repository.h"
 #include "data/supplier_transaction_repository.h"
 #include "network/sync_client.h"
+#include "ui/cash_session_page.h"
 #include "ui/customers_page.h"
 #include "ui/format_utils.h"
+#include "ui/pos_page.h"
 #include "ui/products_page.h"
+#include "ui/sales_page.h"
 #include "ui/server_controller.h"
 #include "ui/suppliers_page.h"
 
 using namespace app;
 
-// Phase 11 (desktop): the headless ServerController (sync hub + daily retention)
-// plus a smoke check that the master-data pages render the seeded store data.
+// Phase 11+12 (desktop): the headless ServerController (sync hub + daily
+// retention), the master-data pages, and the cash & sales flow: a fast POS
+// page with flexible price/quantity entry, the cash session lifecycle, and
+// today's sales summary.
 class UiTest : public QObject
 {
     Q_OBJECT
@@ -38,10 +47,16 @@ private slots:
     void serverEmitsStatsOnTimer();
     void serverRetentionPrunesOldOps();
     void pagesReflectSeededData();
+    void flexibleAmountParsing();
+    void posSaleWithPriceOverride();
+    void posSaleRequiresOpenSession();
+    void cashSessionLifecycle();
+    void salesPageShowsToday();
 
 private:
     void seedSyncDatabase(const QString& path, int* productId, int* sessionId);
     void seedMasterData(const QString& path);
+    int seedProduct(const QString& path, int* sessionId, long long salePriceCents);
 
     QTemporaryDir m_dir;
     QByteArray m_key;
@@ -252,6 +267,219 @@ void UiTest::pagesReflectSeededData()
     QCOMPARE(suppliers.supplierCount(), 1);
     suppliers.suppliersTable()->setCurrentCell(0, 0);
     QCOMPARE(suppliers.transactionCount(), 1);
+}
+
+int UiTest::seedProduct(const QString& path, int* sessionId, long long salePriceCents)
+{
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    *sessionId = sessions.open(5000);
+    if (*sessionId <= 0) {
+        return 0;
+    }
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.costPriceCents = 6000;
+    product.salePriceCents = salePriceCents;
+    product.unit = QStringLiteral("أنبوب");
+    product.packageSize = 1;
+    const int productId = products.save(product);
+    if (productId <= 0) {
+        return 0;
+    }
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+    return productId;
+}
+
+void UiTest::flexibleAmountParsing()
+{
+    QCOMPARE(ui::parseMoney(QStringLiteral("12")).value_or(-1), 1200LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("12.5")).value_or(-1), 1250LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("12.50")).value_or(-1), 1250LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("12,5")).value_or(-1), 1250LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("12,50")).value_or(-1), 1250LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("0,5")).value_or(-1), 50LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral(".5")).value_or(-1), 50LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("1,000")).value_or(-1), 100000LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("1.000")).value_or(-1), 100000LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("1,234.50")).value_or(-1), 123450LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("12.75")).value_or(-1), 1275LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("500 دج")).value_or(-1), 50000LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("1 234")).value_or(-1), 123400LL);
+    QCOMPARE(ui::parseMoney(QStringLiteral("١٢٫٥٠")).value_or(-1), 1250LL);
+    QVERIFY(!ui::parseMoney(QString()).has_value());
+    QVERIFY(!ui::parseMoney(QStringLiteral("abc")).has_value());
+    QVERIFY(!ui::parseMoney(QStringLiteral("-5")).has_value());
+}
+
+void UiTest::posSaleWithPriceOverride()
+{
+    int productId = 0;
+    int sessionId = 0;
+    const QString path = m_dir.filePath(QStringLiteral("pos-override.sqlite"));
+    productId = seedProduct(path, &sessionId, 10000);
+
+    data::Database db(path);
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("6130000000004"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 1);
+    QCOMPARE(page.linePriceAt(0), 10000LL);
+    QCOMPARE(page.totalCents(), 10000LL);
+
+    // Cashier edits quantity and overrides the unit price in the grid.
+    page.table()->item(0, 1)->setText(QStringLiteral("2"));
+    page.table()->item(0, 2)->setText(QStringLiteral("7.50"));
+    page.completeSale();
+
+    QVERIFY(page.lastSaleId() != 0);
+    QCOMPARE(page.lineCount(), 0);
+    QVERIFY(page.noticeText().contains(QStringLiteral("تم البيع")));
+
+    data::SaleRepository sales(db);
+    const auto sale = sales.findById(page.lastSaleId());
+    QVERIFY(sale.has_value());
+    QCOMPARE(sale->totalCents, 1500LL);
+    QCOMPARE(sale->deviceId, QStringLiteral("desktop"));
+
+    data::SaleItemRepository saleItems(db);
+    const auto items = saleItems.findBySaleId(page.lastSaleId());
+    QCOMPARE(items.size(), 1);
+    QCOMPARE(items[0].unitPriceCents, 750LL);
+    QCOMPARE(items[0].quantity, 2LL);
+
+    data::ProductRepository products(db);
+    QCOMPARE(products.findById(productId)->quantity, 98LL);
+
+    data::CashMovementRepository movements(db);
+    QCOMPARE(movements.sumBySessionId(sessionId), 1500LL);
+
+    // Desktop sales never touch the sync outbox/applied ops.
+    QCOMPARE(data::AppliedOpRepository(db).count(), 0);
+
+    // The override left one audit trail entry.
+    int overrides = 0;
+    for (const auto& entry : data::AuditLogRepository(db).findAll()) {
+        if (entry.action == QLatin1String("price_override")) {
+            ++overrides;
+        }
+    }
+    QCOMPARE(overrides, 1);
+}
+
+void UiTest::posSaleRequiresOpenSession()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-no-session.sqlite"));
+    int unusedSession = 0;
+    const int productId = seedProduct(path, &unusedSession, 8000);
+
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    const auto open = sessions.findOpen();
+    if (open.has_value()) {
+        sessions.close(open->id, open->openingFloatCents, open->openingFloatCents, 0);
+    }
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("6130000000004"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 1);
+    page.completeSale();
+    QCOMPARE(page.lastSaleId(), 0);
+    QCOMPARE(page.lineCount(), 1);
+    QVERIFY(!page.noticeText().isEmpty());
+
+    data::SaleRepository sales(db);
+    QCOMPARE(static_cast<int>(sales.findAll().size()), 0);
+}
+
+void UiTest::cashSessionLifecycle()
+{
+    const QString path = m_dir.filePath(QStringLiteral("session.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.costPriceCents = 6000;
+    product.salePriceCents = 5000;
+    product.unit = QStringLiteral("أنبوب");
+    product.packageSize = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::CashSessionPage page(db);
+    QVERIFY(!page.hasOpenSession());
+
+    page.openSession(5000);
+    QVERIFY(page.hasOpenSession());
+    QVERIFY(page.sessionId() > 0);
+    QCOMPARE(page.movementCount(), 0);
+    QCOMPARE(page.expectedCents(), 5000LL);
+
+    data::SaleService service(db);
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    const data::SaleRecordResult result = service.recordSale({ item }, page.sessionId(), "desktop", false);
+    QVERIFY(result.ok);
+    QCOMPARE(result.totalCents, 10000LL);
+
+    page.refresh();
+    QCOMPARE(page.movementCount(), 1);
+    QCOMPARE(page.expectedCents(), 15000LL);
+
+    page.closeSession(15000);
+    QVERIFY(!page.hasOpenSession());
+    QCOMPARE(page.lastVarianceCents(), 0LL);
+
+    page.openSession(2000);
+    item.quantity = 2;
+    const data::SaleRecordResult result2 = service.recordSale({ item }, page.sessionId(), "desktop", false);
+    QVERIFY(result2.ok);
+    QCOMPARE(result2.totalCents, 10000LL);
+    page.refresh();
+    QCOMPARE(page.expectedCents(), 12000LL);
+    page.closeSession(11500);
+    QVERIFY(!page.hasOpenSession());
+    QCOMPARE(page.lastVarianceCents(), -500LL);
+}
+
+void UiTest::salesPageShowsToday()
+{
+    int unused = 0;
+    const QString path = m_dir.filePath(QStringLiteral("sales-today.sqlite"));
+    const int productId = seedProduct(path, &unused, 10000);
+
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    const auto session = sessions.findOpen();
+    QVERIFY(session.has_value());
+    data::SaleService service(db);
+
+    core::SaleItem desktopItem;
+    desktopItem.productId = productId;
+    desktopItem.quantity = 2;
+    desktopItem.unitPriceCents = 7500; // override
+    QVERIFY(service.recordSale({ desktopItem }, session->id, "desktop", false).ok);
+
+    core::SaleItem deviceItem;
+    deviceItem.productId = productId;
+    deviceItem.quantity = 1;
+    QVERIFY(service.recordSale({ deviceItem }, session->id, "dev-1", false).ok);
+
+    ui::SalesPage page(db);
+    QCOMPARE(page.rowCount(), 2);
+    QCOMPARE(page.grandTotalCents(), 25000LL);
+    QCOMPARE(page.profitCents(), 7000LL);
 }
 
 QTEST_MAIN(UiTest)

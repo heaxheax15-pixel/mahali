@@ -85,7 +85,7 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     m_table = new QTableWidget;
     m_table->setColumnCount(3);
     m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("الاسم"), QStringLiteral("الهاتف"), QStringLiteral("المطلوب (رصيد)" )});
+        {QStringLiteral("الاسم"), QStringLiteral("الهاتف"), QStringLiteral("المطلوب (رصيد)")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);

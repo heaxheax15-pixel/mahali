@@ -7,9 +7,12 @@
 #include <QStatusBar>
 #include <QWidget>
 
+#include "cash_session_page.h"
 #include "customers_page.h"
 #include "format_utils.h"
+#include "pos_page.h"
 #include "products_page.h"
+#include "sales_page.h"
 #include "suppliers_page.h"
 
 namespace app::ui {
@@ -25,15 +28,24 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     m_nav = new QListWidget;
     m_nav->setFixedWidth(180);
+    m_nav->addItem(QStringLiteral("البيع السريع"));
     m_nav->addItem(QStringLiteral("المنتجات"));
     m_nav->addItem(QStringLiteral("العملاء"));
     m_nav->addItem(QStringLiteral("الموردون"));
+    m_nav->addItem(QStringLiteral("جلسة الصندوق"));
+    m_nav->addItem(QStringLiteral("مبيعات اليوم"));
     m_nav->setCurrentRow(0);
 
     m_pages = new QStackedWidget;
+    m_pos = new PosPage(db);
+    m_cashSession = new CashSessionPage(db);
+    m_sales = new SalesPage(db);
+    m_pages->addWidget(m_pos);
     m_pages->addWidget(new ProductsPage(db));
     m_pages->addWidget(new CustomersPage(db));
     m_pages->addWidget(new SuppliersPage(db));
+    m_pages->addWidget(m_cashSession);
+    m_pages->addWidget(m_sales);
 
     auto* central = new QWidget;
     auto* layout = new QHBoxLayout(central);
@@ -44,6 +56,15 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     setCentralWidget(central);
 
     connect(m_nav, &QListWidget::currentRowChanged, m_pages, &QStackedWidget::setCurrentIndex);
+    connect(m_nav, &QListWidget::currentRowChanged, this,
+            [this](int row) {
+                // Live pages refresh each time the operator opens them.
+                if (row == 4) {
+                    m_cashSession->refresh();
+                } else if (row == 5) {
+                    m_sales->refresh();
+                }
+            });
 
     m_statusLabel = new QLabel;
     statusBar()->addWidget(m_statusLabel);

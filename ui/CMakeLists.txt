@@ -20,6 +20,12 @@ target_sources(mahali-ui PRIVATE
     main_window.h
     server_controller.cpp
     server_controller.h
+    pos_page.cpp
+    pos_page.h
+    cash_session_page.cpp
+    cash_session_page.h
+    sales_page.cpp
+    sales_page.h
     products_page.cpp
     products_page.h
     customers_page.cpp
