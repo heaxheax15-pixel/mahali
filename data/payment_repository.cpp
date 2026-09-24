@@ -85,7 +85,7 @@ int PaymentRepository::insert(const core::Payment& payment)
     query.addBindValue(payment.customerId);
     query.addBindValue(payment.amountCents);
     query.addBindValue(toIso(payment.createdAt.isValid() ? payment.createdAt : QDateTime::currentDateTime()));
-    query.addBindValue(payment.note);
+    query.addBindValue(payment.note.isNull() ? QStringLiteral("") : payment.note);
     query.addBindValue(payment.reversedId);
     if (!query.exec()) {
         return 0;

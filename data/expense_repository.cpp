@@ -64,7 +64,7 @@ int ExpenseRepository::insert(const core::Expense& expense)
     query.prepare(
         QStringLiteral("INSERT INTO expenses (created_at, label, amount_cents, reversed_id) VALUES (?, ?, ?, ?)"));
     query.addBindValue(toIso(expense.createdAt.isValid() ? expense.createdAt : QDateTime::currentDateTime()));
-    query.addBindValue(expense.label);
+    query.addBindValue(expense.label.isNull() ? QStringLiteral("") : expense.label);
     query.addBindValue(expense.amountCents);
     query.addBindValue(expense.reversedId);
     if (!query.exec()) {

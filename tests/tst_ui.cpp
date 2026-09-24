@@ -1,19 +1,28 @@
 #include <QtTest/QtTest>
 
+#include <QDate>
 #include <QSignalSpy>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
+#include <QTime>
 #include <QTableWidget>
 #include <QUrl>
 
 #include "core/sync_operation.h"
 #include "data/applied_op_repository.h"
 #include "data/audit_log_repository.h"
+#include "data/cash_entry_service.h"
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/customer_transaction_repository.h"
+#include "data/expense_repository.h"
+#include "data/owner_drawing_repository.h"
 #include "data/payment_repository.h"
+#include "data/payment_service.h"
 #include "data/product_repository.h"
+#include "data/report_service.h"
 #include "data/sale_item_repository.h"
 #include "data/sale_repository.h"
 #include "data/sale_service.h"
@@ -23,12 +32,16 @@
 #include "network/sync_client.h"
 #include "ui/cash_session_page.h"
 #include "ui/customers_page.h"
+#include "ui/expenses_page.h"
 #include "ui/format_utils.h"
 #include "ui/pos_page.h"
 #include "ui/products_page.h"
+#include "ui/reports_page.h"
 #include "ui/sales_page.h"
 #include "ui/server_controller.h"
 #include "ui/suppliers_page.h"
+
+#include <algorithm>
 
 using namespace app;
 
@@ -52,6 +65,9 @@ private slots:
     void posSaleRequiresOpenSession();
     void cashSessionLifecycle();
     void salesPageShowsToday();
+    void customerCreditAndPayment();
+    void expensesAndDrawings();
+    void reportBuilds();
 
 private:
     void seedSyncDatabase(const QString& path, int* productId, int* sessionId);
@@ -480,6 +496,184 @@ void UiTest::salesPageShowsToday()
     QCOMPARE(page.rowCount(), 2);
     QCOMPARE(page.grandTotalCents(), 25000LL);
     QCOMPARE(page.profitCents(), 7000LL);
+}
+
+void UiTest::customerCreditAndPayment()
+{
+    const QString path = m_dir.filePath(QStringLiteral("customer-credit.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.costPriceCents = 6000;
+    product.salePriceCents = 10000;
+    product.unit = QStringLiteral("أنبوب");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    data::CustomerRepository customers(db);
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون آجل");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    ui::CustomersPage page(db);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitPriceCents = 5000; // override: credit at a lower price
+    page.recordDebt(customerId, { item });
+
+    QVERIFY(page.noticeText().contains(QStringLiteral("دين")));
+    QCOMPARE(page.balanceAt(0), QStringLiteral("100.00"));
+
+    // Credit sales never touch the till and never enter the sync outbox.
+    data::CashMovementRepository movements(db);
+    QCOMPARE(movements.sumBySessionId(sessionId), 0LL);
+    QCOMPARE(data::AppliedOpRepository(db).count(), 0);
+
+    page.recordPayment(customerId, 4000, QString());
+    QVERIFY(page.noticeText().contains(QStringLiteral("سداد")));
+    QCOMPARE(page.balanceAt(0), QStringLiteral("60.00"));
+    QCOMPARE(page.balanceAt(0), QStringLiteral("60.00"));
+    Q_UNUSED(db)
+    QCOMPARE(movements.sumBySessionId(sessionId), 4000LL);
+
+    bool foundPayment = false;
+    for (const core::CashMovement& movement : movements.findBySessionId(sessionId)) {
+        if (movement.type == QLatin1String("customer_payment")) {
+            foundPayment = true;
+            QCOMPARE(movement.amountCents, 4000LL);
+        }
+    }
+    QVERIFY(foundPayment);
+}
+
+void UiTest::expensesAndDrawings()
+{
+    const QString path = m_dir.filePath(QStringLiteral("cash-entries.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    ui::ExpensesPage page(db);
+    page.recordExpense(QStringLiteral("كهرباء"), 1500);
+    QVERIFY(page.noticeText().contains(QStringLiteral("مصروف")));
+    page.recordDrawing(QStringLiteral("سحب شخصي"), 2000);
+    QVERIFY(page.noticeText().contains(QStringLiteral("سحب")));
+
+    QCOMPARE(page.entryCount(), 2);
+    QCOMPARE(page.expensesTotalCents(), 1500LL);
+
+    data::ExpenseRepository expenses(db);
+    const auto expenseRows = expenses.findBetween(QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+                                                  QDateTime::currentDateTime());
+    QCOMPARE(expenseRows.size(), 1);
+    QCOMPARE(expenseRows[0].amountCents, 1500LL);
+
+    data::OwnerDrawingRepository drawings(db);
+    const auto drawingRows = drawings.findBetween(QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+                                                  QDateTime::currentDateTime());
+    QCOMPARE(drawingRows.size(), 1);
+    QCOMPARE(drawingRows[0].amountCents, 2000LL);
+
+    data::CashMovementRepository movements(db);
+    QCOMPARE(movements.sumBySessionId(sessionId), -3500LL);
+}
+
+void UiTest::reportBuilds()
+{
+    const QString path = m_dir.filePath(QStringLiteral("report.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.costPriceCents = 3000;
+    product.salePriceCents = 5000;
+    product.unit = QStringLiteral("أنبوب");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    data::CustomerRepository customers(db);
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    data::SaleService saleService(db);
+    core::SaleItem saleItem;
+    saleItem.productId = productId;
+    saleItem.quantity = 2;
+    QVERIFY(saleService.recordSale({ saleItem }, sessionId, "desktop", false).ok);
+
+    core::SaleItem debtItem;
+    debtItem.productId = productId;
+    debtItem.quantity = 1;
+    QVERIFY(saleService.recordCustomerDebt(customerId, { debtItem }, "desktop", false).ok);
+
+    data::PaymentService payments(db);
+    QVERIFY(payments.recordCustomerPayment(customerId, 2000, sessionId, QString()).ok);
+
+    data::CashEntryService cashEntries(db);
+    QVERIFY(cashEntries.recordExpense(QStringLiteral("كهرباء"), 1500, sessionId).ok);
+    QVERIFY(cashEntries.recordDrawing(QStringLiteral("سحب"), 2000, sessionId).ok);
+
+    const QDateTime dayStart(QDate::currentDate(), QTime(0, 0, 0));
+    const data::StoreReport report = data::ReportService(db).build(dayStart, QDateTime::currentDateTime());
+
+    QCOMPARE(report.revenueCents, 10000LL);
+    QCOMPARE(report.salesCount, 1LL);
+    QCOMPARE(report.cogsCents, 6000LL);
+    QCOMPARE(report.grossProfitCents, 4000LL);
+    QCOMPARE(report.expensesCents, 1500LL);
+    QCOMPARE(report.drawingsCents, 2000LL);
+    QCOMPARE(report.netProfitCents, 2500LL);
+    QCOMPARE(report.outstandingDebtCents, 3000LL);
+    QCOMPARE(report.zakatBaseCents, 13000LL);
+    QCOMPARE(report.zakatCents, 325LL);
+    QCOMPARE(report.sessionsOpened, 1LL);
+    QCOMPARE(report.openingFloatCents, 5000LL);
+
+    const auto findLine = [&report](const QString& type) -> const data::CashLine* {
+        for (const data::CashLine& line : report.cashLines) {
+            if (line.type == type) {
+                return &line;
+            }
+        }
+        return nullptr;
+    };
+    const data::CashLine* saleLine = findLine(QStringLiteral("sale"));
+    QVERIFY(saleLine != nullptr);
+    QCOMPARE(saleLine->count, 1);
+    QCOMPARE(saleLine->sumCents, 10000LL);
+    QCOMPARE(findLine(QStringLiteral("customer_payment"))->sumCents, 2000LL);
+    QCOMPARE(findLine(QStringLiteral("expense"))->sumCents, -1500LL);
+    QCOMPARE(findLine(QStringLiteral("drawing"))->sumCents, -2000LL);
+
+    ui::ReportsPage page(db);
+    QCOMPARE(page.report().revenueCents, 10000LL);
+    QCOMPARE(page.report().zakatCents, 325LL);
+    QCOMPARE(page.report().netProfitCents, 2500LL);
 }
 
 QTEST_MAIN(UiTest)

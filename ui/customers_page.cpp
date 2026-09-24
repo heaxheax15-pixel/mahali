@@ -1,22 +1,31 @@
 #include "customers_page.h"
 
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
-#include <QHeaderView>
 #include <QHBoxLayout>
+#include <QHeaderView>
+#include <QInputDialog>
+#include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
 #include "core/customer_transaction.h"
 #include "core/payment.h"
+#include "core/sale_item.h"
+#include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/customer_transaction_repository.h"
 #include "data/payment_repository.h"
+#include "data/payment_service.h"
+#include "data/product_repository.h"
+#include "data/sale_service.h"
 #include "format_utils.h"
 
 namespace app::ui {
@@ -72,6 +81,134 @@ long long balanceFor(app::data::Database& db, int customerId)
     return balance;
 }
 
+// A compact credit-sale builder: pick products, set quantity/price, and return
+// the resulting sale items (prices resolved to cents) on accept.
+bool collectDebtItems(QWidget* parent, app::data::Database& db, QVector<core::SaleItem>* out)
+{
+    app::data::ProductRepository products(db);
+    const auto catalog = products.findAll();
+
+    QDialog dialog(parent);
+    dialog.setWindowTitle(QStringLiteral("بيع آجل"));
+    dialog.setModal(true);
+    dialog.resize(560, 400);
+
+    auto* combo = new QComboBox;
+    combo->setEditable(true);
+    for (const core::Product& product : catalog) {
+        const QString label = product.barcode.isEmpty() ? product.name
+                                                        : QStringLiteral("%1 (%2)").arg(product.name, product.barcode);
+        combo->addItem(label, product.id);
+        if (product.barcode == QLatin1String("6130000000004") && catalog.size() == 1) {
+            combo->setCurrentIndex(combo->count() - 1);
+        }
+    }
+    auto* qty = new QSpinBox;
+    qty->setRange(1, 1000000);
+    qty->setValue(1);
+    auto* price = new QLineEdit;
+    price->setPlaceholderText(QStringLiteral("اضغط لتغيير سعر/كغ"));
+    auto* addButton = new QPushButton(QStringLiteral("أضف سطر"));
+    auto* removeButton = new QPushButton(QStringLiteral("حذف السطر المحدد"));
+
+    auto* table = new QTableWidget;
+    table->setColumnCount(4);
+    table->setHorizontalHeaderLabels(
+        {QStringLiteral("المنتج"), QStringLiteral("الكمية"), QStringLiteral("سعر الوحدة"), QStringLiteral("الإجمالي")});
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->horizontalHeader()->setStretchLastSection(true);
+
+    auto* totalLabel = new QLabel;
+    auto* hintLabel = new QLabel(QStringLiteral("الكمية والسعر عشري؟ عدّل في الأسطر قبل الحفظ."));
+
+    auto* picker = new QHBoxLayout;
+    picker->addWidget(combo, 1);
+    picker->addWidget(qty);
+    picker->addWidget(price);
+    picker->addWidget(addButton);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("حفظ البيع الآجل"));
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    layout->addLayout(picker);
+    layout->addWidget(table);
+    layout->addWidget(totalLabel);
+    layout->addWidget(removeButton);
+    layout->addWidget(hintLabel);
+    layout->addWidget(buttons);
+
+    auto refreshTotal = [table, totalLabel]() {
+        long long total = 0;
+        for (int i = 0; i < table->rowCount(); ++i) {
+            total += parseMoney(table->item(i, 3)->text()).value_or(0);
+        }
+        totalLabel->setText(QStringLiteral("الإجمالي: %1").arg(formatMoney(total)));
+    };
+
+    QObject::connect(addButton, &QPushButton::clicked, &dialog, [&]() {
+        const int productId = combo->currentData().toInt();
+        if (productId <= 0) {
+            QMessageBox::warning(&dialog, QStringLiteral("خطأ"), QStringLiteral("اختر منتجاً من القائمة"));
+            return;
+        }
+        const auto product = products.findById(productId);
+        if (!product) {
+            return;
+        }
+        long long unitPrice = product->salePriceCents;
+        if (!price->text().trimmed().isEmpty()) {
+            const auto overridePrice = parseMoney(price->text());
+            if (!overridePrice || *overridePrice < 0) {
+                QMessageBox::warning(&dialog, QStringLiteral("خطأ"), QStringLiteral("السعر غير صالح"));
+                return;
+            }
+            unitPrice = *overridePrice;
+        }
+        const int row = table->rowCount();
+        table->insertRow(row);
+        auto* nameItem = new QTableWidgetItem(product->name);
+        nameItem->setData(Qt::UserRole, productId);
+        table->setItem(row, 0, nameItem);
+        table->setItem(row, 1, new QTableWidgetItem(QString::number(qty->value())));
+        table->setItem(row, 2, new QTableWidgetItem(formatMoney(unitPrice)));
+        table->setItem(row, 3, new QTableWidgetItem(formatMoney(unitPrice * qty->value())));
+        price->clear();
+        refreshTotal();
+    });
+
+    QObject::connect(removeButton, &QPushButton::clicked, &dialog, [&]() {
+        const int row = table->currentRow();
+        if (row >= 0) {
+            table->removeRow(row);
+            refreshTotal();
+        }
+    });
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return false;
+    }
+
+    out->clear();
+    for (int i = 0; i < table->rowCount(); ++i) {
+        bool qtyOk = false;
+        const qlonglong quantity = table->item(i, 1)->text().toLongLong(&qtyOk);
+        const auto unitPrice = parseMoney(table->item(i, 2)->text());
+        if (!qtyOk || quantity <= 0 || !unitPrice || *unitPrice < 0) {
+            return false;
+        }
+        core::SaleItem item;
+        item.productId = table->item(i, 0)->data(Qt::UserRole).toInt();
+        item.quantity = quantity;
+        item.unitPriceCents = *unitPrice;
+        out->append(item);
+    }
+    return !out->isEmpty();
+}
+
 } // namespace
 
 CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
@@ -79,8 +216,15 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     auto* add = new QPushButton(QStringLiteral("إضافة عميل"));
-    auto* edit = new QPushButton(QStringLiteral("تعديل"));
-    edit->setEnabled(false);
+    m_edit = new QPushButton(QStringLiteral("تعديل"));
+    m_debt = new QPushButton(QStringLiteral("بيع آجل"));
+    m_pay = new QPushButton(QStringLiteral("سداد"));
+    m_edit->setEnabled(false);
+    m_debt->setEnabled(false);
+    m_pay->setEnabled(false);
+
+    m_notice = new QLabel;
+    m_notice->setWordWrap(true);
 
     m_table = new QTableWidget;
     m_table->setColumnCount(3);
@@ -94,14 +238,19 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     auto* toolbar = new QHBoxLayout;
     toolbar->addStretch(1);
     toolbar->addWidget(add);
-    toolbar->addWidget(edit);
+    toolbar->addWidget(m_edit);
+    toolbar->addWidget(m_debt);
+    toolbar->addWidget(m_pay);
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->addLayout(toolbar);
     layout->addWidget(m_table);
+    layout->addWidget(m_notice);
 
     connect(add, &QPushButton::clicked, this, &CustomersPage::onAddClicked);
-    connect(edit, &QPushButton::clicked, this, &CustomersPage::onEditClicked);
+    connect(m_edit, &QPushButton::clicked, this, &CustomersPage::onEditClicked);
+    connect(m_debt, &QPushButton::clicked, this, &CustomersPage::onDebtClicked);
+    connect(m_pay, &QPushButton::clicked, this, &CustomersPage::onPaymentClicked);
     connect(m_table, &QTableWidget::itemSelectionChanged, this, &CustomersPage::onSelectionChanged);
 
     refresh();
@@ -137,6 +286,11 @@ QString CustomersPage::balanceAt(int row) const
     return m_table->item(row, 2)->text();
 }
 
+QString CustomersPage::noticeText() const
+{
+    return m_notice->text();
+}
+
 int CustomersPage::selectedCustomerId() const
 {
     const int row = m_table->currentRow();
@@ -149,8 +303,10 @@ int CustomersPage::selectedCustomerId() const
 
 void CustomersPage::onSelectionChanged()
 {
-    // Selection drives an editable footer in a later accounting phase; for now
-    // the page stays read-heavy.
+    const bool has = selectedCustomerId() != 0;
+    m_edit->setEnabled(has);
+    m_debt->setEnabled(has);
+    m_pay->setEnabled(has);
 }
 
 void CustomersPage::onAddClicked()
@@ -183,6 +339,78 @@ void CustomersPage::onEditClicked()
         return;
     }
     customers.save(*maybeCustomer);
+    refresh();
+}
+
+void CustomersPage::onDebtClicked()
+{
+    const int id = selectedCustomerId();
+    if (id == 0) {
+        return;
+    }
+    QVector<core::SaleItem> items;
+    if (!collectDebtItems(this, m_db, &items)) {
+        return;
+    }
+    recordDebt(id, items);
+}
+
+void CustomersPage::onPaymentClicked()
+{
+    const int id = selectedCustomerId();
+    if (id == 0) {
+        return;
+    }
+    bool ok = false;
+    const QString text =
+        QInputDialog::getText(this, QStringLiteral("سداد"),
+                              QStringLiteral("المبلغ الذي دفعه العميل الآن:"), QLineEdit::Normal, QString(), &ok);
+    if (!ok) {
+        return;
+    }
+    const auto cents = parseMoney(text);
+    if (!cents || *cents <= 0) {
+        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("المبلغ غير صالح"));
+        return;
+    }
+    recordPayment(id, *cents, QString());
+}
+
+void CustomersPage::recordDebt(int customerId, const QVector<core::SaleItem>& items)
+{
+    m_notice->clear();
+    if (customerId <= 0 || items.isEmpty()) {
+        m_notice->setText(QStringLiteral("لا يوجد بنود للبيع الآجل"));
+        return;
+    }
+    data::SaleService service(m_db);
+    const data::SaleRecordResult result =
+        service.recordCustomerDebt(customerId, items, QStringLiteral("desktop"), /*allowOversold=*/false);
+    if (!result.ok) {
+        m_notice->setText(QStringLiteral("تعذر تسجيل البيع الآجل: %1").arg(result.error));
+        return;
+    }
+    m_notice->setText(QStringLiteral("سُجّل دين: %1").arg(formatMoney(result.totalCents)));
+    refresh();
+}
+
+void CustomersPage::recordPayment(int customerId, long long amountCents, const QString& note)
+{
+    m_notice->clear();
+    data::CashSessionRepository sessions(m_db);
+    const auto session = sessions.findOpen();
+    if (!session) {
+        m_notice->setText(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        return;
+    }
+    data::PaymentService service(m_db);
+    const data::PaymentResult result =
+        service.recordCustomerPayment(customerId, amountCents, session->id, note);
+    if (!result.ok) {
+        m_notice->setText(QStringLiteral("تعذر تسجيل السداد: %1").arg(result.error));
+        return;
+    }
+    m_notice->setText(QStringLiteral("سُجّل سداد: %1").arg(formatMoney(result.amountCents)));
     refresh();
 }
 

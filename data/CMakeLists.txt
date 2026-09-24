@@ -18,6 +18,7 @@ target_sources(mahali-data PRIVATE
     applied_op_repository.cpp
     cash_movement_repository.cpp
     cash_session_repository.cpp
+    cash_entry_service.cpp
     customer_repository.cpp
     customer_transaction_item_repository.cpp
     customer_transaction_repository.cpp
@@ -29,6 +30,7 @@ target_sources(mahali-data PRIVATE
     payment_repository.cpp
     payment_service.cpp
     product_repository.cpp
+    report_service.cpp
     sale_item_repository.cpp
     sale_repository.cpp
     sale_service.cpp

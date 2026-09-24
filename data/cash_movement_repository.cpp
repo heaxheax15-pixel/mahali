@@ -66,7 +66,7 @@ int CashMovementRepository::insert(const core::CashMovement& movement)
     query.addBindValue(movement.type);
     query.addBindValue(movement.amountCents);
     query.addBindValue(toIso(movement.createdAt.isValid() ? movement.createdAt : QDateTime::currentDateTime()));
-    query.addBindValue(movement.note);
+    query.addBindValue(movement.note.isNull() ? QStringLiteral("") : movement.note);
     if (!query.exec()) {
         return 0;
     }

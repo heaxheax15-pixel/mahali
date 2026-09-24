@@ -66,7 +66,7 @@ int OwnerDrawingRepository::insert(const core::OwnerDrawing& drawing)
         QStringLiteral("INSERT INTO owner_drawings (created_at, amount_cents, note, reversed_id) VALUES (?, ?, ?, ?)"));
     query.addBindValue(toIso(drawing.createdAt.isValid() ? drawing.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(drawing.amountCents);
-    query.addBindValue(drawing.note);
+    query.addBindValue(drawing.note.isNull() ? QStringLiteral("") : drawing.note);
     query.addBindValue(drawing.reversedId);
     if (!query.exec()) {
         return 0;

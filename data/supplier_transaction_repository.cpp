@@ -85,7 +85,7 @@ int SupplierTransactionRepository::insert(const core::SupplierTransaction& trans
     query.addBindValue(transaction.supplierId);
     query.addBindValue(transaction.amountCents);
     query.addBindValue(toIso(transaction.createdAt.isValid() ? transaction.createdAt : QDateTime::currentDateTime()));
-    query.addBindValue(transaction.note);
+    query.addBindValue(transaction.note.isNull() ? QStringLiteral("") : transaction.note);
     if (!query.exec()) {
         return 0;
     }

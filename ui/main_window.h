@@ -12,7 +12,9 @@ class QStackedWidget;
 namespace app::ui {
 
 class CashSessionPage;
+class ExpensesPage;
 class PosPage;
+class ReportsPage;
 class SalesPage;
 
 // The desktop shell: Arabic RTL layout, a sidebar of pages on the right, the
@@ -27,6 +29,8 @@ public:
     PosPage* posPage() const { return m_pos; }
     CashSessionPage* cashSessionPage() const { return m_cashSession; }
     SalesPage* salesPage() const { return m_sales; }
+    ExpensesPage* expensesPage() const { return m_expenses; }
+    ReportsPage* reportsPage() const { return m_reports; }
 
 private slots:
     void onSyncStatusChanged();
@@ -40,6 +44,8 @@ private:
     PosPage* m_pos = nullptr;
     CashSessionPage* m_cashSession = nullptr;
     SalesPage* m_sales = nullptr;
+    ExpensesPage* m_expenses = nullptr;
+    ReportsPage* m_reports = nullptr;
 };
 
 } // namespace app::ui

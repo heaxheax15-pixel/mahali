@@ -26,6 +26,10 @@ target_sources(mahali-ui PRIVATE
     cash_session_page.h
     sales_page.cpp
     sales_page.h
+    expenses_page.cpp
+    expenses_page.h
+    reports_page.cpp
+    reports_page.h
     products_page.cpp
     products_page.h
     customers_page.cpp

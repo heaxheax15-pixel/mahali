@@ -9,9 +9,11 @@
 
 #include "cash_session_page.h"
 #include "customers_page.h"
+#include "expenses_page.h"
 #include "format_utils.h"
 #include "pos_page.h"
 #include "products_page.h"
+#include "reports_page.h"
 #include "sales_page.h"
 #include "suppliers_page.h"
 
@@ -34,18 +36,24 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_nav->addItem(QStringLiteral("الموردون"));
     m_nav->addItem(QStringLiteral("جلسة الصندوق"));
     m_nav->addItem(QStringLiteral("مبيعات اليوم"));
+    m_nav->addItem(QStringLiteral("المصاريف والسحوبات"));
+    m_nav->addItem(QStringLiteral("التقارير"));
     m_nav->setCurrentRow(0);
 
     m_pages = new QStackedWidget;
     m_pos = new PosPage(db);
     m_cashSession = new CashSessionPage(db);
     m_sales = new SalesPage(db);
+    m_expenses = new ExpensesPage(db);
+    m_reports = new ReportsPage(db);
     m_pages->addWidget(m_pos);
     m_pages->addWidget(new ProductsPage(db));
     m_pages->addWidget(new CustomersPage(db));
     m_pages->addWidget(new SuppliersPage(db));
     m_pages->addWidget(m_cashSession);
     m_pages->addWidget(m_sales);
+    m_pages->addWidget(m_expenses);
+    m_pages->addWidget(m_reports);
 
     auto* central = new QWidget;
     auto* layout = new QHBoxLayout(central);
@@ -63,6 +71,10 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
                     m_cashSession->refresh();
                 } else if (row == 5) {
                     m_sales->refresh();
+                } else if (row == 6) {
+                    m_expenses->refresh();
+                } else if (row == 7) {
+                    m_reports->refresh();
                 }
             });
 
