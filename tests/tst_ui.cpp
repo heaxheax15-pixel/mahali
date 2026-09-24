@@ -26,19 +26,24 @@
 #include "data/sale_item_repository.h"
 #include "data/sale_repository.h"
 #include "data/sale_service.h"
+#include "data/setting_repository.h"
 #include "data/stock_movement_repository.h"
 #include "data/supplier_repository.h"
 #include "data/supplier_transaction_repository.h"
+#include "data/zakat_setting_repository.h"
 #include "network/sync_client.h"
+#include "ui/audit_log_page.h"
 #include "ui/cash_session_page.h"
 #include "ui/customers_page.h"
 #include "ui/expenses_page.h"
 #include "ui/format_utils.h"
 #include "ui/pos_page.h"
 #include "ui/products_page.h"
+#include "ui/refunds_page.h"
 #include "ui/reports_page.h"
 #include "ui/sales_page.h"
 #include "ui/server_controller.h"
+#include "ui/settings_page.h"
 #include "ui/suppliers_page.h"
 
 #include <algorithm>
@@ -68,6 +73,10 @@ private slots:
     void customerCreditAndPayment();
     void expensesAndDrawings();
     void reportBuilds();
+    void settingsCurrencyAndZakat();
+    void refundsRestoreMoneyAndStock();
+    void paymentRefundRaisesBalance();
+    void entryReversal();
 
 private:
     void seedSyncDatabase(const QString& path, int* productId, int* sessionId);
@@ -82,6 +91,7 @@ void UiTest::initTestCase()
 {
     QVERIFY(m_dir.isValid());
     m_key = QByteArrayLiteral("phase11-ui-key");
+    app::ui::setCurrencySymbol(QString());
 }
 
 void UiTest::seedSyncDatabase(const QString& path, int* productId, int* sessionId)
@@ -674,6 +684,242 @@ void UiTest::reportBuilds()
     QCOMPARE(page.report().revenueCents, 10000LL);
     QCOMPARE(page.report().zakatCents, 325LL);
     QCOMPARE(page.report().netProfitCents, 2500LL);
+}
+
+void UiTest::settingsCurrencyAndZakat()
+{
+    const QString path = m_dir.filePath(QStringLiteral("settings.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    ui::SettingsPage page(db);
+
+    page.setShopName(QStringLiteral("محل النور"));
+    page.setCurrencySymbol(QStringLiteral("دج"));
+    page.setZakatEnabled(true);
+    page.setSyncKey(QStringLiteral("my-sync-key"));
+    page.save();
+
+    QVERIFY(page.noticeText().contains(QStringLiteral("حُفظت")));
+    QVERIFY(QStringLiteral("15.00 دج") == ui::formatMoney(1500));
+
+    data::SettingRepository settings(db);
+    QCOMPARE(settings.value(QStringLiteral("shop_name")).value_or(QString()), QStringLiteral("محل النور"));
+    QCOMPARE(settings.value(QStringLiteral("currency_symbol")).value_or(QString()), QStringLiteral("دج"));
+    QCOMPARE(settings.value(QStringLiteral("sync_hmac_key")).value_or(QString()), QStringLiteral("my-sync-key"));
+    data::ZakatSettingRepository zakat(db);
+    const auto enabledRow = zakat.findByKey(QStringLiteral("enabled"));
+    QVERIFY(enabledRow.has_value());
+    QCOMPARE(enabledRow->value, QStringLiteral("1"));
+
+    // Disabled zakat in the settings must zero out the report's zakat line.
+    page.setZakatEnabled(false);
+    page.save();
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.costPriceCents = 3000;
+    product.salePriceCents = 5000;
+    product.unit = QStringLiteral("أنبوب");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 10, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    QVERIFY(data::SaleService(db).recordSale({ item }, sessionId, "desktop", false).ok);
+
+    const QDateTime dayStart(QDate::currentDate(), QTime(0, 0, 0));
+    const data::StoreReport report = data::ReportService(db).build(dayStart, QDateTime::currentDateTime());
+    QCOMPARE(report.zakatBaseCents, 10000LL);
+    QCOMPARE(report.zakatCents, 0LL);
+
+    app::ui::setCurrencySymbol(QString());
+}
+
+void UiTest::refundsRestoreMoneyAndStock()
+{
+    const QString path = m_dir.filePath(QStringLiteral("refunds.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.costPriceCents = 3000;
+    product.salePriceCents = 5000;
+    product.unit = QStringLiteral("أنبوب");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    data::CustomerRepository customers(db);
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+    Q_UNUSED(customerId);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    const data::SaleRecordResult sale =
+        data::SaleService(db).recordSale({ item }, sessionId, "desktop", false);
+    QVERIFY(sale.ok);
+    QCOMPARE(products.findById(productId)->quantity, 98);
+
+    ui::RefundsPage page(db);
+    QCOMPARE(page.salesRowCount(), 1);
+    page.refundSale(sale.saleId);
+    QVERIFY(page.noticeText().contains(QStringLiteral("استرداد")));
+    QCOMPARE(page.salesRowCount(), 0);
+    QCOMPARE(products.findById(productId)->quantity, 100);
+
+    data::CashMovementRepository movements(db);
+    QCOMPARE(movements.sumBySessionId(sessionId), 0LL);
+    bool foundRefund = false;
+    for (const core::CashMovement& movement : movements.findBySessionId(sessionId)) {
+        if (movement.type == QLatin1String("refund")) {
+            foundRefund = true;
+            QCOMPARE(movement.amountCents, -10000LL);
+        }
+    }
+    QVERIFY(foundRefund);
+
+    const auto reversals = data::SaleRepository(db).findBetween(
+        QDateTime(QDate::currentDate(), QTime(0, 0, 0)), QDateTime::currentDateTime());
+    QCOMPARE(static_cast<long long>(reversals.size()), 2);
+    const core::Sale& reversal = reversals[0].reversedSaleId != 0 ? reversals[0] : reversals[1];
+    const core::Sale& original = reversals[0].reversedSaleId == 0 ? reversals[0] : reversals[1];
+    QCOMPARE(reversal.totalCents, -original.totalCents);
+    QCOMPARE(reversal.reversedSaleId, sale.saleId);
+
+    data::AuditLogRepository audit(db);
+    const auto entries = audit.findBetween(QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+                                           QDateTime::currentDateTime());
+    bool foundSaleRefund = false;
+    for (const core::AuditLogEntry& entry : entries) {
+        if (entry.action == QLatin1String("sale_refund")) {
+            foundSaleRefund = true;
+        }
+    }
+    QVERIFY(foundSaleRefund);
+}
+
+void UiTest::paymentRefundRaisesBalance()
+{
+    const QString path = m_dir.filePath(QStringLiteral("payment-refund.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.costPriceCents = 3000;
+    product.salePriceCents = 5000;
+    product.unit = QStringLiteral("أنبوب");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    data::CustomerRepository customers(db);
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 1;
+    QVERIFY(data::SaleService(db).recordCustomerDebt(customerId, { item }, "desktop", false).ok);
+
+    data::PaymentService payments(db);
+    const data::PaymentResult paid = payments.recordCustomerPayment(customerId, 2000, sessionId, QString());
+    QVERIFY(paid.ok);
+
+    ui::RefundsPage page(db);
+    QCOMPARE(page.paymentsRowCount(), 1);
+    page.refundPayment(paid.paymentId, QStringLiteral("خطأ في المبلغ"));
+    QVERIFY(page.noticeText().contains(QStringLiteral("استرداد")));
+    QCOMPARE(page.paymentsRowCount(), 0);
+
+    // Balance goes back to the full debt: 5000 - 2000 + 2000 = 5000.
+    ui::CustomersPage customersPage(db);
+    QCOMPARE(customersPage.balanceAt(0), QStringLiteral("50.00"));
+
+    data::CashMovementRepository movements(db);
+    QCOMPARE(movements.sumBySessionId(sessionId), 0LL);
+
+    data::AuditLogRepository audit(db);
+    const auto entries = audit.findBetween(QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+                                           QDateTime::currentDateTime());
+    bool foundRefund = false;
+    for (const core::AuditLogEntry& entry : entries) {
+        if (entry.action == QLatin1String("customer_payment_refund")) {
+            foundRefund = true;
+        }
+    }
+    QVERIFY(foundRefund);
+}
+
+void UiTest::entryReversal()
+{
+    const QString path = m_dir.filePath(QStringLiteral("entry-reversal.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::CashEntryService cash(db);
+    QVERIFY(cash.recordExpense(QStringLiteral("كهرباء"), 1500, sessionId).ok);
+    const data::CashEntryResult drawing = cash.recordDrawing(QStringLiteral("سحب"), 2000, sessionId);
+    QVERIFY(drawing.ok);
+
+    ui::ExpensesPage page(db);
+    QCOMPARE(page.entryCount(), 2);
+
+    // The page's per-row reverse undoes one expense: refund movement back in.
+    page.reverseRow(0);
+    QCOMPARE(data::CashMovementRepository(db).sumBySessionId(sessionId), -2000LL);
+
+    const QDateTime dayStart(QDate::currentDate(), QTime(0, 0, 0));
+    const auto expenses = data::ExpenseRepository(db).findBetween(dayStart, QDateTime::currentDateTime());
+    QCOMPARE(static_cast<long long>(expenses.size()), 2);
+    long long expenseSum = 0;
+    bool hasReversal = false;
+    for (const core::Expense& expense : expenses) {
+        expenseSum += expense.amountCents;
+        if (expense.amountCents < 0) {
+            hasReversal = true;
+        }
+    }
+    QCOMPARE(expenseSum, 0LL);
+    QVERIFY(hasReversal);
+
+    QVERIFY(cash.reverseDrawing(drawing.entryId, sessionId).ok);
+    QCOMPARE(data::CashMovementRepository(db).sumBySessionId(sessionId), 0LL);
+
+    data::AuditLogRepository audit(db);
+    const auto entries = audit.findBetween(dayStart, QDateTime::currentDateTime());
+    QCOMPARE(static_cast<long long>(entries.size()), 1);
+    QCOMPARE(entries[0].action, QStringLiteral("entry_reversal"));
 }
 
 QTEST_MAIN(UiTest)

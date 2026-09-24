@@ -28,10 +28,12 @@ public:
 public slots:
     void recordExpense(const QString& label, long long amountCents);
     void recordDrawing(const QString& note, long long amountCents);
+    void reverseRow(int row);
 
 private slots:
     void onExpenseClicked();
     void onDrawingClicked();
+    void onReverseClicked();
 
 private:
     app::data::Database& m_db;
@@ -40,6 +42,7 @@ private:
     QLabel* m_notice;
     QPushButton* m_expenseButton;
     QPushButton* m_drawingButton;
+    QPushButton* m_reverseButton;
 };
 
 } // namespace app::ui

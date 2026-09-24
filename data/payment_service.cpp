@@ -110,4 +110,51 @@ PaymentResult PaymentService::recordCustomerPayment(int customerId, long long am
     return result;
 }
 
+PaymentResult PaymentService::refundCustomerPayment(int paymentId, int cashSessionId, const QString& note)
+{
+    PaymentResult result;
+    const auto original = m_payments.findById(paymentId);
+    if (!original.has_value() || original->amountCents <= 0 || original->reversedId != 0) {
+        result.error = QStringLiteral("payment is not refundable");
+        return result;
+    }
+
+    if (!m_db.beginTransaction()) {
+        result.error = m_db.lastError();
+        return result;
+    }
+
+    CashSessionRepository cashSessions(m_db);
+    const auto session = cashSessions.findById(cashSessionId);
+    if (!session.has_value() || session->status != QStringLiteral("open")) {
+        m_db.rollback();
+        result.error = QStringLiteral("cash session is not open");
+        return result;
+    }
+
+    m_payments.reverse(paymentId, original->amountCents, note);
+
+    core::CashMovement movement;
+    movement.sessionId = session->id;
+    movement.type = QStringLiteral("refund");
+    movement.amountCents = -original->amountCents;
+    movement.createdAt = QDateTime::currentDateTime();
+    movement.note = note;
+    CashMovementRepository cashMovements(m_db);
+    if (cashMovements.insert(movement) == 0) {
+        m_db.rollback();
+        result.error = m_db.lastError();
+        return result;
+    }
+
+    if (!m_db.commit()) {
+        result.error = m_db.lastError();
+        return result;
+    }
+
+    result.ok = true;
+    result.amountCents = -original->amountCents;
+    return result;
+}
+
 } // namespace app::data

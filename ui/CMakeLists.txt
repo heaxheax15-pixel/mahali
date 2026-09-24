@@ -30,6 +30,12 @@ target_sources(mahali-ui PRIVATE
     expenses_page.h
     reports_page.cpp
     reports_page.h
+    settings_page.cpp
+    settings_page.h
+    refunds_page.cpp
+    refunds_page.h
+    audit_log_page.cpp
+    audit_log_page.h
     products_page.cpp
     products_page.h
     customers_page.cpp

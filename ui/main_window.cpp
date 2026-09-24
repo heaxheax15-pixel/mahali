@@ -7,14 +7,17 @@
 #include <QStatusBar>
 #include <QWidget>
 
+#include "audit_log_page.h"
 #include "cash_session_page.h"
 #include "customers_page.h"
 #include "expenses_page.h"
 #include "format_utils.h"
 #include "pos_page.h"
 #include "products_page.h"
+#include "refunds_page.h"
 #include "reports_page.h"
 #include "sales_page.h"
+#include "settings_page.h"
 #include "suppliers_page.h"
 
 namespace app::ui {
@@ -38,6 +41,9 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_nav->addItem(QStringLiteral("مبيعات اليوم"));
     m_nav->addItem(QStringLiteral("المصاريف والسحوبات"));
     m_nav->addItem(QStringLiteral("التقارير"));
+    m_nav->addItem(QStringLiteral("الاستردادات"));
+    m_nav->addItem(QStringLiteral("سجل المراجعة"));
+    m_nav->addItem(QStringLiteral("الإعدادات"));
     m_nav->setCurrentRow(0);
 
     m_pages = new QStackedWidget;
@@ -46,6 +52,9 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_sales = new SalesPage(db);
     m_expenses = new ExpensesPage(db);
     m_reports = new ReportsPage(db);
+    m_refunds = new RefundsPage(db);
+    m_auditLog = new AuditLogPage(db);
+    m_settings = new SettingsPage(db);
     m_pages->addWidget(m_pos);
     m_pages->addWidget(new ProductsPage(db));
     m_pages->addWidget(new CustomersPage(db));
@@ -54,6 +63,9 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_pages->addWidget(m_sales);
     m_pages->addWidget(m_expenses);
     m_pages->addWidget(m_reports);
+    m_pages->addWidget(m_refunds);
+    m_pages->addWidget(m_auditLog);
+    m_pages->addWidget(m_settings);
 
     auto* central = new QWidget;
     auto* layout = new QHBoxLayout(central);
@@ -75,6 +87,12 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
                     m_expenses->refresh();
                 } else if (row == 7) {
                     m_reports->refresh();
+                } else if (row == 8) {
+                    m_refunds->refresh();
+                } else if (row == 9) {
+                    m_auditLog->refresh();
+                } else if (row == 10) {
+                    m_settings->refresh();
                 }
             });
 

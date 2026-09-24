@@ -23,6 +23,11 @@ public:
     CashEntryResult recordExpense(const QString& label, long long amountCents, int cashSessionId);
     CashEntryResult recordDrawing(const QString& note, long long amountCents, int cashSessionId);
 
+    // Undoes a recorded entry: a reversed (negative) ledger row plus a positive
+    // "refund" cash movement so the till returns to where it was.
+    CashEntryResult reverseExpense(int expenseId, int cashSessionId);
+    CashEntryResult reverseDrawing(int drawingId, int cashSessionId);
+
 private:
     Database& m_db;
 };

@@ -4,6 +4,7 @@
 
 #include "data/database.h"
 #include "data/setting_repository.h"
+#include "ui/format_utils.h"
 #include "ui/main_window.h"
 #include "ui/server_controller.h"
 
@@ -30,6 +31,8 @@ int main(int argc, char* argv[])
     const QByteArray hmacKey = settings.value(QStringLiteral("sync_hmac_key"))
                                    .value_or(QStringLiteral("mahali-local-key"))
                                    .toUtf8();
+
+    app::ui::setCurrencySymbol(settings.value(QStringLiteral("currency_symbol")).value_or(QString()));
 
     app::ui::ServerController controller(*db, hmacKey);
     controller.start();

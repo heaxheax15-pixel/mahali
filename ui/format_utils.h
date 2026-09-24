@@ -7,7 +7,19 @@ namespace app::ui {
 
 // Money lives in the codebase as integer cents. This header is the single place
 // that renders or parses them as text. No currency symbol is hardcoded: the
-// store's currency is a shop setting (Phase 14).
+// store's currency is a shop setting (Phase 14). The UI cache set on startup
+// (and from the Settings page) appends the symbol to rendered amounts.
+
+inline QString& liveCurrencySymbol()
+{
+    static QString symbol;
+    return symbol;
+}
+
+inline void setCurrencySymbol(const QString& symbol)
+{
+    liveCurrencySymbol() = symbol.trimmed();
+}
 
 inline QString formatMoney(long long cents)
 {
@@ -16,7 +28,11 @@ inline QString formatMoney(long long cents)
     const long long major = magnitude / 100;
     const QString minor = QString::number(magnitude % 100).rightJustified(2, QLatin1Char('0'));
     const QString body = QStringLiteral("%1.%2").arg(major).arg(minor);
-    return negative ? QStringLiteral("-") + body : body;
+    const QString sign = negative ? QStringLiteral("-") : QString();
+    if (liveCurrencySymbol().isEmpty()) {
+        return sign + body;
+    }
+    return sign + body + QLatin1Char(' ') + liveCurrencySymbol();
 }
 
 // Parses money typed in any shape into cents: "12", "12.5", "12,50",

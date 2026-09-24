@@ -11,11 +11,14 @@ class QStackedWidget;
 
 namespace app::ui {
 
+class AuditLogPage;
 class CashSessionPage;
 class ExpensesPage;
 class PosPage;
+class RefundsPage;
 class ReportsPage;
 class SalesPage;
+class SettingsPage;
 
 // The desktop shell: Arabic RTL layout, a sidebar of pages on the right, the
 // active page on the left, and a live sync status line in the status bar.
@@ -31,6 +34,9 @@ public:
     SalesPage* salesPage() const { return m_sales; }
     ExpensesPage* expensesPage() const { return m_expenses; }
     ReportsPage* reportsPage() const { return m_reports; }
+    SettingsPage* settingsPage() const { return m_settings; }
+    RefundsPage* refundsPage() const { return m_refunds; }
+    AuditLogPage* auditLogPage() const { return m_auditLog; }
 
 private slots:
     void onSyncStatusChanged();
@@ -46,6 +52,9 @@ private:
     SalesPage* m_sales = nullptr;
     ExpensesPage* m_expenses = nullptr;
     ReportsPage* m_reports = nullptr;
+    SettingsPage* m_settings = nullptr;
+    RefundsPage* m_refunds = nullptr;
+    AuditLogPage* m_auditLog = nullptr;
 };
 
 } // namespace app::ui

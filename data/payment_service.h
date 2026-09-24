@@ -28,6 +28,10 @@ public:
                                         const QString& note,
                                         const core::SyncApplyToken* applyToken = nullptr);
 
+    // Refunds an earlier payment on the open session: a reversed (negative)
+    // payment row plus a negative "refund" cash movement.
+    PaymentResult refundCustomerPayment(int paymentId, int cashSessionId, const QString& note);
+
 private:
     Database& m_db;
     PaymentRepository m_payments;

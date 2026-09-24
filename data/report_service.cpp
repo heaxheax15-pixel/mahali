@@ -13,6 +13,7 @@
 #include "payment_repository.h"
 #include "sale_item_repository.h"
 #include "sale_repository.h"
+#include "zakat_setting_repository.h"
 
 namespace app::data {
 
@@ -83,7 +84,10 @@ StoreReport ReportService::build(const QDateTime& from, const QDateTime& to) con
     }
     report.zakatBaseCents =
         core::ZakatCalculator::zakatBaseCents(report.revenueCents, report.outstandingDebtCents);
-    report.zakatCents = report.zakatBaseCents > 0 ? report.zakatBaseCents * 25 / 1000 : 0;
+    ZakatSettingRepository zakatSettings(m_db);
+    const auto enabledRow = zakatSettings.findByKey(QStringLiteral("enabled"));
+    const bool zakatEnabled = !enabledRow.has_value() || enabledRow->value == QLatin1String("1");
+    report.zakatCents = zakatEnabled && report.zakatBaseCents > 0 ? report.zakatBaseCents * 25 / 1000 : 0;
 
     QSqlQuery sessionQuery(m_db.handle());
     sessionQuery.prepare(QStringLiteral(

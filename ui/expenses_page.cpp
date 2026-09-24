@@ -11,6 +11,8 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+#include "core/audit_log_entry.h"
+#include "data/audit_log_repository.h"
 #include "data/cash_entry_service.h"
 #include "data/cash_session_repository.h"
 #include "data/expense_repository.h"
@@ -19,12 +21,28 @@
 
 namespace app::ui {
 
+namespace {
+
+void writeAudit(app::data::Database& db, const QString& action, const QString& target)
+{
+    core::AuditLogEntry entry;
+    entry.actor = QStringLiteral("desktop");
+    entry.action = action;
+    entry.target = target;
+    entry.createdAt = QDateTime::currentDateTime();
+    data::AuditLogRepository(db).insert(entry);
+}
+
+} // namespace
+
 ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
     m_expenseButton = new QPushButton(QStringLiteral("مصروف جديد"));
     m_drawingButton = new QPushButton(QStringLiteral("سحب مالك"));
+    m_reverseButton = new QPushButton(QStringLiteral("عكس المحدد"));
+    m_reverseButton->setEnabled(false);
 
     m_table = new QTableWidget;
     m_table->setColumnCount(4);
@@ -39,9 +57,11 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
 
+    m_reverseButton = new QPushButton(QStringLiteral("عكس المحدد"));
     auto* toolbar = new QHBoxLayout;
     toolbar->addWidget(m_expenseButton);
     toolbar->addWidget(m_drawingButton);
+    toolbar->addWidget(m_reverseButton);
     toolbar->addStretch(1);
 
     QVBoxLayout* layout = new QVBoxLayout(this);
@@ -52,6 +72,9 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
 
     connect(m_expenseButton, &QPushButton::clicked, this, &ExpensesPage::onExpenseClicked);
     connect(m_drawingButton, &QPushButton::clicked, this, &ExpensesPage::onDrawingClicked);
+    connect(m_reverseButton, &QPushButton::clicked, this, &ExpensesPage::onReverseClicked);
+    connect(m_table, &QTableWidget::itemSelectionChanged, this,
+            [this]() { m_reverseButton->setEnabled(m_table->currentRow() >= 0); });
 
     refresh();
 }
@@ -75,6 +98,7 @@ void ExpensesPage::refresh()
         m_table->setItem(row, 1, new QTableWidgetItem(QStringLiteral("مصروف")));
         m_table->setItem(row, 2, new QTableWidgetItem(formatMoney(expense.amountCents)));
         m_table->setItem(row, 3, new QTableWidgetItem(expense.label));
+        m_table->item(row, 0)->setData(Qt::UserRole, expense.id);
         expenseTotal += expense.amountCents;
     }
     const auto drawingRows = drawings.findBetween(dayStart, now);
@@ -85,6 +109,7 @@ void ExpensesPage::refresh()
         m_table->setItem(row, 1, new QTableWidgetItem(QStringLiteral("سحب")));
         m_table->setItem(row, 2, new QTableWidgetItem(formatMoney(drawing.amountCents)));
         m_table->setItem(row, 3, new QTableWidgetItem(drawing.note));
+        m_table->item(row, 0)->setData(Qt::UserRole, drawing.id);
         drawingTotal += drawing.amountCents;
     }
 
@@ -195,6 +220,47 @@ void ExpensesPage::recordDrawing(const QString& note, long long amountCents)
     }
     m_notice->setText(QStringLiteral("سُجّل سحب: %1").arg(formatMoney(result.amountCents)));
     refresh();
+}
+
+void ExpensesPage::reverseRow(int row)
+{
+    m_notice->clear();
+    if (row < 0 || row >= m_table->rowCount()) {
+        return;
+    }
+    const int entryId = m_table->item(row, 0)->data(Qt::UserRole).toInt();
+    const QString type = m_table->item(row, 1)->text();
+    if (entryId <= 0) {
+        return;
+    }
+
+    data::CashSessionRepository sessions(m_db);
+    const auto session = sessions.findOpen();
+    if (!session) {
+        m_notice->setText(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        return;
+    }
+
+    data::CashEntryService service(m_db);
+    const data::CashEntryResult result =
+        type == QStringLiteral("مصروف") ? service.reverseExpense(entryId, session->id)
+                                        : service.reverseDrawing(entryId, session->id);
+    if (!result.ok) {
+        m_notice->setText(QStringLiteral("تعذر العكس: %1").arg(result.error));
+        return;
+    }
+    writeAudit(m_db, QStringLiteral("entry_reversal"),
+               QStringLiteral("%1 #%2 (%3)")
+                   .arg(type)
+                   .arg(entryId)
+                   .arg(formatMoney(result.amountCents)));
+    m_notice->setText(QStringLiteral("أُلغي: %1").arg(formatMoney(result.amountCents)));
+    refresh();
+}
+
+void ExpensesPage::onReverseClicked()
+{
+    reverseRow(m_table->currentRow());
 }
 
 } // namespace app::ui
