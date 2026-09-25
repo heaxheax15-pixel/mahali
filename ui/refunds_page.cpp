@@ -50,6 +50,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     m_salesTable = new QTableWidget;
+    m_salesTable->setObjectName(QStringLiteral("refundSalesTable"));
     m_salesTable->setAlternatingRowColors(true);
     m_salesTable->setFrameShape(QFrame::NoFrame);
     m_salesTable->setShowGrid(false);
@@ -61,9 +62,6 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_salesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_salesTable->horizontalHeader()->setStretchLastSection(true);
     m_salesTable->verticalHeader()->setDefaultSectionSize(42);
-    m_salesTable->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
-                                              "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
-                                              "QTableWidget::item { padding: 8px 10px; }"));
 
     m_refundSale = new QPushButton(QStringLiteral("استرداد المبيع"));
     m_refundSale->setObjectName(QStringLiteral("danger"));
@@ -87,6 +85,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     salesLayout->addWidget(m_salesTable, 1);
 
     m_paymentsTable = new QTableWidget;
+    m_paymentsTable->setObjectName(QStringLiteral("refundPaymentsTable"));
     m_paymentsTable->setAlternatingRowColors(true);
     m_paymentsTable->setFrameShape(QFrame::NoFrame);
     m_paymentsTable->setShowGrid(false);
@@ -97,9 +96,6 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_paymentsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_paymentsTable->horizontalHeader()->setStretchLastSection(true);
     m_paymentsTable->verticalHeader()->setDefaultSectionSize(42);
-    m_paymentsTable->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
-                                                 "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
-                                                 "QTableWidget::item { padding: 8px 10px; }"));
 
     m_refundPayment = new QPushButton(QStringLiteral("استرداد السداد"));
     m_refundPayment->setObjectName(QStringLiteral("danger"));

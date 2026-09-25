@@ -110,6 +110,7 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     m_addInvoice->setEnabled(false);
 
     m_suppliers = new QTableWidget;
+    m_suppliers->setObjectName(QStringLiteral("supplierTable"));
     m_suppliers->setAlternatingRowColors(true);
     m_suppliers->setFrameShape(QFrame::NoFrame);
     m_suppliers->setShowGrid(false);
@@ -120,11 +121,9 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     m_suppliers->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_suppliers->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_suppliers->verticalHeader()->setDefaultSectionSize(42);
-    m_suppliers->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
-                                             "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
-                                             "QTableWidget::item { padding: 8px 10px; }"));
 
     m_transactions = new QTableWidget;
+    m_transactions->setObjectName(QStringLiteral("supplierTransactionsTable"));
     m_transactions->setAlternatingRowColors(true);
     m_transactions->setFrameShape(QFrame::NoFrame);
     m_transactions->setShowGrid(false);
@@ -134,9 +133,6 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     m_transactions->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_transactions->horizontalHeader()->setStretchLastSection(true);
     m_transactions->verticalHeader()->setDefaultSectionSize(42);
-    m_transactions->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
-                                                "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
-                                                "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* addRow = new QHBoxLayout;
     addRow->setSpacing(10);

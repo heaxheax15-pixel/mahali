@@ -79,6 +79,7 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     m_notice->setObjectName(QStringLiteral("noticeOk"));
 
     m_table = new QTableWidget;
+    m_table->setObjectName(QStringLiteral("expenseTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(false);
@@ -89,9 +90,6 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->verticalHeader()->setDefaultSectionSize(42);
-    m_table->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
-                                          "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
-                                          "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);

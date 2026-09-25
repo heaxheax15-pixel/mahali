@@ -349,7 +349,7 @@ QLabel[state="info"] {
 /* ================= Group boxes & misc ================= */
 QGroupBox {
     background: #ffffff;
-    border: 1px solid #dce5e7;
+    border: 1px solid rgba(79, 70, 229, 0.18);
     border-radius: 12px;
     margin-top: 14px;
     padding: 12px 10px 10px 10px;
@@ -358,23 +358,34 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     padding: 0 8px;
-    color: #0b4b48;
+    color: #312e81;
 }
-QStatusBar {
-    background: #ffffff;
-    border-top: 1px solid #dce5e7;
-    color: #66757a;
+QStatusBar#appStatusBar {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #0f172a,
+                                stop:1 #111827);
+    border-top: 1px solid rgba(79, 70, 229, 0.18);
+    color: #cbd5e1;
 }
-QStatusBar::item { border: none; }
+QStatusBar#appStatusBar::item { border: none; }
+QStatusBar#appStatusBar QLabel#statusLabel {
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 600;
+}
 QToolTip {
-    background: #16272b;
-    color: #ffffff;
-    border: none;
+    background: #1f2937;
+    color: #f8fafc;
+    border: 1px solid rgba(139, 92, 246, 0.30);
     padding: 5px 8px;
     border-radius: 6px;
 }
 QScrollBar:vertical { background: transparent; width: 12px; margin: 2px; }
-QScrollBar::handle:vertical { background: #c2d0d2; border-radius: 5px; min-height: 24px; }
-QScrollBar::handle:vertical:hover { background: #9fb5b7; }
+QScrollBar::handle:vertical { background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #8b5cf6,
+                                stop:1 #4f46e5); border-radius: 5px; min-height: 24px; }
+QScrollBar::handle:vertical:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #7c3aed,
+                                stop:1 #2563eb); }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QCalendarWidget QWidget { alternate-background-color: #f5f9fa; }
+QCalendarWidget QWidget { alternate-background-color: #eef2ff; }

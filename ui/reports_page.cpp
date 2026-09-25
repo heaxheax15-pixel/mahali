@@ -84,6 +84,7 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     m_bottom->setObjectName(QStringLiteral("faintText"));
 
     m_cashTable = new QTableWidget;
+    m_cashTable->setObjectName(QStringLiteral("reportTable"));
     m_cashTable->setAlternatingRowColors(true);
     m_cashTable->setFrameShape(QFrame::NoFrame);
     m_cashTable->setShowGrid(false);
@@ -93,9 +94,6 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     m_cashTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_cashTable->horizontalHeader()->setStretchLastSection(true);
     m_cashTable->verticalHeader()->setDefaultSectionSize(42);
-    m_cashTable->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
-                                              "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
-                                              "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* quick = new QHBoxLayout;
     quick->setSpacing(10);

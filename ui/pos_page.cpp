@@ -49,6 +49,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     root->addWidget(m_entry);
 
     m_table = new QTableWidget;
+    m_table->setObjectName(QStringLiteral("posTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(false);
@@ -64,9 +65,6 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_table->verticalHeader()->setDefaultSectionSize(46);
     m_table->setColumnWidth(1, 90);
     m_table->setColumnWidth(2, 120);
-    m_table->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
-                                          "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 700; color: #334155; }"
-                                          "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* hero = new QFrame;
     hero->setObjectName(QStringLiteral("heroPanel"));

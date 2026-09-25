@@ -97,13 +97,12 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_nav->setCurrentRow(0);
 
     auto* brandIcon = new QLabel;
+    brandIcon->setObjectName(QStringLiteral("brandIcon"));
     brandIcon->setFixedSize(42, 42);
     brandIcon->setAlignment(Qt::AlignCenter);
     brandIcon->setPixmap(appIcon(Icon::Shop, QColor(QStringLiteral("#ffffff")), 24).pixmap(24, 24));
-    brandIcon->setStyleSheet(QStringLiteral("background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px;"));
     auto* brandTitle = new QLabel(QStringLiteral("محلي"));
     brandTitle->setObjectName(QStringLiteral("appTitle"));
-    brandTitle->setStyleSheet(QStringLiteral("letter-spacing: 0.2px;"));
     auto* brandSub = new QLabel(QStringLiteral("نظام البيع والمحاسبة"));
     brandSub->setObjectName(QStringLiteral("appSub"));
 
@@ -178,11 +177,10 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     m_statusLabel = new QLabel;
     m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
+    statusBar()->setObjectName(QStringLiteral("appStatusBar"));
     statusBar()->setContentsMargins(0, 0, 0, 0);
     statusBar()->setFixedHeight(28);
     statusBar()->addWidget(m_statusLabel);
-    statusBar()->setStyleSheet(QStringLiteral("QStatusBar { background: #0f172a; color: #cbd5e1; border-top: 1px solid rgba(148, 163, 184, 0.14); }"
-                                             "QStatusBar QLabel#statusLabel { color: #cbd5e1; font-size: 12px; font-weight: 600; }"));
     connect(&m_controller, &ServerController::statsChanged, this, &MainWindow::onSyncStatusChanged);
     onSyncStatusChanged();
 }

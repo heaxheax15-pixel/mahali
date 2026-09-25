@@ -1,6 +1,7 @@
 #include "stat_card.h"
 
 #include <QHBoxLayout>
+#include <QStyle>
 #include <QVBoxLayout>
 
 namespace app::ui {
@@ -8,11 +9,11 @@ namespace app::ui {
 StatCard::StatCard(const QString& caption, QWidget* parent)
     : QFrame(parent)
 {
-    setObjectName(QStringLiteral("card"));
+    setObjectName(QStringLiteral("statCard"));
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    setStyleSheet(QStringLiteral("QFrame#card { background: rgba(255,255,255,0.96); border: 1px solid #e2e8f0; border-radius: 20px; }"));
 
     m_icon = new QLabel;
+    m_icon->setObjectName(QStringLiteral("statIcon"));
     m_icon->setFixedSize(40, 40);
     m_icon->setAlignment(Qt::AlignCenter);
 
@@ -38,18 +39,8 @@ StatCard::StatCard(const QString& caption, QWidget* parent)
 
 void StatCard::setIcon(Icon kind, const QString& accentColor)
 {
-    const QColor base(accentColor);
-    QColor bg = base;
-    bg.setAlpha(28);
-    m_icon->setPixmap(appIcon(kind, base, 22).pixmap(22, 22));
-    m_icon->setStyleSheet(QStringLiteral("background: rgba(%1,%2,%3,%4); border: 1px solid rgba(%5,%6,%7,0.16); border-radius: 12px;")
-                              .arg(bg.red())
-                              .arg(bg.green())
-                              .arg(bg.blue())
-                              .arg(bg.alpha())
-                              .arg(base.red())
-                              .arg(base.green())
-                              .arg(base.blue()));
+    Q_UNUSED(accentColor);
+    m_icon->setPixmap(appIcon(kind, QColor(QStringLiteral("#4f46e5")), 22).pixmap(22, 22));
 }
 
 void StatCard::setValue(const QString& text)
@@ -66,15 +57,18 @@ void StatCard::setDelta(long long deltaCents)
 {
     const QString text = formatMoney(deltaCents);
     if (deltaCents > 0) {
-        m_value->setStyleSheet(QStringLiteral("font-size: 16px; font-weight: 700; color: #10b981;"));
+        m_value->setProperty("deltaState", QStringLiteral("positive"));
         m_value->setText(QStringLiteral("+%1").arg(text));
     } else if (deltaCents < 0) {
-        m_value->setStyleSheet(QStringLiteral("font-size: 16px; font-weight: 700; color: #ef4444;"));
+        m_value->setProperty("deltaState", QStringLiteral("negative"));
         m_value->setText(text);
     } else {
-        m_value->setStyleSheet(QString());
+        m_value->setProperty("deltaState", QStringLiteral("neutral"));
         m_value->setText(text);
     }
+    m_value->style()->unpolish(m_value);
+    m_value->style()->polish(m_value);
+    m_value->update();
 }
 
 } // namespace app::ui

@@ -102,6 +102,94 @@ QLabel#cardTitle {
     font-weight: 800;
     color: #f8fafc;
 }
+QLabel#pageHeaderTitle {
+    font-size: 22px;
+    font-weight: 800;
+    color: #f8fafc;
+}
+QLabel#pageHeaderSubtitle {
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+}
+QWidget#pageHeader {
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid #334155;
+    border-radius: 18px;
+}
+QLabel#brandIcon {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+}
+QFrame#statCard {
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid #334155;
+    border-radius: 20px;
+}
+QLabel#statIcon {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.24);
+    border-radius: 12px;
+}
+QLabel#statValue[deltaState="positive"] {
+    color: #6ee7b7;
+}
+QLabel#statValue[deltaState="negative"] {
+    color: #fca5a5;
+}
+QLabel#statValue[deltaState="neutral"] {
+    color: #f8fafc;
+}
+
+QTableWidget#posTable,
+QTableWidget#salesTable,
+QTableWidget#productTable,
+QTableWidget#customerTable,
+QTableWidget#supplierTable,
+QTableWidget#supplierTransactionsTable,
+QTableWidget#cashSessionTable,
+QTableWidget#expenseTable,
+QTableWidget#refundSalesTable,
+QTableWidget#refundPaymentsTable,
+QTableWidget#reportTable,
+QTableWidget#auditTable {
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid #334155;
+    border-radius: 18px;
+}
+QTableWidget#posTable QHeaderView::section,
+QTableWidget#salesTable QHeaderView::section,
+QTableWidget#productTable QHeaderView::section,
+QTableWidget#customerTable QHeaderView::section,
+QTableWidget#supplierTable QHeaderView::section,
+QTableWidget#supplierTransactionsTable QHeaderView::section,
+QTableWidget#cashSessionTable QHeaderView::section,
+QTableWidget#expenseTable QHeaderView::section,
+QTableWidget#refundSalesTable QHeaderView::section,
+QTableWidget#refundPaymentsTable QHeaderView::section,
+QTableWidget#reportTable QHeaderView::section,
+QTableWidget#auditTable QHeaderView::section {
+    background: #111827;
+    border: none;
+    padding: 12px 10px;
+    color: #e2e8f0;
+    font-weight: 800;
+}
+QTableWidget#posTable::item,
+QTableWidget#salesTable::item,
+QTableWidget#productTable::item,
+QTableWidget#customerTable::item,
+QTableWidget#supplierTable::item,
+QTableWidget#supplierTransactionsTable::item,
+QTableWidget#cashSessionTable::item,
+QTableWidget#expenseTable::item,
+QTableWidget#refundSalesTable::item,
+QTableWidget#refundPaymentsTable::item,
+QTableWidget#reportTable::item,
+QTableWidget#auditTable::item {
+    padding: 8px 10px;
+}
 
 QLabel#sectionTitle {
     font-size: 12px;
@@ -347,8 +435,8 @@ QLabel[state="info"] {
 
 /* ================= Group boxes & misc ================= */
 QGroupBox {
-    background: #1b2326;
-    border: 1px solid #2a3539;
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid rgba(139, 92, 246, 0.22);
     border-radius: 12px;
     margin-top: 14px;
     padding: 12px 10px 10px 10px;
@@ -357,23 +445,34 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     padding: 0 8px;
-    color: #bfe0dd;
+    color: #e9d5ff;
 }
-QStatusBar {
-    background: #1b2326;
-    border-top: 1px solid #2a3539;
-    color: #93a3a8;
+QStatusBar#appStatusBar {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #0f172a,
+                                stop:1 #111827);
+    border-top: 1px solid rgba(139, 92, 246, 0.18);
+    color: #e2e8f0;
 }
-QStatusBar::item { border: none; }
+QStatusBar#appStatusBar::item { border: none; }
+QStatusBar#appStatusBar QLabel#statusLabel {
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 600;
+}
 QToolTip {
-    background: #e6edee;
-    color: #121719;
-    border: none;
+    background: #111827;
+    color: #f8fafc;
+    border: 1px solid rgba(139, 92, 246, 0.30);
     padding: 5px 8px;
     border-radius: 6px;
 }
 QScrollBar:vertical { background: transparent; width: 12px; margin: 2px; }
-QScrollBar::handle:vertical { background: #374346; border-radius: 5px; min-height: 24px; }
-QScrollBar::handle:vertical:hover { background: #4a5a5f; }
+QScrollBar::handle:vertical { background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #8b5cf6,
+                                stop:1 #4f46e5); border-radius: 5px; min-height: 24px; }
+QScrollBar::handle:vertical:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #7c3aed,
+                                stop:1 #2563eb); }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QCalendarWidget QWidget { alternate-background-color: #20292c; }
+QCalendarWidget QWidget { alternate-background-color: #111827; }

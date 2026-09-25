@@ -9,17 +9,14 @@ namespace app::ui {
 PageHeader::PageHeader(const QString& title, const QString& subtitle, QWidget* parent)
     : QWidget(parent)
 {
-    setObjectName(QStringLiteral("card"));
-    setStyleSheet(QStringLiteral("QWidget#card { background: rgba(255,255,255,0.9); border: 1px solid #e2e8f0; border-radius: 18px; }"));
+    setObjectName(QStringLiteral("pageHeader"));
 
     auto* titleLabel = new QLabel(title);
-    titleLabel->setObjectName(QStringLiteral("cardTitle"));
-    titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #0f172a;"));
+    titleLabel->setObjectName(QStringLiteral("pageHeaderTitle"));
 
     auto* subtitleLabel = new QLabel(subtitle);
-    subtitleLabel->setObjectName(QStringLiteral("hint"));
+    subtitleLabel->setObjectName(QStringLiteral("pageHeaderSubtitle"));
     subtitleLabel->setWordWrap(true);
-    subtitleLabel->setStyleSheet(QStringLiteral("color: #64748b; font-size: 12px; font-weight: 600;"));
 
     auto* texts = new QVBoxLayout;
     texts->setContentsMargins(0, 0, 0, 0);
