@@ -10,6 +10,8 @@ class QTableWidget;
 
 namespace app::ui {
 
+class StatCard;
+
 // Expenses & owner drawings (المصاريف والسحوبات): money leaving the till on
 // the central PC. Each entry is written to its ledger and to the open session
 // as a negative cash movement (so the expected-till stays accurate).
@@ -43,6 +45,8 @@ private:
     QPushButton* m_expenseButton;
     QPushButton* m_drawingButton;
     QPushButton* m_reverseButton;
+    StatCard* m_expensesCard = nullptr;
+    StatCard* m_drawingsCard = nullptr;
 };
 
 } // namespace app::ui

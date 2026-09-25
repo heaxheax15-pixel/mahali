@@ -63,6 +63,9 @@ private:
     bool syncFromTable();
     PosLine& lineForRow(int row);
 
+    void setNotice(const QString& text, bool ok);
+    void refreshSessionChip();
+
     app::data::Database& m_db;
     QVector<PosLine> m_lines;
     QLineEdit* m_entry;
@@ -71,6 +74,7 @@ private:
     QLabel* m_itemsLabel;
     QLabel* m_totalLabel;
     QLabel* m_notice;
+    QLabel* m_sessionChip = nullptr;
     int m_lastSaleId = 0;
     bool m_updating = false;
 };

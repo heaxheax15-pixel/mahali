@@ -7,6 +7,7 @@
 
 class QLabel;
 class QListWidget;
+class QPropertyAnimation;
 class QStackedWidget;
 
 namespace app::ui {
@@ -40,6 +41,7 @@ public:
 
 private slots:
     void onSyncStatusChanged();
+    void onPageChanged(int row);
 
 private:
     app::data::Database& m_db;
@@ -47,6 +49,7 @@ private:
     QListWidget* m_nav;
     QStackedWidget* m_pages;
     QLabel* m_statusLabel;
+    QPropertyAnimation* m_fade = nullptr;
     PosPage* m_pos = nullptr;
     CashSessionPage* m_cashSession = nullptr;
     SalesPage* m_sales = nullptr;

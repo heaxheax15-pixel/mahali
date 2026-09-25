@@ -16,6 +16,8 @@ target_link_libraries(mahali-ui
 
 target_sources(mahali-ui PRIVATE
     format_utils.h
+    theme.cpp
+    theme.h
     main_window.cpp
     main_window.h
     server_controller.cpp
@@ -41,7 +43,18 @@ target_sources(mahali-ui PRIVATE
     customers_page.cpp
     customers_page.h
     suppliers_page.cpp
-    suppliers_page.h)
+    suppliers_page.h
+    widgets/app_icon.cpp
+    widgets/app_icon.h
+    widgets/ui_helpers.cpp
+    widgets/ui_helpers.h
+    widgets/page_header.cpp
+    widgets/page_header.h
+    widgets/stat_card.cpp
+    widgets/stat_card.h
+    widgets/mini_bar_chart.cpp
+    widgets/mini_bar_chart.h
+    resources/app.qrc)
 
 set_target_properties(mahali-ui PROPERTIES
     POSITION_INDEPENDENT_CODE ON)

@@ -14,9 +14,14 @@
 #include <QVBoxLayout>
 
 #include "core/cash_session_calculator.h"
+#include "core/cash_movement.h"
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
 #include "format_utils.h"
+#include "widgets/app_icon.h"
+#include "widgets/page_header.h"
+#include "widgets/stat_card.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -49,15 +54,40 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     m_openButton = new QPushButton(QStringLiteral("ابدأ جلسة"));
+    m_openButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     m_closeButton = new QPushButton(QStringLiteral("أغلق الجلسة"));
+    m_closeButton->setObjectName(QStringLiteral("danger"));
     m_closeButton->setEnabled(false);
 
-    m_summary = new QLabel;
+    m_header = new PageHeader(QStringLiteral("جلسة الصندوق"),
+                              QStringLiteral("جلسة يومية مشتركة — تفتح بالرأس المبدئي وتُغلق بالجرد"));
+    m_header->addAction(m_openButton);
+    m_header->addAction(m_closeButton);
+
+    m_floatCard = new StatCard(QStringLiteral("رأس الفتح"));
+    m_floatCard->setIcon(Icon::Wallet, QStringLiteral("#0e7c75"));
+    m_movementsCard = new StatCard(QStringLiteral("مجموع الحركات"));
+    m_movementsCard->setIcon(Icon::Receipt, QStringLiteral("#c8860f"));
+    m_expectedCard = new StatCard(QStringLiteral("الموجود المتوقع"));
+    m_expectedCard->setIcon(Icon::Clock, QStringLiteral("#1d5f9e"));
+    m_varianceCard = new StatCard(QStringLiteral("الفرق (عند الجرد)"));
+    m_varianceCard->setIcon(Icon::BarChart, QStringLiteral("#c84444"));
+
+    auto* cards = new QHBoxLayout;
+    cards->setSpacing(10);
+    for (StatCard* card : {m_floatCard, m_movementsCard, m_expectedCard, m_varianceCard}) {
+        cards->addWidget(card, 1);
+    }
+
+    m_summary = new QLabel(this);
     m_summary->setWordWrap(true);
-    m_variance = new QLabel;
+    m_variance = new QLabel(this);
     m_variance->setWordWrap(true);
+    m_summary->hide();
+    m_variance->hide();
 
     m_table = new QTableWidget;
+    m_table->setAlternatingRowColors(true);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
         {QStringLiteral("الوقت"), QStringLiteral("النوع"), QStringLiteral("المبلغ"), QStringLiteral("ملاحظة")});
@@ -66,16 +96,18 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
-    auto* toolbar = new QHBoxLayout;
-    toolbar->addWidget(m_openButton);
-    toolbar->addWidget(m_closeButton);
-    toolbar->addStretch(1);
+    auto* movementsCard = makeCard();
+    auto* movementsLayout = new QVBoxLayout(movementsCard);
+    movementsLayout->setContentsMargins(14, 12, 14, 14);
+    movementsLayout->setSpacing(8);
+    movementsLayout->addWidget(makeCardTitle(QStringLiteral("حركات الجلسة")));
+    movementsLayout->addWidget(m_table, 1);
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addLayout(toolbar);
-    layout->addWidget(m_summary);
-    layout->addWidget(m_table);
-    layout->addWidget(m_variance);
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(m_header);
+    root->addLayout(cards);
+    root->addWidget(movementsCard, 1);
 
     connect(m_openButton, &QPushButton::clicked, this, &CashSessionPage::onOpenClicked);
     connect(m_closeButton, &QPushButton::clicked, this, &CashSessionPage::onCloseClicked);
@@ -94,6 +126,15 @@ void CashSessionPage::refresh()
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
+        m_header->setSubtitle(QStringLiteral("لا توجد جلسة مفتوحة حالياً — ابدأ جلسة برصيد الفتح."));
+        for (StatCard* card : {m_floatCard, m_movementsCard, m_expectedCard, m_varianceCard}) {
+            card->setValue(QStringLiteral("—"));
+        }
+        if (m_lastVarianceCents != 0) {
+            m_varianceCard->setDelta(m_lastVarianceCents);
+            m_header->setSubtitle(QStringLiteral("آخر جلسة أُغلقت بفرق %1")
+                                      .arg(formatMoney(m_lastVarianceCents)));
+        }
         m_summary->setText(QStringLiteral("لا توجد جلسة مفتوحة حالياً."));
         m_openButton->setEnabled(true);
         m_closeButton->setEnabled(false);
@@ -106,7 +147,14 @@ void CashSessionPage::refresh()
     data::CashMovementRepository movements(m_db);
     const long long movementSum = movements.sumBySessionId(session->id);
     m_expectedCents = core::CashSessionCalculator::expectedTotalCents(session->openingFloatCents, movementSum);
-    m_summary->setText(QStringLiteral("الجلسة #%1 — مفتوحة. رأس الفتح: %2  |  مجموع الحركات: %3  |  الموجود المتوقع: %4")
+    m_header->setSubtitle(QStringLiteral("الجلسة #%1 مفتوحة منذ %2")
+                              .arg(session->id)
+                              .arg(session->openedAt.toString(QStringLiteral("HH:mm"))));
+    m_floatCard->setCents(session->openingFloatCents);
+    m_movementsCard->setCents(movementSum);
+    m_expectedCard->setCents(m_expectedCents);
+    m_varianceCard->setValue(m_hasOpen ? QStringLiteral("جارية") : QStringLiteral("—"));
+    m_summary->setText(QStringLiteral("الجلسة #%1 — مفتوحة: %2  |  %3  |  %4")
                            .arg(session->id)
                            .arg(formatMoney(session->openingFloatCents))
                            .arg(formatMoney(movementSum))

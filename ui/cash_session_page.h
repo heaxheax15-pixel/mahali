@@ -10,6 +10,9 @@ class QTableWidget;
 
 namespace app::ui {
 
+class PageHeader;
+class StatCard;
+
 // Cash session (جلسة الصندوق): one open shared daily session per day on the
 // central PC. Shows the current session, its opening float and movement sum
 // (expected in the till), lets the operator open and close it, and reports the
@@ -45,6 +48,11 @@ private:
     QLabel* m_variance;
     QPushButton* m_openButton;
     QPushButton* m_closeButton;
+    PageHeader* m_header = nullptr;
+    StatCard* m_floatCard = nullptr;
+    StatCard* m_movementsCard = nullptr;
+    StatCard* m_expectedCard = nullptr;
+    StatCard* m_varianceCard = nullptr;
     int m_sessionId = 0;
     long long m_expectedCents = 0;
     long long m_lastVarianceCents = 0;

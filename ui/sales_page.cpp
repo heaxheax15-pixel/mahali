@@ -2,6 +2,7 @@
 
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QRegularExpression>
@@ -15,6 +16,10 @@
 #include "data/sale_item_repository.h"
 #include "data/sale_repository.h"
 #include "format_utils.h"
+#include "widgets/app_icon.h"
+#include "widgets/page_header.h"
+#include "widgets/stat_card.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -46,11 +51,27 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
+    auto* header = new PageHeader(QStringLiteral("المبيعات"),
+                                  QStringLiteral("سجل مبيعات اليوم مصنّفاً حسب الجهاز"));
+    m_countCard = new StatCard(QStringLiteral("فواتير اليوم"));
+    m_countCard->setIcon(Icon::Receipt, QStringLiteral("#c8860f"));
+    m_totalCard = new StatCard(QStringLiteral("الإجمالي (الصافي)"));
+    m_totalCard->setIcon(Icon::Wallet, QStringLiteral("#0e7c75"));
+    m_profitCard = new StatCard(QStringLiteral("الربح التقريبي"));
+    m_profitCard->setIcon(Icon::BarChart, QStringLiteral("#1d5f9e"));
+
+    auto* cards = new QHBoxLayout;
+    cards->setSpacing(10);
+    cards->addWidget(m_countCard, 1);
+    cards->addWidget(m_totalCard, 1);
+    cards->addWidget(m_profitCard, 1);
+
     m_summary = new QLabel;
     m_summary->setWordWrap(true);
-    m_summary->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    m_summary->setObjectName(QStringLiteral("infoBar"));
 
     m_table = new QTableWidget;
+    m_table->setAlternatingRowColors(true);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
         {QStringLiteral("الوقت"), QStringLiteral("المصدر"), QStringLiteral("الإجمالي"), QStringLiteral("الحالة")});
@@ -62,9 +83,19 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_table->setColumnWidth(0, 90);
     m_table->setColumnWidth(2, 130);
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addWidget(m_summary);
-    layout->addWidget(m_table);
+    auto* tableCard = makeCard();
+    auto* tableLayout = new QVBoxLayout(tableCard);
+    tableLayout->setContentsMargins(14, 12, 14, 14);
+    tableLayout->setSpacing(8);
+    tableLayout->addWidget(makeCardTitle(QStringLiteral("سجل فواتير اليوم")));
+    tableLayout->addWidget(m_table, 1);
+    tableLayout->addWidget(m_summary);
+
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(header);
+    root->addLayout(cards);
+    root->addWidget(tableCard, 1);
 
     connect(m_table, &QTableWidget::cellDoubleClicked, this, &SalesPage::showDetails);
 
@@ -104,6 +135,10 @@ void SalesPage::refresh()
             cogs += cogsFor(sale.id, saleItems);
         }
     }
+
+    m_countCard->setValue(QString::number(ordered.size()));
+    m_totalCard->setCents(total);
+    m_profitCard->setDelta(total - cogs);
 
     m_summary->setText(QStringLiteral("مبيعات اليوم: %1  |  الإجمالي (الصافي): %2  |  الربح التقريبي: %3")
                            .arg(ordered.size())

@@ -25,6 +25,9 @@
 #include "data/sale_repository.h"
 #include "data/sale_service.h"
 #include "format_utils.h"
+#include "widgets/app_icon.h"
+#include "widgets/page_header.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -47,6 +50,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     m_salesTable = new QTableWidget;
+    m_salesTable->setAlternatingRowColors(true);
     m_salesTable->setColumnCount(4);
     m_salesTable->setHorizontalHeaderLabels(
         {QStringLiteral("الوقت"), QStringLiteral("المصدر"), QStringLiteral("الإجمالي"), QStringLiteral("الحالة")});
@@ -56,22 +60,28 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_salesTable->horizontalHeader()->setStretchLastSection(true);
 
     m_refundSale = new QPushButton(QStringLiteral("استرداد المبيع"));
+    m_refundSale->setObjectName(QStringLiteral("danger"));
+    m_refundSale->setIcon(appIcon(Icon::Return, QColor(QStringLiteral("#ffffff")), 18));
     m_refundSale->setEnabled(false);
     connect(m_refundSale, &QPushButton::clicked, this, &RefundsPage::onRefundSaleClicked);
     connect(m_salesTable, &QTableWidget::itemSelectionChanged, this,
             [this]() { m_refundSale->setEnabled(m_salesTable->currentRow() >= 0); });
 
     auto* refundSaleRow = new QHBoxLayout;
-    refundSaleRow->addWidget(new QLabel(QStringLiteral("مبيعات اليوم:")));
+    refundSaleRow->addWidget(new QLabel(QStringLiteral("مبيعات اليوم (تُعرض الأصول فقط):")));
     refundSaleRow->addStretch(1);
     refundSaleRow->addWidget(m_refundSale);
 
-    auto* salesBox = new QGroupBox(QStringLiteral("استرداد مبيع"));
-    auto* salesLayout = new QVBoxLayout(salesBox);
+    auto* salesCard = makeCard();
+    auto* salesLayout = new QVBoxLayout(salesCard);
+    salesLayout->setContentsMargins(14, 12, 14, 14);
+    salesLayout->setSpacing(8);
+    salesLayout->addWidget(makeCardTitle(QStringLiteral("استرداد مبيع")));
     salesLayout->addLayout(refundSaleRow);
-    salesLayout->addWidget(m_salesTable);
+    salesLayout->addWidget(m_salesTable, 1);
 
     m_paymentsTable = new QTableWidget;
+    m_paymentsTable->setAlternatingRowColors(true);
     m_paymentsTable->setColumnCount(3);
     m_paymentsTable->setHorizontalHeaderLabels({QStringLiteral("الوقت"), QStringLiteral("العميل"), QStringLiteral("المبلغ")});
     m_paymentsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -80,6 +90,8 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_paymentsTable->horizontalHeader()->setStretchLastSection(true);
 
     m_refundPayment = new QPushButton(QStringLiteral("استرداد السداد"));
+    m_refundPayment->setObjectName(QStringLiteral("danger"));
+    m_refundPayment->setIcon(appIcon(Icon::Return, QColor(QStringLiteral("#ffffff")), 18));
     m_refundPayment->setEnabled(false);
     connect(m_refundPayment, &QPushButton::clicked, this, &RefundsPage::onRefundPaymentClicked);
     connect(m_paymentsTable, &QTableWidget::itemSelectionChanged, this,
@@ -90,18 +102,25 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     refundPaymentRow->addStretch(1);
     refundPaymentRow->addWidget(m_refundPayment);
 
-    auto* paymentsBox = new QGroupBox(QStringLiteral("استرداد سداد عميل"));
-    auto* paymentsLayout = new QVBoxLayout(paymentsBox);
+    auto* paymentsCard = makeCard();
+    auto* paymentsLayout = new QVBoxLayout(paymentsCard);
+    paymentsLayout->setContentsMargins(14, 12, 14, 14);
+    paymentsLayout->setSpacing(8);
+    paymentsLayout->addWidget(makeCardTitle(QStringLiteral("استرداد سداد عميل")));
     paymentsLayout->addLayout(refundPaymentRow);
-    paymentsLayout->addWidget(m_paymentsTable);
+    paymentsLayout->addWidget(m_paymentsTable, 1);
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
+    m_notice->setObjectName(QStringLiteral("noticeOk"));
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addWidget(salesBox);
-    layout->addWidget(paymentsBox);
-    layout->addWidget(m_notice);
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(new PageHeader(QStringLiteral("الاستردادات"),
+                                   QStringLiteral("عكس مبيع أو إرجاع سداد عميل")));
+    root->addWidget(salesCard, 1);
+    root->addWidget(paymentsCard, 1);
+    root->addWidget(m_notice);
 
     refresh();
 }

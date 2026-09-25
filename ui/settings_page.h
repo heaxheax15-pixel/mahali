@@ -5,6 +5,7 @@
 #include "data/database.h"
 
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -42,6 +43,7 @@ private:
     QLineEdit* m_currency;
     QCheckBox* m_zakat;
     QLineEdit* m_syncKey;
+    QComboBox* m_theme;
     QPushButton* m_save;
     QLabel* m_preview;
     QLabel* m_notice;

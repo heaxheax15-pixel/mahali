@@ -26,6 +26,9 @@
 #include "data/payment_service.h"
 #include "data/product_repository.h"
 #include "data/sale_service.h"
+#include "widgets/app_icon.h"
+#include "widgets/page_header.h"
+#include "widgets/ui_helpers.h"
 #include "format_utils.h"
 
 namespace app::ui {
@@ -216,17 +219,23 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     auto* add = new QPushButton(QStringLiteral("إضافة عميل"));
+    add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     m_edit = new QPushButton(QStringLiteral("تعديل"));
+    m_edit->setObjectName(QStringLiteral("secondary"));
     m_debt = new QPushButton(QStringLiteral("بيع آجل"));
+    m_debt->setObjectName(QStringLiteral("secondary"));
     m_pay = new QPushButton(QStringLiteral("سداد"));
+    m_pay->setObjectName(QStringLiteral("secondary"));
     m_edit->setEnabled(false);
     m_debt->setEnabled(false);
     m_pay->setEnabled(false);
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
+    m_notice->setObjectName(QStringLiteral("noticeOk"));
 
     m_table = new QTableWidget;
+    m_table->setAlternatingRowColors(true);
     m_table->setColumnCount(3);
     m_table->setHorizontalHeaderLabels(
         {QStringLiteral("الاسم"), QStringLiteral("الهاتف"), QStringLiteral("المطلوب (رصيد)")});
@@ -242,10 +251,20 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     toolbar->addWidget(m_debt);
     toolbar->addWidget(m_pay);
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addLayout(toolbar);
-    layout->addWidget(m_table);
-    layout->addWidget(m_notice);
+    auto* card = makeCard();
+    auto* cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(14, 12, 14, 14);
+    cardLayout->setSpacing(10);
+    cardLayout->addWidget(makeCardTitle(QStringLiteral("العملاء والرصيد")));
+    cardLayout->addLayout(toolbar);
+    cardLayout->addWidget(m_table, 1);
+
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(new PageHeader(QStringLiteral("العملاء"),
+                                   QStringLiteral("المبيعات الآجلة وسداد الأرصدة")));
+    root->addWidget(card, 1);
+    root->addWidget(m_notice);
 
     connect(add, &QPushButton::clicked, this, &CustomersPage::onAddClicked);
     connect(m_edit, &QPushButton::clicked, this, &CustomersPage::onEditClicked);

@@ -12,6 +12,8 @@
 #include <algorithm>
 
 #include "data/audit_log_repository.h"
+#include "widgets/page_header.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -21,10 +23,13 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
 {
     m_todayOnly = new QCheckBox(QStringLiteral("اليوم فقط"));
     m_todayOnly->setChecked(true);
+    m_todayOnly->setObjectName(QStringLiteral("secondary"));
 
     m_summary = new QLabel;
+    m_summary->setObjectName(QStringLiteral("faintText"));
 
     m_table = new QTableWidget;
+    m_table->setAlternatingRowColors(true);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
         {QStringLiteral("الوقت"), QStringLiteral("المسؤول"), QStringLiteral("العملية"), QStringLiteral("التفاصيل")});
@@ -37,10 +42,19 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
     top->addWidget(m_todayOnly);
     top->addStretch(1);
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addLayout(top);
-    layout->addWidget(m_summary);
-    layout->addWidget(m_table);
+    auto* card = makeCard();
+    auto* cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(14, 12, 14, 14);
+    cardLayout->setSpacing(8);
+    cardLayout->addLayout(top);
+    cardLayout->addWidget(m_summary);
+    cardLayout->addWidget(m_table, 1);
+
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(new PageHeader(QStringLiteral("سجل التدقيق"),
+                                   QStringLiteral("كل العمليات الحساسة — تغييرات، أخطاء ومخالفات أسعار")));
+    root->addWidget(card, 1);
 
     connect(m_todayOnly, &QCheckBox::toggled, this, &AuditLogPage::onTodayToggled);
 

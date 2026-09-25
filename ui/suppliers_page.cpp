@@ -17,6 +17,9 @@
 #include "data/supplier_repository.h"
 #include "data/supplier_transaction_repository.h"
 #include "format_utils.h"
+#include "widgets/app_icon.h"
+#include "widgets/page_header.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -99,11 +102,15 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     auto* add = new QPushButton(QStringLiteral("إضافة مورد"));
+    add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* edit = new QPushButton(QStringLiteral("تعديل"));
+    edit->setObjectName(QStringLiteral("secondary"));
     m_addInvoice = new QPushButton(QStringLiteral("فاتورة آجلة"));
+    m_addInvoice->setObjectName(QStringLiteral("secondary"));
     m_addInvoice->setEnabled(false);
 
     m_suppliers = new QTableWidget;
+    m_suppliers->setAlternatingRowColors(true);
     m_suppliers->setColumnCount(1);
     m_suppliers->setHorizontalHeaderLabels({QStringLiteral("المورد")});
     m_suppliers->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -112,27 +119,44 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     m_suppliers->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
     m_transactions = new QTableWidget;
+    m_transactions->setAlternatingRowColors(true);
     m_transactions->setColumnCount(3);
     m_transactions->setHorizontalHeaderLabels(
         {QStringLiteral("التاريخ"), QStringLiteral("المبلغ"), QStringLiteral("ملاحظة")});
     m_transactions->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_transactions->horizontalHeader()->setStretchLastSection(true);
 
-    auto* toolbar = new QHBoxLayout;
-    toolbar->addStretch(1);
-    toolbar->addWidget(add);
-    toolbar->addWidget(edit);
-    toolbar->addWidget(m_addInvoice);
+    auto* addRow = new QHBoxLayout;
+    addRow->addStretch(1);
+    addRow->addWidget(add);
+    addRow->addWidget(edit);
+    addRow->addWidget(m_addInvoice);
 
-    auto* suppliersTitle = new QLabel(QStringLiteral("الموردون"));
-    auto* transactionsTitle = new QLabel(QStringLiteral("فواتير المورد المحدد"));
+    auto* suppliersCard = makeCard();
+    auto* suppliersLayout = new QVBoxLayout(suppliersCard);
+    suppliersLayout->setContentsMargins(14, 12, 14, 14);
+    suppliersLayout->setSpacing(8);
+    suppliersLayout->addWidget(makeCardTitle(QStringLiteral("الموردون")));
+    suppliersLayout->addLayout(addRow);
+    suppliersLayout->addWidget(m_suppliers, 1);
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addLayout(toolbar);
-    layout->addWidget(suppliersTitle);
-    layout->addWidget(m_suppliers, 1);
-    layout->addWidget(transactionsTitle);
-    layout->addWidget(m_transactions, 1);
+    auto* transactionsCard = makeCard();
+    auto* transactionsLayout = new QVBoxLayout(transactionsCard);
+    transactionsLayout->setContentsMargins(14, 12, 14, 14);
+    transactionsLayout->setSpacing(8);
+    transactionsLayout->addWidget(makeCardTitle(QStringLiteral("فواتير المورد المحدد")));
+    transactionsLayout->addWidget(m_transactions, 1);
+
+    auto* split = new QHBoxLayout;
+    split->setSpacing(12);
+    split->addWidget(suppliersCard, 2);
+    split->addWidget(transactionsCard, 3);
+
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(new PageHeader(QStringLiteral("الموردون"),
+                                   QStringLiteral("الموردون والحسابات الآجلة عندهم")));
+    root->addLayout(split, 1);
 
     connect(add, &QPushButton::clicked, this, &SuppliersPage::onAddClicked);
     connect(edit, &QPushButton::clicked, this, &SuppliersPage::onEditClicked);

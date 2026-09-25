@@ -11,7 +11,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
+# No Qt Designer (.ui) forms are used; AUTOUIC is disabled because its
+# `ui_<name>.h` pattern would misclassify plain headers like "ui_helpers.h".
+set(CMAKE_AUTOUIC OFF)
 
 option(MAHALI_ANDROID "Build the Android POS target (requires Qt for Android toolchain)" OFF)
 

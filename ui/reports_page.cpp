@@ -2,13 +2,15 @@
 
 #include <QDate>
 #include <QDateEdit>
-#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QVBoxLayout>
+
+#include "widgets/page_header.h"
+#include "widgets/ui_helpers.h"
 
 #include "data/report_service.h"
 #include "format_utils.h"
@@ -63,16 +65,23 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     auto* weekButton = new QPushButton(QStringLiteral("هذا الأسبوع"));
     auto* monthButton = new QPushButton(QStringLiteral("هذا الشهر"));
     auto* allButton = new QPushButton(QStringLiteral("الكل"));
+    for (QPushButton* button : {todayButton, yesterdayButton, weekButton, monthButton, allButton}) {
+        button->setObjectName(QStringLiteral("secondary"));
+    }
 
     m_summary = new QLabel;
     m_summary->setWordWrap(true);
-    m_summary->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: bold;"));
+m_summary->setObjectName(QStringLiteral("infoBar"));
+
     m_costs = new QLabel;
     m_costs->setWordWrap(true);
     m_bottom = new QLabel;
     m_bottom->setWordWrap(true);
+    m_costs->setObjectName(QStringLiteral("faintText"));
+    m_bottom->setObjectName(QStringLiteral("faintText"));
 
     m_cashTable = new QTableWidget;
+    m_cashTable->setAlternatingRowColors(true);
     m_cashTable->setColumnCount(3);
     m_cashTable->setHorizontalHeaderLabels(
         {QStringLiteral("العملية"), QStringLiteral("العدد"), QStringLiteral("المجموع")});
@@ -86,19 +95,35 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     quick->addStretch(1);
 
     auto* range = new QHBoxLayout;
-    range->addWidget(new QLabel(QStringLiteral("من:")));
     range->addWidget(m_fromEdit);
     range->addWidget(new QLabel(QStringLiteral("إلى:")));
     range->addWidget(m_toEdit);
     range->addStretch(1);
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addLayout(quick);
-    layout->addLayout(range);
-    layout->addWidget(m_summary);
-    layout->addWidget(m_costs);
-    layout->addWidget(m_bottom);
-    layout->addWidget(m_cashTable);
+    auto* summaryCard = makeCard();
+    auto* summaryLayout = new QVBoxLayout(summaryCard);
+    summaryLayout->setContentsMargins(14, 12, 14, 14);
+    summaryLayout->setSpacing(8);
+    summaryLayout->addWidget(makeCardTitle(QStringLiteral("الملخص")));
+    summaryLayout->addWidget(m_summary);
+    summaryLayout->addWidget(m_costs);
+    summaryLayout->addWidget(m_bottom);
+
+    auto* tableCard = makeCard();
+    auto* tableLayout = new QVBoxLayout(tableCard);
+    tableLayout->setContentsMargins(14, 12, 14, 14);
+    tableLayout->setSpacing(8);
+    tableLayout->addWidget(makeCardTitle(QStringLiteral("تفاصيل العمليات")));
+    tableLayout->addWidget(m_cashTable, 1);
+
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(new PageHeader(QStringLiteral("التقارير"),
+                                   QStringLiteral("ملخص حركات الصندوق خلال فترة محددة")));
+    root->addLayout(quick);
+    root->addLayout(range);
+    root->addWidget(summaryCard);
+    root->addWidget(tableCard, 1);
 
     connect(todayButton, &QPushButton::clicked, this, &ReportsPage::onToday);
     connect(yesterdayButton, &QPushButton::clicked, this, &ReportsPage::onYesterday);

@@ -18,6 +18,9 @@
 
 #include "data/product_repository.h"
 #include "data/stock_movement_repository.h"
+#include "widgets/app_icon.h"
+#include "widgets/page_header.h"
+#include "widgets/ui_helpers.h"
 #include "format_utils.h"
 
 namespace app::ui {
@@ -128,13 +131,20 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     m_search = new QLineEdit;
+    m_search->setObjectName(QStringLiteral("searchField"));
     m_search->setPlaceholderText(QStringLiteral("بحث بالباركود أو الاسم..."));
     m_search->setClearButtonEnabled(true);
+    m_search->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
+                        QLineEdit::LeadingPosition);
     m_add = new QPushButton(QStringLiteral("إضافة منتج"));
+    m_add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     m_edit = new QPushButton(QStringLiteral("تعديل"));
+    m_edit->setObjectName(QStringLiteral("secondary"));
     m_stock = new QPushButton(QStringLiteral("تعديل المخزون"));
+    m_stock->setObjectName(QStringLiteral("secondary"));
 
     m_table = new QTableWidget;
+    m_table->setAlternatingRowColors(true);
     m_table->setColumnCount(7);
     m_table->setHorizontalHeaderLabels({QStringLiteral("الباركود"), QStringLiteral("الاسم"),
                                         QStringLiteral("سعر التكلفة"), QStringLiteral("سعر البيع"),
@@ -152,9 +162,19 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     toolbar->addWidget(m_edit);
     toolbar->addWidget(m_stock);
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addLayout(toolbar);
-    layout->addWidget(m_table);
+    auto* card = makeCard();
+    auto* cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(14, 12, 14, 14);
+    cardLayout->setSpacing(10);
+    cardLayout->addWidget(makeCardTitle(QStringLiteral("المنتجات")));
+    cardLayout->addLayout(toolbar);
+    cardLayout->addWidget(m_table, 1);
+
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+    root->addWidget(new PageHeader(QStringLiteral("المنتجات"),
+                                   QStringLiteral("إدارة الأصناف، الأسعار والمخزون")));
+    root->addWidget(card, 1);
 
     connect(m_search, &QLineEdit::textChanged, this, &ProductsPage::onSearchChanged);
     connect(m_add, &QPushButton::clicked, this, &ProductsPage::onAddClicked);
