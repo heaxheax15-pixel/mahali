@@ -14,12 +14,15 @@ namespace app::ui {
 
 class AuditLogPage;
 class CashSessionPage;
+class CustomersPage;
 class ExpensesPage;
 class PosPage;
+class ProductsPage;
 class RefundsPage;
 class ReportsPage;
 class SalesPage;
 class SettingsPage;
+class SuppliersPage;
 
 // The desktop shell: Arabic RTL layout, a sidebar of pages on the right, the
 // active page on the left, and a live sync status line in the status bar.
@@ -52,6 +55,9 @@ private:
     QPropertyAnimation* m_fade = nullptr;
     PosPage* m_pos = nullptr;
     CashSessionPage* m_cashSession = nullptr;
+    ProductsPage* m_products = nullptr;
+    CustomersPage* m_customers = nullptr;
+    SuppliersPage* m_suppliers = nullptr;
     SalesPage* m_sales = nullptr;
     ExpensesPage* m_expenses = nullptr;
     ReportsPage* m_reports = nullptr;

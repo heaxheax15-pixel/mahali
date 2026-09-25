@@ -153,9 +153,12 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_auditLog = new AuditLogPage(db);
     m_settings = new SettingsPage(db);
     m_pages->addWidget(m_pos);
-    m_pages->addWidget(new ProductsPage(db));
-    m_pages->addWidget(new CustomersPage(db));
-    m_pages->addWidget(new SuppliersPage(db));
+    m_products = new ProductsPage(db);
+    m_pages->addWidget(m_products);
+    m_customers = new CustomersPage(db);
+    m_pages->addWidget(m_customers);
+    m_suppliers = new SuppliersPage(db);
+    m_pages->addWidget(m_suppliers);
     m_pages->addWidget(m_cashSession);
     m_pages->addWidget(m_sales);
     m_pages->addWidget(m_expenses);
@@ -189,6 +192,15 @@ void MainWindow::onPageChanged(int row)
 {
     m_pages->setCurrentIndex(row);
     switch (row) {
+    case 1:
+        m_products->refresh();
+        break;
+    case 2:
+        m_customers->refresh();
+        break;
+    case 3:
+        m_suppliers->refresh();
+        break;
     case 4:
         m_cashSession->refresh();
         break;
