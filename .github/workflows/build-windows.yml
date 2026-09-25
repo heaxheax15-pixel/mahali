@@ -26,9 +26,10 @@ jobs:
         run: cmake --build build --target mahali-desktop
 
       - name: Deploy
+        shell: pwsh
         run: |
           mkdir dist
-          copy build\mahali-desktop.exe dist\
+          Copy-Item build\apps\desktop\mahali-desktop.exe dist\
           windeployqt --release dist\mahali-desktop.exe
 
       - name: Zip
