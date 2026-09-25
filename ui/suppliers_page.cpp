@@ -111,22 +111,35 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
 
     m_suppliers = new QTableWidget;
     m_suppliers->setAlternatingRowColors(true);
+    m_suppliers->setFrameShape(QFrame::NoFrame);
+    m_suppliers->setShowGrid(false);
     m_suppliers->setColumnCount(1);
     m_suppliers->setHorizontalHeaderLabels({QStringLiteral("المورد")});
     m_suppliers->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_suppliers->setSelectionMode(QAbstractItemView::SingleSelection);
     m_suppliers->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_suppliers->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_suppliers->verticalHeader()->setDefaultSectionSize(42);
+    m_suppliers->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
+                                             "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
+                                             "QTableWidget::item { padding: 8px 10px; }"));
 
     m_transactions = new QTableWidget;
     m_transactions->setAlternatingRowColors(true);
+    m_transactions->setFrameShape(QFrame::NoFrame);
+    m_transactions->setShowGrid(false);
     m_transactions->setColumnCount(3);
     m_transactions->setHorizontalHeaderLabels(
         {QStringLiteral("التاريخ"), QStringLiteral("المبلغ"), QStringLiteral("ملاحظة")});
     m_transactions->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_transactions->horizontalHeader()->setStretchLastSection(true);
+    m_transactions->verticalHeader()->setDefaultSectionSize(42);
+    m_transactions->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
+                                                "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
+                                                "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* addRow = new QHBoxLayout;
+    addRow->setSpacing(10);
     addRow->addStretch(1);
     addRow->addWidget(add);
     addRow->addWidget(edit);
@@ -134,16 +147,16 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
 
     auto* suppliersCard = makeCard();
     auto* suppliersLayout = new QVBoxLayout(suppliersCard);
-    suppliersLayout->setContentsMargins(14, 12, 14, 14);
-    suppliersLayout->setSpacing(8);
+    suppliersLayout->setContentsMargins(18, 16, 18, 16);
+    suppliersLayout->setSpacing(10);
     suppliersLayout->addWidget(makeCardTitle(QStringLiteral("الموردون")));
     suppliersLayout->addLayout(addRow);
     suppliersLayout->addWidget(m_suppliers, 1);
 
     auto* transactionsCard = makeCard();
     auto* transactionsLayout = new QVBoxLayout(transactionsCard);
-    transactionsLayout->setContentsMargins(14, 12, 14, 14);
-    transactionsLayout->setSpacing(8);
+    transactionsLayout->setContentsMargins(18, 16, 18, 16);
+    transactionsLayout->setSpacing(10);
     transactionsLayout->addWidget(makeCardTitle(QStringLiteral("فواتير المورد المحدد")));
     transactionsLayout->addWidget(m_transactions, 1);
 

@@ -15,9 +15,9 @@ namespace {
 // Paints inside a 24x24 box; caller must scale the painter first.
 void paintInBox(Icon kind, QPainter& painter, const QColor& color)
 {
-    QPen pen(color, 1.8f, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    QPen pen(color, 2.1f, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     QBrush brush(color);
-    QPen thin(color, 1.5f, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    QPen thin(color, 1.7f, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     painter.setPen(Qt::NoPen);
 
     auto strokeCircle = [&](float cx, float cy, float r) {

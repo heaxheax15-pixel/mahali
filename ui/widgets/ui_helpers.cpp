@@ -54,8 +54,8 @@ QLabel* makeCardTitle(const QString& text, QWidget* parent)
 
 void padPageLayout(QVBoxLayout* layout)
 {
-    layout->setContentsMargins(18, 14, 18, 12);
-    layout->setSpacing(12);
+    layout->setContentsMargins(20, 18, 20, 18);
+    layout->setSpacing(16);
 }
 
 } // namespace app::ui

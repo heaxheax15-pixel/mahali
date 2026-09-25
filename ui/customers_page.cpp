@@ -232,10 +232,13 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
+    m_notice->setMinimumHeight(42);
     m_notice->setObjectName(QStringLiteral("noticeOk"));
 
     m_table = new QTableWidget;
     m_table->setAlternatingRowColors(true);
+    m_table->setFrameShape(QFrame::NoFrame);
+    m_table->setShowGrid(false);
     m_table->setColumnCount(3);
     m_table->setHorizontalHeaderLabels(
         {QStringLiteral("الاسم"), QStringLiteral("الهاتف"), QStringLiteral("المطلوب (رصيد)")});
@@ -243,8 +246,13 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
+    m_table->verticalHeader()->setDefaultSectionSize(42);
+    m_table->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
+                                          "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
+                                          "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* toolbar = new QHBoxLayout;
+    toolbar->setSpacing(10);
     toolbar->addStretch(1);
     toolbar->addWidget(add);
     toolbar->addWidget(m_edit);
@@ -253,8 +261,8 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
 
     auto* card = makeCard();
     auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(14, 12, 14, 14);
-    cardLayout->setSpacing(10);
+    cardLayout->setContentsMargins(18, 16, 18, 16);
+    cardLayout->setSpacing(12);
     cardLayout->addWidget(makeCardTitle(QStringLiteral("العملاء والرصيد")));
     cardLayout->addLayout(toolbar);
     cardLayout->addWidget(m_table, 1);

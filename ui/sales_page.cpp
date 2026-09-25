@@ -69,9 +69,12 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_summary = new QLabel;
     m_summary->setWordWrap(true);
     m_summary->setObjectName(QStringLiteral("infoBar"));
+    m_summary->setMinimumHeight(48);
 
     m_table = new QTableWidget;
     m_table->setAlternatingRowColors(true);
+    m_table->setFrameShape(QFrame::NoFrame);
+    m_table->setShowGrid(false);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
         {QStringLiteral("الوقت"), QStringLiteral("المصدر"), QStringLiteral("الإجمالي"), QStringLiteral("الحالة")});
@@ -80,13 +83,17 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_table->verticalHeader()->setDefaultSectionSize(42);
     m_table->setColumnWidth(0, 90);
     m_table->setColumnWidth(2, 130);
+    m_table->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
+                                          "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
+                                          "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);
-    tableLayout->setContentsMargins(14, 12, 14, 14);
-    tableLayout->setSpacing(8);
+    tableLayout->setContentsMargins(18, 16, 18, 16);
+    tableLayout->setSpacing(10);
     tableLayout->addWidget(makeCardTitle(QStringLiteral("سجل فواتير اليوم")));
     tableLayout->addWidget(m_table, 1);
     tableLayout->addWidget(m_summary);

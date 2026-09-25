@@ -67,8 +67,8 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 {
     setWindowTitle(QStringLiteral("محلي — نظام نقاط البيع والمحاسبة"));
     setLayoutDirection(Qt::RightToLeft);
-    resize(1360, 840);
-    setMinimumSize(1120, 700);
+    resize(1480, 900);
+    setMinimumSize(1200, 760);
 
     QIcon windowIcon;
     windowIcon.addFile(QStringLiteral(":/mahali/icons/app-512.png"), QSize(512, 512));
@@ -82,18 +82,28 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_nav = new QListWidget;
     m_nav->setObjectName(QStringLiteral("nav"));
     m_nav->setIconSize(QSize(20, 20));
+    m_nav->setSpacing(4);
+    m_nav->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_nav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_nav->setTextElideMode(Qt::ElideRight);
+    m_nav->setUniformItemSizes(false);
     for (const NavEntry& entry : navEntries()) {
-        auto* item = new QListWidgetItem(appIcon(entry.icon, QColor(QStringLiteral("#2ba89e")), 20),
+        auto* item = new QListWidgetItem(appIcon(entry.icon, QColor(QStringLiteral("#8b5cf6")), 20),
                                          entry.label);
-        item->setSizeHint(QSize(0, 42));
+        item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        item->setSizeHint(QSize(0, 46));
         m_nav->addItem(item);
     }
     m_nav->setCurrentRow(0);
 
     auto* brandIcon = new QLabel;
+    brandIcon->setFixedSize(42, 42);
+    brandIcon->setAlignment(Qt::AlignCenter);
     brandIcon->setPixmap(appIcon(Icon::Shop, QColor(QStringLiteral("#ffffff")), 24).pixmap(24, 24));
+    brandIcon->setStyleSheet(QStringLiteral("background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); border-radius: 12px;"));
     auto* brandTitle = new QLabel(QStringLiteral("محلي"));
     brandTitle->setObjectName(QStringLiteral("appTitle"));
+    brandTitle->setStyleSheet(QStringLiteral("letter-spacing: 0.2px;"));
     auto* brandSub = new QLabel(QStringLiteral("نظام البيع والمحاسبة"));
     brandSub->setObjectName(QStringLiteral("appSub"));
 
@@ -104,8 +114,8 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     brandTexts->addWidget(brandSub);
 
     auto* brandRow = new QHBoxLayout;
-    brandRow->setContentsMargins(16, 14, 16, 6);
-    brandRow->setSpacing(10);
+    brandRow->setContentsMargins(18, 16, 18, 12);
+    brandRow->setSpacing(12);
     brandRow->addWidget(brandIcon);
     brandRow->addLayout(brandTexts, 1);
 
@@ -125,13 +135,13 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     auto* sidebar = new QWidget;
     sidebar->setObjectName(QStringLiteral("sidebar"));
-    sidebar->setFixedWidth(210);
+    sidebar->setFixedWidth(240);
     auto* sidebarLayout = new QVBoxLayout(sidebar);
-    sidebarLayout->setContentsMargins(0, 0, 0, 10);
-    sidebarLayout->setSpacing(0);
+    sidebarLayout->setContentsMargins(0, 0, 0, 12);
+    sidebarLayout->setSpacing(8);
     sidebarLayout->addLayout(brandRow);
     sidebarLayout->addWidget(m_nav, 1);
-    sidebarLayout->addWidget(about);
+    sidebarLayout->addWidget(about, 0, Qt::AlignCenter);
 
     m_pages = new QStackedWidget;
     m_pages->setObjectName(QStringLiteral("content"));
@@ -167,7 +177,12 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_nav->setCurrentRow(0);
 
     m_statusLabel = new QLabel;
+    m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
+    statusBar()->setContentsMargins(0, 0, 0, 0);
+    statusBar()->setFixedHeight(28);
     statusBar()->addWidget(m_statusLabel);
+    statusBar()->setStyleSheet(QStringLiteral("QStatusBar { background: #0f172a; color: #cbd5e1; border-top: 1px solid rgba(148, 163, 184, 0.14); }"
+                                             "QStatusBar QLabel#statusLabel { color: #cbd5e1; font-size: 12px; font-weight: 600; }"));
     connect(&m_controller, &ServerController::statsChanged, this, &MainWindow::onSyncStatusChanged);
     onSyncStatusChanged();
 }

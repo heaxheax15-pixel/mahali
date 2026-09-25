@@ -1,6 +1,7 @@
 #include "mini_bar_chart.h"
 
 #include <QPainter>
+#include <QPainterPath>
 
 namespace app::ui {
 
@@ -17,7 +18,7 @@ MiniBarChart::MiniBarChart(QWidget* parent)
     : QWidget(parent)
     , m_emptyMessage(QStringLiteral("لا بيانات"))
 {
-    setMinimumHeight(130);
+    setMinimumHeight(150);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
@@ -35,7 +36,7 @@ void MiniBarChart::setEmptyMessage(const QString& message)
 
 QSize MiniBarChart::sizeHint() const
 {
-    return QSize(360, 150);
+    return QSize(420, 170);
 }
 
 void MiniBarChart::paintEvent(QPaintEvent* event)
@@ -46,8 +47,10 @@ void MiniBarChart::paintEvent(QPaintEvent* event)
 
     const int w = width();
     const int h = height();
-    const int padL = 30; // room for the value labels
-    const int padT = 8;
+    const int padL = 26;
+    const int padR = 10;
+    const int padT = 10;
+    const int padB = 26;
 
     if (m_points.isEmpty()) {
         painter.setPen(QColor(QStringLiteral("#93a3a8")));
@@ -63,46 +66,77 @@ void MiniBarChart::paintEvent(QPaintEvent* event)
         max = 1;
     }
 
-    const int bars = m_points.size();
-    const int plotH = h - padT - 22;
-    const int plotY = padT;
-    const int slotW = (w - padL) / bars;
+    const int plotLeft = padL;
+    const int plotTop = padT;
+    const int plotRight = w - padR;
+    const int plotBottom = h - padB;
+    const int plotW = plotRight - plotLeft;
+    const int plotH = plotBottom - plotTop;
 
-    // Grid: three faint baselines.
-    painter.setPen(QPen(QColor(255, 255, 255, 0)));
+    painter.setPen(QPen(QColor(QStringLiteral("#dfe7ee")), 1));
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QColor(QStringLiteral("#5b9593")), 1));
     for (int g = 0; g <= 3; ++g) {
-        const int y = plotY + plotH * g / 3;
-        painter.setOpacity(0.12);
-        painter.drawLine(QPointF(padL, y), QPointF(w - 4, y));
-        painter.setOpacity(1.0);
+        const int y = plotTop + (plotH * g) / 3;
+        painter.drawLine(QPoint(plotLeft, y), QPoint(plotRight, y));
     }
 
-    painter.setPen(QColor(QStringLiteral("#0e7c75")));
-    const QVector<QColor> positives = {QColor(QStringLiteral("#2ba89e")), QColor(QStringLiteral("#0e7c75"))};
-    for (int i = 0; i < bars; ++i) {
+    QVector<QPointF> points;
+    const int count = m_points.size();
+    for (int i = 0; i < count; ++i) {
         const long long value = m_points[i].second;
-        const int barH = int(double(qAbs(value)) / double(max) * (plotH - 8));
-        const int barW = qMax(6, slotW - 10);
-        const int x = padL + i * slotW + (slotW - barW) / 2;
-        const int y = plotY + plotH - barH;
+        const int x = plotLeft + (plotW * i) / qMax(1, count - 1);
+        const int y = plotBottom - int((double(qAbs(value)) / double(max)) * (plotH - 8));
+        points.append(QPointF(x, y));
+    }
 
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(positives[i % 2]);
-        painter.drawRoundedRect(QRectF(x, y, barW, barH), 4, 4);
-
-        // Value above the bar when the bar is tall enough.
-        if (barH > 16) {
-            painter.setPen(QColor(QStringLiteral("#6b7a7e")));
-            painter.drawText(QRect(x - 4, y - 16, barW + 8, 14), Qt::AlignCenter,
-                             formatCompact(value));
+    if (points.size() > 1) {
+        QPainterPath area;
+        QPainterPath line;
+        line.moveTo(points.first());
+        for (int i = 1; i < points.size(); ++i) {
+            line.lineTo(points[i]);
         }
 
-        // Day label.
-        painter.setPen(QColor(QStringLiteral("#7a8b8f")));
-        painter.drawText(QRect(x - 4, plotY + plotH + 4, barW + 8, 16), Qt::AlignCenter,
-                         m_points[i].first);
+        area.moveTo(points.first().x(), plotBottom);
+        area.lineTo(points.first());
+        for (int i = 1; i < points.size(); ++i) {
+            area.lineTo(points[i]);
+        }
+        area.lineTo(points.last().x(), plotBottom);
+        area.closeSubpath();
+
+        QLinearGradient fillGradient(QPointF(plotLeft, plotTop), QPointF(plotLeft, plotBottom));
+        fillGradient.setColorAt(0.0, QColor(QStringLiteral("#8b5cf6")));
+        fillGradient.setColorAt(1.0, QColor(QStringLiteral("#dbeafe")));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(fillGradient);
+        painter.setOpacity(0.22);
+        painter.drawPath(area);
+        painter.setOpacity(1.0);
+
+        QPen linePen(QColor(QStringLiteral("#4f46e5")), 2.5);
+        painter.setPen(linePen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(line);
+    }
+
+    for (int i = 0; i < count; ++i) {
+        const long long value = m_points[i].second;
+        const int x = plotLeft + (plotW * i) / qMax(1, count - 1);
+        const int y = plotBottom - int((double(qAbs(value)) / double(max)) * (plotH - 8));
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(QStringLiteral("#4f46e5")));
+        painter.drawEllipse(QPoint(x, y), 4, 4);
+
+        painter.setPen(QColor(QStringLiteral("#64748b")));
+        painter.drawText(QRect(x - 16, plotBottom + 4, 32, 18), Qt::AlignCenter, m_points[i].first);
+
+        if (value != 0) {
+            painter.setPen(QColor(QStringLiteral("#334155")));
+            painter.drawText(QRect(x - 18, qMax(plotTop, y - 20), 36, 16), Qt::AlignCenter,
+                             formatCompact(value));
+        }
     }
 }
 

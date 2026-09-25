@@ -57,8 +57,10 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
 {
     m_fromEdit = new QDateEdit;
     m_fromEdit->setCalendarPopup(true);
+    m_fromEdit->setMinimumHeight(42);
     m_toEdit = new QDateEdit;
     m_toEdit->setCalendarPopup(true);
+    m_toEdit->setMinimumHeight(42);
 
     auto* todayButton = new QPushButton(QStringLiteral("اليوم"));
     auto* yesterdayButton = new QPushButton(QStringLiteral("أمس"));
@@ -71,7 +73,8 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
 
     m_summary = new QLabel;
     m_summary->setWordWrap(true);
-m_summary->setObjectName(QStringLiteral("infoBar"));
+    m_summary->setObjectName(QStringLiteral("infoBar"));
+    m_summary->setMinimumHeight(50);
 
     m_costs = new QLabel;
     m_costs->setWordWrap(true);
@@ -82,19 +85,27 @@ m_summary->setObjectName(QStringLiteral("infoBar"));
 
     m_cashTable = new QTableWidget;
     m_cashTable->setAlternatingRowColors(true);
+    m_cashTable->setFrameShape(QFrame::NoFrame);
+    m_cashTable->setShowGrid(false);
     m_cashTable->setColumnCount(3);
     m_cashTable->setHorizontalHeaderLabels(
         {QStringLiteral("العملية"), QStringLiteral("العدد"), QStringLiteral("المجموع")});
     m_cashTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_cashTable->horizontalHeader()->setStretchLastSection(true);
+    m_cashTable->verticalHeader()->setDefaultSectionSize(42);
+    m_cashTable->setStyleSheet(QStringLiteral("QTableWidget { border: 1px solid #e2e8f0; border-radius: 18px; background: rgba(255,255,255,0.82); }"
+                                              "QHeaderView::section { background: #f8fafc; border: none; padding: 12px 10px; font-weight: 800; color: #334155; }"
+                                              "QTableWidget::item { padding: 8px 10px; }"));
 
     auto* quick = new QHBoxLayout;
+    quick->setSpacing(10);
     for (QPushButton* button : {todayButton, yesterdayButton, weekButton, monthButton, allButton}) {
         quick->addWidget(button);
     }
     quick->addStretch(1);
 
     auto* range = new QHBoxLayout;
+    range->setSpacing(10);
     range->addWidget(m_fromEdit);
     range->addWidget(new QLabel(QStringLiteral("إلى:")));
     range->addWidget(m_toEdit);
@@ -102,8 +113,8 @@ m_summary->setObjectName(QStringLiteral("infoBar"));
 
     auto* summaryCard = makeCard();
     auto* summaryLayout = new QVBoxLayout(summaryCard);
-    summaryLayout->setContentsMargins(14, 12, 14, 14);
-    summaryLayout->setSpacing(8);
+    summaryLayout->setContentsMargins(18, 16, 18, 16);
+    summaryLayout->setSpacing(10);
     summaryLayout->addWidget(makeCardTitle(QStringLiteral("الملخص")));
     summaryLayout->addWidget(m_summary);
     summaryLayout->addWidget(m_costs);
@@ -111,8 +122,8 @@ m_summary->setObjectName(QStringLiteral("infoBar"));
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);
-    tableLayout->setContentsMargins(14, 12, 14, 14);
-    tableLayout->setSpacing(8);
+    tableLayout->setContentsMargins(18, 16, 18, 16);
+    tableLayout->setSpacing(10);
     tableLayout->addWidget(makeCardTitle(QStringLiteral("تفاصيل العمليات")));
     tableLayout->addWidget(m_cashTable, 1);
 
