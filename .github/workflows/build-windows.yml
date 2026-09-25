@@ -10,11 +10,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - uses: jurplel/install-qt-action@v4
         with:
           version: '6.7.3'
           arch: win64_msvc2022_64
-          modules: 'qthttpserver qtshadertools'
+          modules: 'qthttpserver'
           cache: true
       - name: Configure
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -31,10 +34,13 @@ jobs:
           name: mahali-msvc
           path: mahali-msvc.zip
 
-  build-mingw65:
+  build-mingw:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - uses: jurplel/install-qt-action@v4
         with:
           version: '6.5.3'
