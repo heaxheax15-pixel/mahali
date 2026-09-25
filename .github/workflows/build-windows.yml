@@ -1,0 +1,40 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.2'
+          arch: win64_mingw
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --target mahali-desktop
+
+      - name: Deploy
+        run: |
+          mkdir dist
+          copy build\mahali-desktop.exe dist\
+          windeployqt --release dist\mahali-desktop.exe
+
+      - name: Zip
+        run: Compress-Archive -Path dist\* -DestinationPath mahali-windows.zip
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: mahali-windows
+          path: mahali-windows.zip
