@@ -49,6 +49,7 @@ private slots:
     void journalModeMatchesDatabaseRole();
     void pruneOnlyExpiredAcknowledgedOutboxRows();
     void appliedOpsJournalPrunesBoundedly();
+    void user_pin_roundtrip();
 
 private:
     QTemporaryDir m_dir;
@@ -466,6 +467,49 @@ void DataLayerTest::appliedOpsJournalPrunesBoundedly()
     QCOMPARE(journal.count(), 2);
     QCOMPARE(journal.pruneOlderThan(QDateTime::currentDateTime(), 10), 1);
     QCOMPARE(journal.count(), 1);
+}
+
+void DataLayerTest::user_pin_roundtrip()
+{
+    const QString path = m_dir.filePath(QStringLiteral("user-pin.sqlite"));
+    data::Database db(path);
+    data::UserRepository repo(db);
+
+    QVERIFY(!repo.hasAny());
+
+    core::User user;
+    user.name = QStringLiteral("أمين");
+    user.role = QStringLiteral("manager");
+    const int id = repo.save(user);
+    QVERIFY(id > 0);
+    QVERIFY(repo.hasAny());
+
+    QVERIFY(repo.savePin(id, QStringLiteral("12")));
+
+    const auto found = repo.findByPin(QStringLiteral("12"));
+    QVERIFY(found.has_value());
+    QCOMPARE(found->id, id);
+    QCOMPARE(found->name, QStringLiteral("أمين"));
+    QCOMPARE(found->active, true);
+
+    QVERIFY(repo.setActive(id, false));
+    QVERIFY(!repo.findByPin(QStringLiteral("12")).has_value());
+    QVERIFY(repo.listActive().isEmpty());
+
+    QVERIFY(repo.setActive(id, true));
+    QVERIFY(repo.findByPin(QStringLiteral("12")).has_value());
+    QCOMPARE(repo.listActive().size(), 1);
+
+    QVERIFY(repo.savePin(id, QStringLiteral("34")));
+    QVERIFY(!repo.findByPin(QStringLiteral("12")).has_value());
+    const auto rotated = repo.findByPin(QStringLiteral("34"));
+    QVERIFY(rotated.has_value());
+    QCOMPARE(rotated->id, id);
+
+    const auto byName = repo.findByName(QStringLiteral("أمين"));
+    QVERIFY(byName.has_value());
+    QCOMPARE(byName->id, id);
+    QVERIFY(!repo.findByName(QStringLiteral("مجهول")).has_value());
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

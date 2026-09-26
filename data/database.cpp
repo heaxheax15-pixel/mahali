@@ -15,6 +15,44 @@ QString uniqueConnectionName()
     return QStringLiteral("mahali_%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
 }
 
+QStringList tableColumns(const QSqlDatabase& db, const QString& table)
+{
+    QStringList columns;
+    QSqlQuery query(db);
+    if (!query.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table))) {
+        return columns;
+    }
+    while (query.next()) {
+        columns << query.value(1).toString();
+    }
+    return columns;
+}
+
+// Idempotent, runs on every open: adds only the columns an older users table
+// lacks. SQLite forbids expression defaults in ALTER, so pre-existing rows get
+// an empty created_at.
+void migrateUsersTable(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("users"));
+    if (columns.isEmpty()) {
+        return;
+    }
+    QStringList statements;
+    if (!columns.contains(QStringLiteral("pin"))) {
+        statements << QStringLiteral("ALTER TABLE users ADD COLUMN pin TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.contains(QStringLiteral("active"))) {
+        statements << QStringLiteral("ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1");
+    }
+    if (!columns.contains(QStringLiteral("created_at"))) {
+        statements << QStringLiteral("ALTER TABLE users ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
+    }
+    for (const QString& statement : statements) {
+        QSqlQuery alter(db);
+        alter.exec(statement);
+    }
+}
+
 } // namespace
 
 Database::Database(const QString& filePath, DatabaseMode mode)
@@ -223,7 +261,10 @@ void Database::createSchema()
             "CREATE TABLE IF NOT EXISTS users ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "name TEXT NOT NULL,"
-            "role TEXT NOT NULL);"),
+            "role TEXT NOT NULL,"
+            "pin TEXT NOT NULL DEFAULT '',"
+            "active INTEGER NOT NULL DEFAULT 1,"
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')));"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS devices ("
@@ -307,6 +348,8 @@ void Database::createSchema()
         throw std::runtime_error(
             QStringLiteral("Failed to create schema: %1").arg(m_lastError).toStdString());
     }
+
+    migrateUsersTable(m_db);
 }
 
 bool Database::execStatements(const QStringList& statements, const QString& source)

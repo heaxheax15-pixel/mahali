@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QString>
+#include <QVector>
 #include <optional>
 #include <vector>
 
@@ -16,6 +18,13 @@ public:
     std::vector<core::User> findAll() const;
 
     int save(const core::User& user);
+
+    QVector<core::User> listActive() const;
+    std::optional<core::User> findByPin(const QString& pin) const;
+    std::optional<core::User> findByName(const QString& name) const;
+    bool savePin(int id, const QString& pin);
+    bool setActive(int id, bool active);
+    bool hasAny() const;
 
 private:
     Database& m_db;
