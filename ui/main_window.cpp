@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -8,8 +9,10 @@
 #include <QMessageBox>
 #include <QPropertyAnimation>
 #include <QPushButton>
+#include <QScreen>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -29,6 +32,7 @@
 #include "sales_page.h"
 #include "settings_page.h"
 #include "suppliers_page.h"
+#include "users_page.h"
 #include "theme.h"
 #include "widgets/app_icon.h"
 
@@ -69,8 +73,8 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 {
     setWindowTitle(QStringLiteral("محلي — نظام نقاط البيع والمحاسبة"));
     setLayoutDirection(Qt::RightToLeft);
-    resize(1480, 900);
-    setMinimumSize(1200, 760);
+
+    setMinimumSize(900, 600);
 
     QIcon windowIcon;
     windowIcon.addFile(QStringLiteral(":/mahali/icons/app-512.png"), QSize(512, 512));
@@ -89,14 +93,6 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_nav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_nav->setTextElideMode(Qt::ElideRight);
     m_nav->setUniformItemSizes(false);
-    for (const NavEntry& entry : navEntries()) {
-        auto* item = new QListWidgetItem(appIcon(entry.icon, QColor(QStringLiteral("#8b5cf6")), 20),
-                                         entry.label);
-        item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        item->setSizeHint(QSize(0, 46));
-        m_nav->addItem(item);
-    }
-    m_nav->setCurrentRow(0);
 
     auto* brandIcon = new QLabel;
     brandIcon->setObjectName(QStringLiteral("brandIcon"));
@@ -154,6 +150,7 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_refunds = new RefundsPage(db);
     m_auditLog = new AuditLogPage(db);
     m_settings = new SettingsPage(db);
+    m_usersPage = new UsersPage(db);
     m_pages->addWidget(m_pos);
     m_products = new ProductsPage(db);
     m_pages->addWidget(m_products);
@@ -168,6 +165,7 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_pages->addWidget(m_refunds);
     m_pages->addWidget(m_auditLog);
     m_pages->addWidget(m_settings);
+    m_pages->addWidget(m_usersPage);
 
     auto* central = new QWidget;
     auto* layout = new QHBoxLayout(central);
@@ -178,24 +176,39 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     setCentralWidget(central);
 
     connect(m_nav, &QListWidget::currentRowChanged, this, &MainWindow::onPageChanged);
+
+    buildNavForRole(app::core::Session::instance().currentUser().role);
     m_nav->setCurrentRow(0);
 
     m_statusLabel = new QLabel;
     m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
-    statusBar()->setObjectName(QStringLiteral("appStatusBar"));
     statusBar()->setContentsMargins(0, 0, 0, 0);
-    statusBar()->setFixedHeight(28);
+    statusBar()->setFixedHeight(36);
     statusBar()->addWidget(m_statusLabel);
 
+    m_userLabel = new QLabel;
+    m_userLabel->setObjectName(QStringLiteral("userLabel"));
+    m_userLabel->setText(QStringLiteral("المستخدم: %1").arg(app::core::Session::instance().actorName()));
+    m_userLabel->setStyleSheet(QStringLiteral("font-size: 12px; font-weight: 600; color: #475569; padding-right: 12px;"));
+    statusBar()->addPermanentWidget(m_userLabel);
+
     auto* switchUserBtn = new QPushButton(QStringLiteral("تبديل المستخدم"));
-    switchUserBtn->setObjectName(QStringLiteral("switchUserBtn"));
     switchUserBtn->setCursor(Qt::PointingHandCursor);
-    switchUserBtn->setFixedHeight(24);
+    switchUserBtn->setFixedHeight(32);
+    switchUserBtn->setStyleSheet(
+        QStringLiteral("QPushButton { background-color: #2563eb; color: white; "
+                       "border-radius: 4px; padding: 4px 12px; font-weight: bold; }"
+                       "QPushButton:hover { background-color: #1d4ed8; }"));
     connect(switchUserBtn, &QPushButton::clicked, this, &MainWindow::onSwitchUserClicked);
     statusBar()->addPermanentWidget(switchUserBtn);
 
     connect(&m_controller, &ServerController::statsChanged, this, &MainWindow::onSyncStatusChanged);
     onSyncStatusChanged();
+
+    QTimer::singleShot(0, this, [this]() {
+        buildNavForRole(app::core::Session::instance().currentUser().role);
+        m_nav->setCurrentRow(0);
+    });
 }
 
 void MainWindow::onPageChanged(int row)
@@ -232,6 +245,9 @@ void MainWindow::onPageChanged(int row)
     case 10:
         m_settings->refresh();
         break;
+    case 11:
+        m_usersPage->refresh();
+        break;
     default:
         break;
     }
@@ -246,6 +262,49 @@ void MainWindow::onPageChanged(int row)
         m_fade->setEasingCurve(QEasingCurve::OutCubic);
     }
     m_fade->start();
+}
+
+void MainWindow::buildNavForRole(const QString& role)
+{
+    m_nav->clear();
+
+    struct NavEntry {
+        Icon icon;
+        QString label;
+        int pageIndex;
+    };
+
+    std::vector<NavEntry> entries = {
+        {Icon::Cart, QStringLiteral("البيع السريع"), 0},
+        {Icon::Box, QStringLiteral("المنتجات"), 1},
+        {Icon::People, QStringLiteral("العملاء"), 2},
+        {Icon::Truck, QStringLiteral("الموردون"), 3},
+        {Icon::Wallet, QStringLiteral("جلسة الصندوق"), 4},
+        {Icon::Receipt, QStringLiteral("مبيعات اليوم"), 5},
+        {Icon::Tag, QStringLiteral("المصاريف والسحوبات"), 6},
+        {Icon::BarChart, QStringLiteral("التقارير"), 7},
+        {Icon::Return, QStringLiteral("الاستردادات"), 8},
+        {Icon::History, QStringLiteral("سجل المراجعة"), 9},
+        {Icon::Gear, QStringLiteral("الإعدادات"), 10},
+    };
+
+    if (role == QStringLiteral("admin")) {
+        entries.push_back({Icon::People, QStringLiteral("إدارة المستخدمين"), 11});
+    }
+
+    for (const NavEntry& entry : entries) {
+        auto* item = new QListWidgetItem(appIcon(entry.icon, QColor(QStringLiteral("#8b5cf6")), 20),
+                                         entry.label);
+        item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        item->setSizeHint(QSize(0, 46));
+        item->setData(Qt::UserRole, entry.pageIndex);
+        m_nav->addItem(item);
+    }
+}
+
+void MainWindow::rebuildNav()
+{
+    buildNavForRole(app::core::Session::instance().currentUser().role);
 }
 
 void MainWindow::onSyncStatusChanged()
@@ -280,6 +339,11 @@ void MainWindow::onSwitchUserClicked()
         m_refunds->refresh();
         m_auditLog->refresh();
         m_settings->refresh();
+        m_usersPage->refresh();
+        if (m_userLabel) {
+            m_userLabel->setText(QStringLiteral("المستخدم: %1").arg(app::core::Session::instance().actorName()));
+        }
+        rebuildNav();
         show();
     } else {
         show();

@@ -23,6 +23,7 @@ class ReportsPage;
 class SalesPage;
 class SettingsPage;
 class SuppliersPage;
+class UsersPage;
 
 // The desktop shell: Arabic RTL layout, a sidebar of pages on the right, the
 // active page on the left, and a live sync status line in the status bar.
@@ -41,18 +42,23 @@ public:
     SettingsPage* settingsPage() const { return m_settings; }
     RefundsPage* refundsPage() const { return m_refunds; }
     AuditLogPage* auditLogPage() const { return m_auditLog; }
+    UsersPage* usersPage() const { return m_usersPage; }
 
 private slots:
     void onSyncStatusChanged();
     void onPageChanged(int row);
     void onSwitchUserClicked();
+    void rebuildNav();
 
 private:
+    void buildNavForRole(const QString& role);
+
     app::data::Database& m_db;
     ServerController& m_controller;
     QListWidget* m_nav;
     QStackedWidget* m_pages;
     QLabel* m_statusLabel;
+    QLabel* m_userLabel = nullptr;
     QPropertyAnimation* m_fade = nullptr;
     PosPage* m_pos = nullptr;
     CashSessionPage* m_cashSession = nullptr;
@@ -65,6 +71,7 @@ private:
     SettingsPage* m_settings = nullptr;
     RefundsPage* m_refunds = nullptr;
     AuditLogPage* m_auditLog = nullptr;
+    UsersPage* m_usersPage = nullptr;
 };
 
 } // namespace app::ui

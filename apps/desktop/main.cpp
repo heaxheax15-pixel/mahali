@@ -81,5 +81,7 @@ int main(int argc, char* argv[])
 
     app::ui::MainWindow window(*db, controller);
     window.show();
+    window.raise();
+    window.activateWindow();
     return app.exec();
 }

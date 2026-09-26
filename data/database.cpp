@@ -267,6 +267,12 @@ void Database::createSchema()
             "created_at TEXT NOT NULL DEFAULT (datetime('now')));"),
 
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS admin_secrets ("
+            "user_id INTEGER PRIMARY KEY REFERENCES users(id),"
+            "master_hash TEXT NOT NULL,"
+            "master_salt TEXT NOT NULL);"),
+
+        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS devices ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "device_id TEXT UNIQUE NOT NULL,"

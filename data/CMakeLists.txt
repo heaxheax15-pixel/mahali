@@ -10,10 +10,12 @@ target_include_directories(mahali-data
 target_link_libraries(mahali-data
     PUBLIC
         mahali-core
-        Qt${QT_VERSION_MAJOR}::Sql)
+        Qt${QT_VERSION_MAJOR}::Sql
+        Qt${QT_VERSION_MAJOR}::Network)
 
 target_sources(mahali-data PRIVATE
     database.cpp
+    admin_secret_repository.cpp
     audit_log_repository.cpp
     applied_op_repository.cpp
     cash_movement_repository.cpp

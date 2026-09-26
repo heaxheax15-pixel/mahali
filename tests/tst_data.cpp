@@ -20,6 +20,7 @@
 #include "cash_session_repository.h"
 #include "cash_movement_repository.h"
 #include "user_repository.h"
+#include "admin_secret_repository.h"
 #include "device_repository.h"
 #include "audit_log_repository.h"
 #include "zakat_setting_repository.h"
@@ -50,6 +51,7 @@ private slots:
     void pruneOnlyExpiredAcknowledgedOutboxRows();
     void appliedOpsJournalPrunesBoundedly();
     void user_pin_roundtrip();
+    void admin_master_roundtrip();
 
 private:
     QTemporaryDir m_dir;
@@ -74,6 +76,7 @@ void DataLayerTest::schemaContainsAllTables()
         QStringLiteral("cash_movements"), QStringLiteral("users"), QStringLiteral("devices"),
         QStringLiteral("audit_log"), QStringLiteral("zakat_settings"), QStringLiteral("settings"),
         QStringLiteral("sync_outbox"), QStringLiteral("applied_ops"), QStringLiteral("sync_sequence"),
+        QStringLiteral("admin_secrets"),
     };
 
     QSqlQuery query(m_db->handle());
@@ -510,6 +513,32 @@ void DataLayerTest::user_pin_roundtrip()
     QVERIFY(byName.has_value());
     QCOMPARE(byName->id, id);
     QVERIFY(!repo.findByName(QStringLiteral("مجهول")).has_value());
+}
+
+void DataLayerTest::admin_master_roundtrip()
+{
+    const QString path = m_dir.filePath(QStringLiteral("admin-master.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::UserRepository userRepo(db);
+    data::AdminSecretRepository secretRepo(db);
+
+    core::User admin;
+    admin.name = QStringLiteral("المدير");
+    admin.role = QStringLiteral("admin");
+    const int id = userRepo.save(admin);
+    QVERIFY(id > 0);
+    QVERIFY(userRepo.savePin(id, QStringLiteral("12")));
+
+    QVERIFY(secretRepo.setMaster(id, QStringLiteral("secret")));
+    QVERIFY(secretRepo.verifyMaster(id, QStringLiteral("secret")));
+    QVERIFY(!secretRepo.verifyMaster(id, QStringLiteral("wrong")));
+
+    const auto found = secretRepo.findAdminByMaster(QStringLiteral("secret"));
+    QVERIFY(found.has_value());
+    QCOMPARE(*found, id);
+
+    QVERIFY(!secretRepo.findAdminByMaster(QStringLiteral("wrong")).has_value());
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

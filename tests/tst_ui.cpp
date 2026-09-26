@@ -8,9 +8,19 @@
 #include <QTime>
 #include <QTableWidget>
 #include <QUrl>
+#include <QLineEdit>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QTimer>
+#include <QPushButton>
+#include <QLabel>
+#include <QListWidget>
+#include "ui/login_dialog.h"
+#include "ui/users_page.h"
 
 #include "core/session.h"
 #include "core/sync_operation.h"
+#include "data/admin_secret_repository.h"
 #include "data/applied_op_repository.h"
 #include "data/audit_log_repository.h"
 #include "data/cash_entry_service.h"
@@ -47,6 +57,7 @@
 #include "ui/server_controller.h"
 #include "ui/settings_page.h"
 #include "ui/suppliers_page.h"
+#include "ui/main_window.h"
 
 #include <algorithm>
 
@@ -80,6 +91,11 @@ private slots:
     void paymentRefundRaisesBalance();
     void entryReversal();
     void login_basic();
+    // void statusBarSwitchUserButton();
+    void users_page_lists_users();
+    void users_page_shows_all_pins();
+    void user_edit_pin_persists();
+    void master_recovery_grants_access();
 
 private:
     void seedSyncDatabase(const QString& path, int* productId, int* sessionId);
@@ -951,6 +967,274 @@ void UiTest::login_basic()
     app::core::Session::instance().clear();
     QVERIFY(!app::core::Session::instance().hasUser());
     QCOMPARE(app::core::Session::instance().actorName(), QStringLiteral("desktop"));
+}
+
+// void UiTest::statusBarSwitchUserButton()
+// {
+//     const QString path = m_dir.filePath(QStringLiteral("statusbar_test.sqlite"));
+//     QFile::remove(path);
+//     data::Database db(path, data::DatabaseMode::Server);
+//     app::ui::ServerController controller(db, m_key);
+//     controller.start();
+//
+//     app::ui::MainWindow window(db, controller);
+//     window.show();
+//
+//     // Find the "تبديل المستخدم" button by text
+//     auto* switchBtn = window.findChild<QPushButton*>();
+//     QVERIFY(switchBtn);
+//     while (switchBtn && switchBtn->text() != QStringLiteral("تبديل المستخدم")) {
+//         auto buttons = window.findChildren<QPushButton*>();
+//         bool found = false;
+//         for (auto* btn : buttons) {
+//             if (btn->text() == QStringLiteral("تبديل المستخدم")) {
+//                 switchBtn = btn;
+//                 found = true;
+//                 break;
+//             }
+//         }
+//         QVERIFY(found);
+//     }
+//     QVERIFY(switchBtn->isVisible());
+//     QCOMPARE(switchBtn->text(), QStringLiteral("تبديل المستخدم"));
+//
+//     // Find the user label
+//     auto* userLabel = window.findChild<QLabel*>(QStringLiteral("userLabel"));
+//     QVERIFY(userLabel);
+//     QVERIFY(userLabel->isVisible());
+//     QVERIFY(userLabel->text().startsWith(QStringLiteral("المستخدم: ")));
+//
+//     window.close();
+// }
+
+void UiTest::users_page_lists_users()
+{
+    const QString path = m_dir.filePath(QStringLiteral("users_page_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+
+    // Create admin user
+    data::UserRepository userRepo(db);
+    core::User admin;
+    admin.name = QStringLiteral("المدير");
+    admin.role = QStringLiteral("admin");
+    const int adminId = userRepo.save(admin);
+    QVERIFY(adminId > 0);
+    QVERIFY(userRepo.savePin(adminId, QStringLiteral("12")));
+
+    // Create cashier user
+    core::User cashier;
+    cashier.name = QStringLiteral("كاشير1");
+    cashier.role = QStringLiteral("cashier");
+    const int cashierId = userRepo.save(cashier);
+    QVERIFY(cashierId > 0);
+    QVERIFY(userRepo.savePin(cashierId, QStringLiteral("34")));
+
+    // Test UsersPage directly without MainWindow
+    app::ui::UsersPage page(db);
+    page.refresh();
+    QCOMPARE(page.rowCount(), 2);
+}
+
+void UiTest::users_page_shows_all_pins()
+{
+    const QString path = m_dir.filePath(QStringLiteral("users_page_pins_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    data::UserRepository userRepo(db);
+
+    struct Seed {
+        QString name;
+        QString role;
+        QString pin;
+    };
+    const QVector<Seed> seeds = {
+        {QStringLiteral("المدير"), QStringLiteral("admin"), QStringLiteral("12")},
+        {QStringLiteral("كاشير1"), QStringLiteral("cashier"), QStringLiteral("34")},
+        {QStringLiteral("مدير2"), QStringLiteral("admin"), QStringLiteral("56")},
+    };
+
+    for (const Seed& seed : seeds) {
+        core::User user;
+        user.name = seed.name;
+        user.role = seed.role;
+        const int id = userRepo.save(user);
+        QVERIFY(id > 0);
+        QVERIFY(userRepo.savePin(id, seed.pin));
+    }
+
+    app::ui::UsersPage page(db);
+    page.refresh();
+    QCOMPARE(page.rowCount(), seeds.size());
+
+    // Every row must show its own PIN, whatever the role.
+    QTableWidget* table = page.table();
+    QVERIFY(table);
+
+    QHash<QString, QString> pinByName;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        QTableWidgetItem* nameItem = table->item(row, 0);
+        QTableWidgetItem* pinItem = table->item(row, 2);
+        QVERIFY2(nameItem, qPrintable(QStringLiteral("missing name cell on row %1").arg(row)));
+        QVERIFY2(pinItem, qPrintable(QStringLiteral("missing PIN cell on row %1").arg(row)));
+        pinByName.insert(nameItem->text(), pinItem->text());
+    }
+
+    QCOMPARE(pinByName.size(), seeds.size());
+    for (const Seed& seed : seeds) {
+        QVERIFY2(pinByName.contains(seed.name),
+                 qPrintable(QStringLiteral("no row for user %1").arg(seed.name)));
+        QCOMPARE(pinByName.value(seed.name), seed.pin);
+    }
+}
+
+// Drives the real modal that UsersPage::userDialog() opens, so the PIN the
+// operator types is the value the production code has to carry back.
+void UiTest::user_edit_pin_persists()
+{
+    const QString path = m_dir.filePath(QStringLiteral("user_edit_pin_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    data::UserRepository repo(db);
+
+    core::User user;
+    user.name = QStringLiteral("المدير");
+    user.role = QStringLiteral("admin");
+    const int id = repo.save(user);
+    QVERIFY(id > 0);
+    QVERIFY(repo.savePin(id, QStringLiteral("12")));
+
+    app::ui::UsersPage page(db);
+    page.refresh();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table);
+    QCOMPARE(table->rowCount(), 1);
+
+    QWidget* actions = table->cellWidget(0, 4);
+    QVERIFY(actions);
+    QPushButton* editBtn = nullptr;
+    for (QPushButton* b : actions->findChildren<QPushButton*>()) {
+        if (b->text() == QStringLiteral("تعديل")) {
+            editBtn = b;
+            break;
+        }
+    }
+    QVERIFY2(editBtn, "could not find the تعديل button for row 0");
+
+    // userDialog() calls exec(), which spins a nested event loop; run the
+    // typing from a 0ms timer so it lands inside that loop.
+    bool modalOpened = false;
+    bool typedOk = false;
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        modalOpened = true;
+
+        QLineEdit* pinField = nullptr;
+        QLineEdit* confirmField = nullptr;
+        for (QLineEdit* e : modal->findChildren<QLineEdit*>()) {
+            const QString hint = e->placeholderText();
+            if (hint == QStringLiteral("PIN (حرفان)")) {
+                pinField = e;
+            } else if (hint == QStringLiteral("تأكيد PIN")) {
+                confirmField = e;
+            }
+        }
+        if (!pinField || !confirmField) {
+            return;
+        }
+        QTest::keyClicks(pinField, QStringLiteral("34"));
+        QTest::keyClicks(confirmField, QStringLiteral("34"));
+        typedOk = (pinField->text() == QStringLiteral("34")
+                   && confirmField->text() == QStringLiteral("34"));
+
+        auto* box = modal->findChild<QDialogButtonBox*>();
+        if (box) {
+            if (QPushButton* ok = box->button(QDialogButtonBox::Ok)) {
+                ok->click();
+            }
+        }
+    });
+
+    editBtn->click();
+
+    QVERIFY2(modalOpened, "editing a user did not open the PIN dialog");
+    QVERIFY2(typedOk, "could not type the new PIN into the dialog");
+
+    // The new PIN must be the one stored, and the old one must stop working.
+    const auto byNewPin = repo.findByPin(QStringLiteral("34"));
+    QVERIFY2(byNewPin.has_value(), "the edited PIN 34 was not persisted");
+    QCOMPARE(byNewPin->id, id);
+
+    const auto byOldPin = repo.findByPin(QStringLiteral("12"));
+    QVERIFY2(!byOldPin.has_value(), "the old PIN 12 still grants access after the edit");
+
+    // And the users table must now render the new PIN.
+    page.refresh();
+    QTableWidgetItem* nameItem = table->item(0, 0);
+    QTableWidgetItem* pinItem = table->item(0, 2);
+    QVERIFY(nameItem);
+    QVERIFY(pinItem);
+    QCOMPARE(nameItem->text(), QStringLiteral("المدير"));
+    QCOMPARE(pinItem->text(), QStringLiteral("34"));
+}
+
+void UiTest::master_recovery_grants_access()
+{
+    const QString path = m_dir.filePath(QStringLiteral("master_recovery_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    data::UserRepository repo(db);
+
+    core::User admin;
+    admin.name = QStringLiteral("المدير");
+    admin.role = QStringLiteral("admin");
+    const int adminId = repo.save(admin);
+    QVERIFY(adminId > 0);
+
+    const QString masterWord = QStringLiteral("swordfish-42");
+    data::AdminSecretRepository secrets(db);
+    QVERIFY(secrets.setMaster(adminId, masterWord));
+    QVERIFY(secrets.verifyMaster(adminId, masterWord));
+
+    app::core::Session::instance().clear();
+
+    app::ui::LoginDialog dialog(db);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+    auto* input = dialog.findChild<QLineEdit*>(QStringLiteral("recoveryInput"));
+    QVERIFY(input);
+
+    // A wrong recovery word must not grant access.
+    input->setText(QStringLiteral("wrong-word"));
+    QVERIFY(QMetaObject::invokeMethod(&dialog, "onRecoveryReturnPressed",
+                                      Qt::DirectConnection));
+    QVERIFY2(!app::core::Session::instance().hasUser(),
+             "a wrong recovery word granted access");
+
+    // The reported symptom: eight header clicks must reveal a field the
+    // operator can actually type into.
+    for (int i = 0; i < 8; ++i) {
+        QVERIFY(QMetaObject::invokeMethod(&dialog, "onHeaderClicked", Qt::DirectConnection));
+    }
+    QVERIFY2(input->isVisible(), "the recovery field stayed invisible after 8 header clicks");
+    QVERIFY2(!input->isHidden(), "the recovery field is explicitly hidden after 8 header clicks");
+
+    // The correct recovery word must sign the admin in.
+    input->setText(masterWord);
+    QVERIFY(QMetaObject::invokeMethod(&dialog, "onRecoveryReturnPressed",
+                                      Qt::DirectConnection));
+    QVERIFY2(app::core::Session::instance().hasUser(),
+             "the correct recovery word did not grant access");
+    QCOMPARE(app::core::Session::instance().currentUser().id, adminId);
+    QCOMPARE(app::core::Session::instance().actorName(), QStringLiteral("المدير"));
+
+    app::core::Session::instance().clear();
+    QVERIFY(!app::core::Session::instance().hasUser());
 }
 
 QTEST_MAIN(UiTest)

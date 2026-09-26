@@ -22,8 +22,11 @@ bool Session::hasUser() const
 
 const core::User& Session::currentUser() const
 {
+    if (m_currentUser.has_value()) {
+        return *m_currentUser;
+    }
     static const core::User emptyUser;
-    return m_currentUser.value_or(emptyUser);
+    return emptyUser;
 }
 
 QString Session::actorName() const

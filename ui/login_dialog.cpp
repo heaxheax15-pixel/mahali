@@ -2,17 +2,20 @@
 
 #include <QApplication>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QScreen>
 #include <QScrollArea>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include "core/session.h"
+#include "data/admin_secret_repository.h"
 #include "data/user_repository.h"
 #include "widgets/ui_helpers.h"
 
@@ -25,8 +28,9 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     setWindowTitle(QStringLiteral("تسجيل الدخول — محلي"));
     setLayoutDirection(Qt::RightToLeft);
     setModal(true);
-    setFixedSize(420, 520);
     setObjectName(QStringLiteral("loginDialog"));
+
+    setMinimumSize(500, 400);
 
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(24, 16, 24, 24);
@@ -97,26 +101,101 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     m_recoveryInput->setPlaceholderText(QStringLiteral("كلمة الاستعادة"));
     m_recoveryInput->setEchoMode(QLineEdit::Password);
     m_recoveryInput->setVisible(false);
+    connect(m_recoveryInput, &QLineEdit::returnPressed, this, &LoginDialog::onRecoveryReturnPressed);
     pinLayout->addWidget(m_recoveryInput);
 
     mainLayout->addWidget(m_pinWidget);
 
-    createDefaultUserIfNeeded();
-    buildUserList();
-}
+    // Setup mode widget (initially hidden)
+    m_setupWidget = new QWidget;
+    auto* setupLayout = new QVBoxLayout(m_setupWidget);
+    setupLayout->setContentsMargins(0, 0, 0, 0);
+    setupLayout->setSpacing(8);
 
-void LoginDialog::createDefaultUserIfNeeded()
-{
+    auto* setupTitle = new QLabel(QStringLiteral("إعداد المدير الأول"));
+    setupTitle->setObjectName(QStringLiteral("setupTitle"));
+    setupTitle->setAlignment(Qt::AlignCenter);
+    setupLayout->addWidget(setupTitle);
+
+    auto* nameLabel = new QLabel(QStringLiteral("الاسم"));
+    setupLayout->addWidget(nameLabel);
+    m_setupNameInput = new QLineEdit;
+    m_setupNameInput->setObjectName(QStringLiteral("setupNameInput"));
+    m_setupNameInput->setPlaceholderText(QStringLiteral("مثال: المدير"));
+    setupLayout->addWidget(m_setupNameInput);
+
+    auto* pinSetupLabel = new QLabel(QStringLiteral("رمز PIN (حرفان)"));
+    setupLayout->addWidget(pinSetupLabel);
+    m_setupPinInput = new QLineEdit;
+    m_setupPinInput->setObjectName(QStringLiteral("setupPinInput"));
+    m_setupPinInput->setMaxLength(2);
+    m_setupPinInput->setEchoMode(QLineEdit::Password);
+    m_setupPinInput->setAlignment(Qt::AlignCenter);
+    m_setupPinInput->setFont(QFont(QStringLiteral("monospace"), 24));
+    m_setupPinInput->setFixedHeight(56);
+    setupLayout->addWidget(m_setupPinInput);
+
+    auto* recoverySetupLabel = new QLabel(QStringLiteral("كلمة الاستعادة (4 أحرف على الأقل)"));
+    setupLayout->addWidget(recoverySetupLabel);
+    m_setupRecoveryInput = new QLineEdit;
+    m_setupRecoveryInput->setObjectName(QStringLiteral("setupRecoveryInput"));
+    m_setupRecoveryInput->setEchoMode(QLineEdit::Password);
+    m_setupRecoveryInput->setPlaceholderText(QStringLiteral("كلمة الاستعادة"));
+    setupLayout->addWidget(m_setupRecoveryInput);
+
+    auto* confirmLabel = new QLabel(QStringLiteral("تأكيد كلمة الاستعادة"));
+    setupLayout->addWidget(confirmLabel);
+    m_setupConfirmInput = new QLineEdit;
+    m_setupConfirmInput->setObjectName(QStringLiteral("setupConfirmInput"));
+    m_setupConfirmInput->setEchoMode(QLineEdit::Password);
+    m_setupConfirmInput->setPlaceholderText(QStringLiteral("تأكيد كلمة الاستعادة"));
+    setupLayout->addWidget(m_setupConfirmInput);
+
+    m_setupErrorLabel = new QLabel;
+    m_setupErrorLabel->setObjectName(QStringLiteral("setupError"));
+    m_setupErrorLabel->setAlignment(Qt::AlignCenter);
+    m_setupErrorLabel->setVisible(false);
+    setupLayout->addWidget(m_setupErrorLabel);
+
+    m_setupButton = new QPushButton(QStringLiteral("إنشاء"));
+    m_setupButton->setObjectName(QStringLiteral("primary"));
+    m_setupButton->setFixedHeight(44);
+    m_setupButton->setCursor(Qt::PointingHandCursor);
+    connect(m_setupButton, &QPushButton::clicked, this, &LoginDialog::onSetupClicked);
+    setupLayout->addWidget(m_setupButton);
+
+    mainLayout->addWidget(m_setupWidget);
+
+    // Determine mode
     data::UserRepository repo(m_db);
     if (repo.listActive().isEmpty()) {
-        core::User admin;
-        admin.name = QStringLiteral("المدير");
-        admin.role = QStringLiteral("admin");
-        const int id = repo.save(admin);
-        if (id > 0) {
-            repo.savePin(id, QStringLiteral("00"));
-        }
+        showSetupMode();
+    } else {
+        showLoginMode();
     }
+}
+
+void LoginDialog::showSetupMode()
+{
+    m_setupMode = true;
+    m_headerLabel->setText(QStringLiteral("محلي"));
+    m_headerLabel->setCursor(Qt::ArrowCursor);
+    m_userListWidget->setVisible(false);
+    m_pinWidget->setVisible(false);
+    m_setupWidget->setVisible(true);
+    clearSetupInputs();
+    m_setupNameInput->setFocus();
+}
+
+void LoginDialog::showLoginMode()
+{
+    m_setupMode = false;
+    m_headerLabel->setText(QStringLiteral("محلي"));
+    m_headerLabel->setCursor(Qt::PointingHandCursor);
+    m_setupWidget->setVisible(false);
+    m_userListWidget->setVisible(true);
+    m_pinWidget->setVisible(false);
+    buildUserList();
 }
 
 void LoginDialog::buildUserList()
@@ -160,8 +239,8 @@ void LoginDialog::onUserButtonClicked(int userId)
 void LoginDialog::showPinInput(int userId, const QString& userName)
 {
     m_headerLabel->setText(userName);
-    m_pinWidget->setVisible(true);
     m_userListWidget->setVisible(false);
+    m_pinWidget->setVisible(true);
     clearPinInput();
     m_pinInput->setFocus();
 }
@@ -169,8 +248,21 @@ void LoginDialog::showPinInput(int userId, const QString& userName)
 void LoginDialog::clearPinInput()
 {
     m_pinInput->clear();
+    m_recoveryInput->clear();
+    m_recoveryInput->setVisible(false);
     m_errorLabel->setVisible(false);
     m_errorLabel->clear();
+    m_headerClickCount = 0;
+}
+
+void LoginDialog::clearSetupInputs()
+{
+    m_setupNameInput->clear();
+    m_setupPinInput->clear();
+    m_setupRecoveryInput->clear();
+    m_setupConfirmInput->clear();
+    m_setupErrorLabel->setVisible(false);
+    m_setupErrorLabel->clear();
 }
 
 void LoginDialog::onLoginClicked()
@@ -197,13 +289,103 @@ void LoginDialog::onLoginClicked()
     }
 }
 
+void LoginDialog::onSetupClicked()
+{
+    const QString name = m_setupNameInput->text().trimmed();
+    const QString pin = m_setupPinInput->text();
+    const QString recovery = m_setupRecoveryInput->text();
+    const QString confirm = m_setupConfirmInput->text();
+
+    if (name.isEmpty()) {
+        m_setupErrorLabel->setText(QStringLiteral("أدخل اسماً"));
+        m_setupErrorLabel->setVisible(true);
+        return;
+    }
+    if (pin.length() != 2) {
+        m_setupErrorLabel->setText(QStringLiteral("PIN يجب أن يكون حرفين"));
+        m_setupErrorLabel->setVisible(true);
+        return;
+    }
+    if (recovery.length() < 4) {
+        m_setupErrorLabel->setText(QStringLiteral("كلمة الاستعادة: 4 أحرف على الأقل"));
+        m_setupErrorLabel->setVisible(true);
+        return;
+    }
+    if (recovery != confirm) {
+        m_setupErrorLabel->setText(QStringLiteral("كلمة الاستعادة غير متطابقة"));
+        m_setupErrorLabel->setVisible(true);
+        return;
+    }
+
+    data::UserRepository repo(m_db);
+    core::User admin;
+    admin.name = name;
+    admin.role = QStringLiteral("admin");
+    const int id = repo.save(admin);
+    if (id <= 0) {
+        m_setupErrorLabel->setText(QStringLiteral("فشل إنشاء المستخدم"));
+        m_setupErrorLabel->setVisible(true);
+        return;
+    }
+    if (!repo.savePin(id, pin)) {
+        m_setupErrorLabel->setText(QStringLiteral("فشل حفظ PIN"));
+        m_setupErrorLabel->setVisible(true);
+        return;
+    }
+
+    data::AdminSecretRepository secretRepo(m_db);
+    if (!secretRepo.setMaster(id, recovery)) {
+        m_setupErrorLabel->setText(QStringLiteral("فشل حفظ كلمة الاستعادة"));
+        m_setupErrorLabel->setVisible(true);
+        return;
+    }
+
+    const auto user = repo.findById(id);
+    if (user.has_value()) {
+        app::core::Session::instance().setCurrentUser(*user);
+        accept();
+    }
+}
+
 void LoginDialog::onHeaderClicked()
 {
+    if (m_setupMode) {
+        return;
+    }
     m_headerClickCount++;
     if (m_headerClickCount >= 8) {
+        // The recovery field lives inside m_pinWidget, which login mode hides.
+        // Reveal the container too, otherwise the field can never be shown or
+        // focused and the word can never be submitted.
+        m_userListWidget->setVisible(false);
+        m_pinWidget->setVisible(true);
         m_recoveryInput->setVisible(true);
         m_recoveryInput->setFocus();
+        m_recoveryInput->selectAll();
     }
+}
+
+void LoginDialog::onRecoveryReturnPressed()
+{
+    const QString password = m_recoveryInput->text();
+    if (password.isEmpty()) {
+        return;
+    }
+
+    data::AdminSecretRepository secretRepo(m_db);
+    const std::optional<int> userId = secretRepo.findAdminByMaster(password);
+    if (userId.has_value()) {
+        data::UserRepository repo(m_db);
+        const auto user = repo.findById(*userId);
+        if (user.has_value() && user->active) {
+            app::core::Session::instance().setCurrentUser(*user);
+            accept();
+            return;
+        }
+    }
+    m_errorLabel->setText(QStringLiteral("كلمة الاستعادة غير صحيحة"));
+    m_errorLabel->setVisible(true);
+    m_recoveryInput->clear();
 }
 
 bool LoginDialog::eventFilter(QObject* obj, QEvent* event)

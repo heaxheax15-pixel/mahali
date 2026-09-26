@@ -118,6 +118,28 @@ bool UserRepository::hasAny() const
     return query.exec() && query.next();
 }
 
+QVector<core::User> UserRepository::listAll() const
+{
+    QVector<core::User> users;
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral("SELECT %1 FROM users ORDER BY name").arg(QLatin1String(kUserColumns)));
+    if (!query.exec()) {
+        return users;
+    }
+    while (query.next()) {
+        users.push_back(userFromQuery(query));
+    }
+    return users;
+}
+
+bool UserRepository::remove(int id)
+{
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral("DELETE FROM users WHERE id = ?"));
+    query.addBindValue(id);
+    return query.exec() && query.numRowsAffected() > 0;
+}
+
 int UserRepository::save(const core::User& user)
 {
     QSqlQuery query(m_db.handle());

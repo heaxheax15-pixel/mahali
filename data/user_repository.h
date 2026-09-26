@@ -16,6 +16,7 @@ public:
 
     std::optional<core::User> findById(int id) const;
     std::vector<core::User> findAll() const;
+    QVector<core::User> listAll() const;
 
     int save(const core::User& user);
 
@@ -24,6 +25,7 @@ public:
     std::optional<core::User> findByName(const QString& name) const;
     bool savePin(int id, const QString& pin);
     bool setActive(int id, bool active);
+    bool remove(int id);
     bool hasAny() const;
 
 private:
