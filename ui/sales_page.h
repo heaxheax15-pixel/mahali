@@ -20,11 +20,12 @@ class SalesPage : public QWidget {
 public:
     explicit SalesPage(app::data::Database& db, QWidget* parent = nullptr);
 
-    // Test accessors.
+    // Test accessors. These read cached values captured in refresh(), so they stay
+    // correct no matter which language the summary label is rendered in.
     void refresh();
     int rowCount() const;
-    long long grandTotalCents() const;
-    long long profitCents() const;
+    qint64 grandTotalCents() const;
+    qint64 profitCents() const;
     QTableWidget* table() const { return m_table; }
 
 private slots:
@@ -37,6 +38,8 @@ private:
     StatCard* m_countCard = nullptr;
     StatCard* m_totalCard = nullptr;
     StatCard* m_profitCard = nullptr;
+    qint64 m_cachedGrandTotalCents = 0;
+    qint64 m_cachedProfitCents = 0;
 };
 
 } // namespace app::ui

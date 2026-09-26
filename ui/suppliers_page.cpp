@@ -1,5 +1,6 @@
 #include "suppliers_page.h"
 
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -28,13 +29,14 @@ namespace {
 std::optional<core::Supplier> supplierDialog(QWidget* parent, bool forNew, const core::Supplier& initial)
 {
     QDialog dialog(parent);
-    dialog.setWindowTitle(forNew ? QStringLiteral("مورد جديد") : QStringLiteral("تعديل المورد"));
+    dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::SuppliersPage", "مورد جديد")
+                                 : QCoreApplication::translate("app::ui::SuppliersPage", "تعديل المورد"));
     dialog.setModal(true);
 
     auto* name = new QLineEdit(initial.name);
 
     QFormLayout* form = new QFormLayout;
-    form->addRow(QStringLiteral("الاسم"), name);
+    form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "الاسم"), name);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -63,16 +65,16 @@ struct InvoiceInput {
 std::optional<InvoiceInput> invoiceDialog(QWidget* parent, const QString& supplierName)
 {
     QDialog dialog(parent);
-    dialog.setWindowTitle(QStringLiteral("فاتورة آجلة — %1").arg(supplierName));
+    dialog.setWindowTitle(QCoreApplication::translate("app::ui::SuppliersPage", "فاتورة آجلة — %1").arg(supplierName));
     dialog.setModal(true);
 
     auto* amount = new QLineEdit;
-    amount->setPlaceholderText(QStringLiteral("مثال: 4500.50"));
+    amount->setPlaceholderText(QCoreApplication::translate("app::ui::SuppliersPage", "مثال: 4500.50"));
     auto* note = new QLineEdit;
 
     QFormLayout* form = new QFormLayout;
-    form->addRow(QStringLiteral("المبلغ"), amount);
-    form->addRow(QStringLiteral("ملاحظة"), note);
+    form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "المبلغ"), amount);
+    form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "ملاحظة"), note);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -101,11 +103,11 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
-    auto* add = new QPushButton(QStringLiteral("إضافة مورد"));
+    auto* add = new QPushButton(tr("إضافة مورد"));
     add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
-    auto* edit = new QPushButton(QStringLiteral("تعديل"));
+    auto* edit = new QPushButton(tr("تعديل"));
     edit->setObjectName(QStringLiteral("secondary"));
-    m_addInvoice = new QPushButton(QStringLiteral("فاتورة آجلة"));
+    m_addInvoice = new QPushButton(tr("فاتورة آجلة"));
     m_addInvoice->setObjectName(QStringLiteral("secondary"));
     m_addInvoice->setEnabled(false);
 
@@ -115,7 +117,7 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     m_suppliers->setFrameShape(QFrame::NoFrame);
     m_suppliers->setShowGrid(false);
     m_suppliers->setColumnCount(1);
-    m_suppliers->setHorizontalHeaderLabels({QStringLiteral("المورد")});
+    m_suppliers->setHorizontalHeaderLabels({tr("المورد")});
     m_suppliers->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_suppliers->setSelectionMode(QAbstractItemView::SingleSelection);
     m_suppliers->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -129,7 +131,7 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     m_transactions->setShowGrid(false);
     m_transactions->setColumnCount(3);
     m_transactions->setHorizontalHeaderLabels(
-        {QStringLiteral("التاريخ"), QStringLiteral("المبلغ"), QStringLiteral("ملاحظة")});
+        {tr("التاريخ"), tr("المبلغ"), tr("ملاحظة")});
     m_transactions->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_transactions->horizontalHeader()->setStretchLastSection(true);
     m_transactions->verticalHeader()->setDefaultSectionSize(42);
@@ -145,7 +147,7 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     auto* suppliersLayout = new QVBoxLayout(suppliersCard);
     suppliersLayout->setContentsMargins(18, 16, 18, 16);
     suppliersLayout->setSpacing(10);
-    suppliersLayout->addWidget(makeCardTitle(QStringLiteral("الموردون")));
+    suppliersLayout->addWidget(makeCardTitle(tr("الموردون")));
     suppliersLayout->addLayout(addRow);
     suppliersLayout->addWidget(m_suppliers, 1);
 
@@ -153,7 +155,7 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     auto* transactionsLayout = new QVBoxLayout(transactionsCard);
     transactionsLayout->setContentsMargins(18, 16, 18, 16);
     transactionsLayout->setSpacing(10);
-    transactionsLayout->addWidget(makeCardTitle(QStringLiteral("فواتير المورد المحدد")));
+    transactionsLayout->addWidget(makeCardTitle(tr("فواتير المورد المحدد")));
     transactionsLayout->addWidget(m_transactions, 1);
 
     auto* split = new QHBoxLayout;
@@ -163,8 +165,8 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
 
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
-    root->addWidget(new PageHeader(QStringLiteral("الموردون"),
-                                   QStringLiteral("الموردون والحسابات الآجلة عندهم")));
+    root->addWidget(new PageHeader(tr("الموردون"),
+                                   tr("الموردون والحسابات الآجلة عندهم")));
     root->addLayout(split, 1);
 
     connect(add, &QPushButton::clicked, this, &SuppliersPage::onAddClicked);
@@ -246,7 +248,7 @@ void SuppliersPage::onAddClicked()
     }
     data::SupplierRepository suppliers(m_db);
     if (suppliers.save(*maybeSupplier) == 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("تعذر حفظ المورد"));
+        QMessageBox::warning(this, tr("خطأ"), tr("تعذر حفظ المورد"));
         return;
     }
     refresh();
@@ -294,7 +296,7 @@ void SuppliersPage::onAddTransactionClicked()
 
     data::SupplierTransactionRepository repo(m_db);
     if (repo.insert(transaction) == 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("تعذر حفظ الفاتورة"));
+        QMessageBox::warning(this, tr("خطأ"), tr("تعذر حفظ الفاتورة"));
         return;
     }
     reloadTransactions();

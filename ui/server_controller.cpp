@@ -34,12 +34,12 @@ bool ServerController::startAt(quint16 port)
     // network; phones reach the PC by its LAN address.
     m_port = m_server.server().listen(QHostAddress::Any, port);
     if (m_port == 0) {
-        emit message(QStringLiteral("تعذر تشغيل خادم المزامنة"));
+        emit message(tr("تعذر تشغيل خادم المزامنة"));
         return false;
     }
     refreshStats();
     m_statsTimer.start();
-    emit message(QStringLiteral("خادم المزامنة يعمل على المنفذ %1").arg(m_port));
+    emit message(tr("خادم المزامنة يعمل على المنفذ %1").arg(m_port));
     return true;
 }
 
@@ -49,7 +49,7 @@ void ServerController::stop()
     m_server.server().disconnect();
     m_port = 0;
     refreshStats();
-    emit message(QStringLiteral("تم إيقاف خادم المزامنة"));
+    emit message(tr("تم إيقاف خادم المزامنة"));
 }
 
 bool ServerController::isListening() const
@@ -72,7 +72,7 @@ int ServerController::runRetention(int days)
     const QDateTime cutoff = QDateTime::currentDateTime().addDays(-days);
     app::data::AppliedOpRepository journal(m_db);
     const int pruned = journal.pruneOlderThan(cutoff);
-    emit message(QStringLiteral("تم تنظيف سجل العمليات: %1 صفاً أقدم من %2 يوم").arg(pruned).arg(days));
+    emit message(tr("تم تنظيف سجل العمليات: %1 صفاً أقدم من %2 يوم").arg(pruned).arg(days));
     return pruned;
 }
 

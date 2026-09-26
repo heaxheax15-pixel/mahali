@@ -25,6 +25,7 @@
 #include "audit_log_repository.h"
 #include "zakat_setting_repository.h"
 #include "setting_repository.h"
+#include "core/i18n.h"
 #include "sync_outbox_repository.h"
 #include "date_utils.h"
 
@@ -52,6 +53,7 @@ private slots:
     void appliedOpsJournalPrunesBoundedly();
     void user_pin_roundtrip();
     void admin_master_roundtrip();
+    void language_setting_persists();
 
 private:
     QTemporaryDir m_dir;
@@ -539,6 +541,29 @@ void DataLayerTest::admin_master_roundtrip()
     QCOMPARE(*found, id);
 
     QVERIFY(!secretRepo.findAdminByMaster(QStringLiteral("wrong")).has_value());
+}
+
+void DataLayerTest::language_setting_persists()
+{
+    data::SettingRepository settings(*m_db);
+
+    // First launch has no value yet, so i18n reports the Arabic default.
+    QCOMPARE(core::currentLanguage(*m_db), core::defaultLanguage());
+
+    settings.set(QStringLiteral("language"), QStringLiteral("fr"));
+    QCOMPARE(settings.value(QStringLiteral("language")),
+             std::optional<QString>(QStringLiteral("fr")));
+    QCOMPARE(core::currentLanguage(*m_db), QStringLiteral("fr"));
+
+    // Overwriting the same key must replace, not duplicate.
+    settings.set(QStringLiteral("language"), QStringLiteral("en"));
+    QCOMPARE(settings.value(QStringLiteral("language")),
+             std::optional<QString>(QStringLiteral("en")));
+    QCOMPARE(core::currentLanguage(*m_db), QStringLiteral("en"));
+
+    // An unsupported value must not win over the default.
+    settings.set(QStringLiteral("language"), QStringLiteral("de"));
+    QCOMPARE(core::currentLanguage(*m_db), core::defaultLanguage());
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

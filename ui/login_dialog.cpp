@@ -25,7 +25,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     : QDialog(parent)
     , m_db(db)
 {
-    setWindowTitle(QStringLiteral("تسجيل الدخول — محلي"));
+    setWindowTitle(tr("تسجيل الدخول — محلي"));
     setLayoutDirection(Qt::RightToLeft);
     setModal(true);
     setObjectName(QStringLiteral("loginDialog"));
@@ -37,7 +37,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     mainLayout->setSpacing(12);
 
     // Header area - clickable for recovery mode
-    m_headerLabel = new QLabel(QStringLiteral("محلي"));
+    m_headerLabel = new QLabel(tr("محلي"));
     m_headerLabel->setObjectName(QStringLiteral("loginHeader"));
     m_headerLabel->setAlignment(Qt::AlignCenter);
     m_headerLabel->setFixedHeight(56);
@@ -46,7 +46,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     mainLayout->addWidget(m_headerLabel);
 
     // Subtitle
-    auto* subtitle = new QLabel(QStringLiteral("اختر مستخدمًا وأدخل رمز PIN"));
+    auto* subtitle = new QLabel(tr("اختر مستخدمًا وأدخل رمز PIN"));
     subtitle->setObjectName(QStringLiteral("loginSubtitle"));
     subtitle->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(subtitle);
@@ -69,7 +69,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     pinLayout->setContentsMargins(0, 0, 0, 0);
     pinLayout->setSpacing(8);
 
-    auto* pinLabel = new QLabel(QStringLiteral("رمز PIN (حرفان)"));
+    auto* pinLabel = new QLabel(tr("رمز PIN (حرفان)"));
     pinLabel->setObjectName(QStringLiteral("pinLabel"));
     pinLayout->addWidget(pinLabel);
 
@@ -88,7 +88,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     m_errorLabel->setVisible(false);
     pinLayout->addWidget(m_errorLabel);
 
-    m_loginButton = new QPushButton(QStringLiteral("دخول"));
+    m_loginButton = new QPushButton(tr("دخول"));
     m_loginButton->setObjectName(QStringLiteral("primary"));
     m_loginButton->setFixedHeight(44);
     m_loginButton->setCursor(Qt::PointingHandCursor);
@@ -98,7 +98,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     // Recovery input (initially hidden)
     m_recoveryInput = new QLineEdit;
     m_recoveryInput->setObjectName(QStringLiteral("recoveryInput"));
-    m_recoveryInput->setPlaceholderText(QStringLiteral("كلمة الاستعادة"));
+    m_recoveryInput->setPlaceholderText(tr("كلمة الاستعادة"));
     m_recoveryInput->setEchoMode(QLineEdit::Password);
     m_recoveryInput->setVisible(false);
     connect(m_recoveryInput, &QLineEdit::returnPressed, this, &LoginDialog::onRecoveryReturnPressed);
@@ -112,19 +112,19 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     setupLayout->setContentsMargins(0, 0, 0, 0);
     setupLayout->setSpacing(8);
 
-    auto* setupTitle = new QLabel(QStringLiteral("إعداد المدير الأول"));
+    auto* setupTitle = new QLabel(tr("إعداد المدير الأول"));
     setupTitle->setObjectName(QStringLiteral("setupTitle"));
     setupTitle->setAlignment(Qt::AlignCenter);
     setupLayout->addWidget(setupTitle);
 
-    auto* nameLabel = new QLabel(QStringLiteral("الاسم"));
+    auto* nameLabel = new QLabel(tr("الاسم"));
     setupLayout->addWidget(nameLabel);
     m_setupNameInput = new QLineEdit;
     m_setupNameInput->setObjectName(QStringLiteral("setupNameInput"));
-    m_setupNameInput->setPlaceholderText(QStringLiteral("مثال: المدير"));
+    m_setupNameInput->setPlaceholderText(tr("مثال: المدير"));
     setupLayout->addWidget(m_setupNameInput);
 
-    auto* pinSetupLabel = new QLabel(QStringLiteral("رمز PIN (حرفان)"));
+    auto* pinSetupLabel = new QLabel(tr("رمز PIN (حرفان)"));
     setupLayout->addWidget(pinSetupLabel);
     m_setupPinInput = new QLineEdit;
     m_setupPinInput->setObjectName(QStringLiteral("setupPinInput"));
@@ -135,20 +135,20 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     m_setupPinInput->setFixedHeight(56);
     setupLayout->addWidget(m_setupPinInput);
 
-    auto* recoverySetupLabel = new QLabel(QStringLiteral("كلمة الاستعادة (4 أحرف على الأقل)"));
+    auto* recoverySetupLabel = new QLabel(tr("كلمة الاستعادة (4 أحرف على الأقل)"));
     setupLayout->addWidget(recoverySetupLabel);
     m_setupRecoveryInput = new QLineEdit;
     m_setupRecoveryInput->setObjectName(QStringLiteral("setupRecoveryInput"));
     m_setupRecoveryInput->setEchoMode(QLineEdit::Password);
-    m_setupRecoveryInput->setPlaceholderText(QStringLiteral("كلمة الاستعادة"));
+    m_setupRecoveryInput->setPlaceholderText(tr("كلمة الاستعادة"));
     setupLayout->addWidget(m_setupRecoveryInput);
 
-    auto* confirmLabel = new QLabel(QStringLiteral("تأكيد كلمة الاستعادة"));
+    auto* confirmLabel = new QLabel(tr("تأكيد كلمة الاستعادة"));
     setupLayout->addWidget(confirmLabel);
     m_setupConfirmInput = new QLineEdit;
     m_setupConfirmInput->setObjectName(QStringLiteral("setupConfirmInput"));
     m_setupConfirmInput->setEchoMode(QLineEdit::Password);
-    m_setupConfirmInput->setPlaceholderText(QStringLiteral("تأكيد كلمة الاستعادة"));
+    m_setupConfirmInput->setPlaceholderText(tr("تأكيد كلمة الاستعادة"));
     setupLayout->addWidget(m_setupConfirmInput);
 
     m_setupErrorLabel = new QLabel;
@@ -157,7 +157,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     m_setupErrorLabel->setVisible(false);
     setupLayout->addWidget(m_setupErrorLabel);
 
-    m_setupButton = new QPushButton(QStringLiteral("إنشاء"));
+    m_setupButton = new QPushButton(tr("إنشاء"));
     m_setupButton->setObjectName(QStringLiteral("primary"));
     m_setupButton->setFixedHeight(44);
     m_setupButton->setCursor(Qt::PointingHandCursor);
@@ -178,7 +178,7 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
 void LoginDialog::showSetupMode()
 {
     m_setupMode = true;
-    m_headerLabel->setText(QStringLiteral("محلي"));
+    m_headerLabel->setText(tr("محلي"));
     m_headerLabel->setCursor(Qt::ArrowCursor);
     m_userListWidget->setVisible(false);
     m_pinWidget->setVisible(false);
@@ -190,7 +190,7 @@ void LoginDialog::showSetupMode()
 void LoginDialog::showLoginMode()
 {
     m_setupMode = false;
-    m_headerLabel->setText(QStringLiteral("محلي"));
+    m_headerLabel->setText(tr("محلي"));
     m_headerLabel->setCursor(Qt::PointingHandCursor);
     m_setupWidget->setVisible(false);
     m_userListWidget->setVisible(true);
@@ -272,7 +272,7 @@ void LoginDialog::onLoginClicked()
     }
     const QString pin = m_pinInput->text();
     if (pin.length() != 2) {
-        m_errorLabel->setText(QStringLiteral("أدخل حرفين فقط"));
+        m_errorLabel->setText(tr("أدخل حرفين فقط"));
         m_errorLabel->setVisible(true);
         return;
     }
@@ -283,7 +283,7 @@ void LoginDialog::onLoginClicked()
         app::core::Session::instance().setCurrentUser(*user);
         accept();
     } else {
-        m_errorLabel->setText(QStringLiteral("PIN خاطئ"));
+        m_errorLabel->setText(tr("PIN خاطئ"));
         m_errorLabel->setVisible(true);
         m_pinInput->clear();
     }
@@ -297,22 +297,22 @@ void LoginDialog::onSetupClicked()
     const QString confirm = m_setupConfirmInput->text();
 
     if (name.isEmpty()) {
-        m_setupErrorLabel->setText(QStringLiteral("أدخل اسماً"));
+        m_setupErrorLabel->setText(tr("أدخل اسماً"));
         m_setupErrorLabel->setVisible(true);
         return;
     }
     if (pin.length() != 2) {
-        m_setupErrorLabel->setText(QStringLiteral("PIN يجب أن يكون حرفين"));
+        m_setupErrorLabel->setText(tr("PIN يجب أن يكون حرفين"));
         m_setupErrorLabel->setVisible(true);
         return;
     }
     if (recovery.length() < 4) {
-        m_setupErrorLabel->setText(QStringLiteral("كلمة الاستعادة: 4 أحرف على الأقل"));
+        m_setupErrorLabel->setText(tr("كلمة الاستعادة: 4 أحرف على الأقل"));
         m_setupErrorLabel->setVisible(true);
         return;
     }
     if (recovery != confirm) {
-        m_setupErrorLabel->setText(QStringLiteral("كلمة الاستعادة غير متطابقة"));
+        m_setupErrorLabel->setText(tr("كلمة الاستعادة غير متطابقة"));
         m_setupErrorLabel->setVisible(true);
         return;
     }
@@ -323,19 +323,19 @@ void LoginDialog::onSetupClicked()
     admin.role = QStringLiteral("admin");
     const int id = repo.save(admin);
     if (id <= 0) {
-        m_setupErrorLabel->setText(QStringLiteral("فشل إنشاء المستخدم"));
+        m_setupErrorLabel->setText(tr("فشل إنشاء المستخدم"));
         m_setupErrorLabel->setVisible(true);
         return;
     }
     if (!repo.savePin(id, pin)) {
-        m_setupErrorLabel->setText(QStringLiteral("فشل حفظ PIN"));
+        m_setupErrorLabel->setText(tr("فشل حفظ PIN"));
         m_setupErrorLabel->setVisible(true);
         return;
     }
 
     data::AdminSecretRepository secretRepo(m_db);
     if (!secretRepo.setMaster(id, recovery)) {
-        m_setupErrorLabel->setText(QStringLiteral("فشل حفظ كلمة الاستعادة"));
+        m_setupErrorLabel->setText(tr("فشل حفظ كلمة الاستعادة"));
         m_setupErrorLabel->setVisible(true);
         return;
     }
@@ -383,7 +383,7 @@ void LoginDialog::onRecoveryReturnPressed()
             return;
         }
     }
-    m_errorLabel->setText(QStringLiteral("كلمة الاستعادة غير صحيحة"));
+    m_errorLabel->setText(tr("كلمة الاستعادة غير صحيحة"));
     m_errorLabel->setVisible(true);
     m_recoveryInput->clear();
 }

@@ -9,8 +9,10 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
+#include "core/i18n.h"
 #include "data/setting_repository.h"
 #include "data/zakat_setting_repository.h"
 #include "format_utils.h"
@@ -27,20 +29,26 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
 {
     m_shopName = new QLineEdit;
     m_currency = new QLineEdit;
-    m_currency->setPlaceholderText(QStringLiteral("مثال: دج  أو  DA"));
-    m_zakat = new QCheckBox(QStringLiteral("احتساب الزكاة (2.5%) في التقارير"));
+    m_currency->setPlaceholderText(tr("مثال: دج  أو  DA"));
+    m_zakat = new QCheckBox(tr("احتساب الزكاة (2.5%) في التقارير"));
     m_syncKey = new QLineEdit;
     m_syncKey->setEchoMode(QLineEdit::Password);
 
     m_theme = new QComboBox;
-    m_theme->addItem(QStringLiteral("فاتح"), QStringLiteral("light"));
-    m_theme->addItem(QStringLiteral("داكن"), QStringLiteral("dark"));
+    m_theme->addItem(tr("فاتح"), QStringLiteral("light"));
+    m_theme->addItem(tr("داكن"), QStringLiteral("dark"));
+
+    m_language = new QComboBox;
+    m_language->setObjectName(QStringLiteral("languageCombo"));
+    m_language->addItem(tr("العربية"), QStringLiteral("ar"));
+    m_language->addItem(tr("Français"), QStringLiteral("fr"));
+    m_language->addItem(tr("English"), QStringLiteral("en"));
 
     m_preview = new QLabel;
     m_preview->setWordWrap(true);
     m_preview->setObjectName(QStringLiteral("faintText"));
 
-    m_save = new QPushButton(QStringLiteral("حفظ الإعدادات"));
+    m_save = new QPushButton(tr("حفظ الإعدادات"));
     m_save->setIcon(appIcon(Icon::Check, QColor(QStringLiteral("#ffffff")), 18));
 
     m_notice = new QLabel;
@@ -49,11 +57,12 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
 
     auto* form = new QFormLayout;
     form->setSpacing(10);
-    form->addRow(QStringLiteral("اسم المتجر:"), m_shopName);
-    form->addRow(QStringLiteral("رمز العملة:"), m_currency);
+    form->addRow(tr("اسم المتجر:"), m_shopName);
+    form->addRow(tr("رمز العملة:"), m_currency);
     form->addRow(QString(), m_zakat);
-    form->addRow(QStringLiteral("السمة:"), m_theme);
-    form->addRow(QStringLiteral("مفتاح المزامنة (يتطلب إعادة تشغيل):"), m_syncKey);
+    form->addRow(tr("السمة:"), m_theme);
+    form->addRow(tr("اللغة:"), m_language);
+    form->addRow(tr("مفتاح المزامنة (يتطلب إعادة تشغيل):"), m_syncKey);
 
     auto* card = makeCard();
     auto* cardLayout = new QVBoxLayout(card);
@@ -66,20 +75,34 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
 
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
-    root->addWidget(new PageHeader(QStringLiteral("الإعدادات"),
-                                   QStringLiteral("اسم المتجر، العملة، السمة ومفتاح المزامنة")));
+    root->addWidget(new PageHeader(tr("الإعدادات"),
+                                   tr("اسم المتجر، العملة، السمة ومفتاح المزامنة")));
     root->addWidget(card);
     root->addStretch(1);
 
     connect(m_currency, &QLineEdit::textChanged, m_preview,
             [this](const QString& symbol) {
-                m_preview->setText(QStringLiteral("معاينة: %1").arg(formatMoney(12345)));
+                m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));
                 Q_UNUSED(symbol);
             });
     connect(m_theme, &QComboBox::currentIndexChanged, this,
             [this]() {
                 applyTheme(m_theme->currentData().toString(), *qApp);
-                m_notice->setText(QStringLiteral("طُبّقت السمة الجديدة — احفظ للإبقاء عليها"));
+                m_notice->setText(tr("طُبّقت السمة الجديدة — احفظ للإبقاء عليها"));
+            });
+
+    // Phase A1: the choice is stored and the catalogue is swapped in, but the
+    // already-built widgets keep their source strings until the restart prompt
+    // is honoured (full in-place retranslate lands in A3).
+    connect(m_language, &QComboBox::currentIndexChanged, this,
+            [this]() {
+                const QString code = m_language->currentData().toString();
+                data::SettingRepository settings(m_db);
+                settings.set(QStringLiteral("language"), code);
+                core::applyLanguage(code);
+                QMessageBox::information(
+                    this, tr("اللغة"),
+                    tr("أعد تشغيل البرنامج لتطبيق اللغة بالكامل"));
             });
 
     connect(m_save, &QPushButton::clicked, this, &SettingsPage::save);
@@ -97,12 +120,21 @@ void SettingsPage::refresh()
     const int idx = m_theme->findData(theme);
     m_theme->setCurrentIndex(idx >= 0 ? idx : m_theme->findData(QStringLiteral("light")));
 
+    // Blocked so restoring the stored value does not fire the change handler
+    // (which would pop the restart dialog every time the page is opened).
+    const QString language =
+        settings.value(QStringLiteral("language")).value_or(core::defaultLanguage());
+    const int langIdx = m_language->findData(language);
+    const QSignalBlocker blocker(m_language);
+    m_language->setCurrentIndex(langIdx >= 0 ? langIdx
+                                             : m_language->findData(core::defaultLanguage()));
+
     data::ZakatSettingRepository zakat(m_db);
     const auto enabledRow = zakat.findByKey(QStringLiteral("enabled"));
     m_zakat->setChecked(!enabledRow.has_value() || enabledRow->value == QLatin1String("1"));
 
     m_notice->clear();
-    m_preview->setText(QStringLiteral("معاينة: %1").arg(formatMoney(12345)));
+    m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));
 }
 
 QString SettingsPage::shopName() const
@@ -163,8 +195,8 @@ void SettingsPage::save()
     zakat.set(QStringLiteral("enabled"), zakatEnabled() ? QStringLiteral("1") : QStringLiteral("0"));
 
     app::ui::setCurrencySymbol(currencySymbol());
-    m_preview->setText(QStringLiteral("معاينة: %1").arg(formatMoney(12345)));
-    m_notice->setText(QStringLiteral("حُفظت الإعدادات"));
+    m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));
+    m_notice->setText(tr("حُفظت الإعدادات"));
 }
 
 } // namespace app::ui

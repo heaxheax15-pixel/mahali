@@ -44,6 +44,7 @@ private:
     QCheckBox* m_zakat;
     QLineEdit* m_syncKey;
     QComboBox* m_theme;
+    QComboBox* m_language;
     QPushButton* m_save;
     QLabel* m_preview;
     QLabel* m_notice;

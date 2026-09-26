@@ -1,5 +1,6 @@
 #include "cash_session_page.h"
 
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -30,19 +31,19 @@ namespace {
 QString movementTypeLabel(const QString& type)
 {
     if (type == QLatin1String("sale")) {
-        return QStringLiteral("بيع");
+        return QCoreApplication::translate("app::ui::CashSessionPage", "بيع");
     }
     if (type == QLatin1String("customer_payment")) {
-        return QStringLiteral("دفعة عميل");
+        return QCoreApplication::translate("app::ui::CashSessionPage", "دفعة عميل");
     }
     if (type == QLatin1String("expense")) {
-        return QStringLiteral("مصروف");
+        return QCoreApplication::translate("app::ui::CashSessionPage", "مصروف");
     }
     if (type == QLatin1String("drawing")) {
-        return QStringLiteral("سحب");
+        return QCoreApplication::translate("app::ui::CashSessionPage", "سحب");
     }
     if (type == QLatin1String("refund")) {
-        return QStringLiteral("استرداد");
+        return QCoreApplication::translate("app::ui::CashSessionPage", "استرداد");
     }
     return type;
 }
@@ -53,24 +54,24 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
-    m_openButton = new QPushButton(QStringLiteral("ابدأ جلسة"));
+    m_openButton = new QPushButton(tr("ابدأ جلسة"));
     m_openButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
-    m_closeButton = new QPushButton(QStringLiteral("أغلق الجلسة"));
+    m_closeButton = new QPushButton(tr("أغلق الجلسة"));
     m_closeButton->setObjectName(QStringLiteral("danger"));
     m_closeButton->setEnabled(false);
 
-    m_header = new PageHeader(QStringLiteral("جلسة الصندوق"),
-                              QStringLiteral("جلسة يومية مشتركة — تفتح بالرأس المبدئي وتُغلق بالجرد"));
+    m_header = new PageHeader(tr("جلسة الصندوق"),
+                              tr("جلسة يومية مشتركة — تفتح بالرأس المبدئي وتُغلق بالجرد"));
     m_header->addAction(m_openButton);
     m_header->addAction(m_closeButton);
 
-    m_floatCard = new StatCard(QStringLiteral("رأس الفتح"));
+    m_floatCard = new StatCard(tr("رأس الفتح"));
     m_floatCard->setIcon(Icon::Wallet, QStringLiteral("#0e7c75"));
-    m_movementsCard = new StatCard(QStringLiteral("مجموع الحركات"));
+    m_movementsCard = new StatCard(tr("مجموع الحركات"));
     m_movementsCard->setIcon(Icon::Receipt, QStringLiteral("#c8860f"));
-    m_expectedCard = new StatCard(QStringLiteral("الموجود المتوقع"));
+    m_expectedCard = new StatCard(tr("الموجود المتوقع"));
     m_expectedCard->setIcon(Icon::Clock, QStringLiteral("#1d5f9e"));
-    m_varianceCard = new StatCard(QStringLiteral("الفرق (عند الجرد)"));
+    m_varianceCard = new StatCard(tr("الفرق (عند الجرد)"));
     m_varianceCard->setIcon(Icon::BarChart, QStringLiteral("#c84444"));
 
     auto* cards = new QHBoxLayout;
@@ -93,7 +94,7 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     m_table->setShowGrid(false);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("الوقت"), QStringLiteral("النوع"), QStringLiteral("المبلغ"), QStringLiteral("ملاحظة")});
+        {tr("الوقت"), tr("النوع"), tr("المبلغ"), tr("ملاحظة")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
@@ -104,7 +105,7 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     auto* movementsLayout = new QVBoxLayout(movementsCard);
     movementsLayout->setContentsMargins(18, 16, 18, 16);
     movementsLayout->setSpacing(10);
-    movementsLayout->addWidget(makeCardTitle(QStringLiteral("حركات الجلسة")));
+    movementsLayout->addWidget(makeCardTitle(tr("حركات الجلسة")));
     movementsLayout->addWidget(m_table, 1);
 
     auto* root = new QVBoxLayout(this);
@@ -130,16 +131,16 @@ void CashSessionPage::refresh()
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        m_header->setSubtitle(QStringLiteral("لا توجد جلسة مفتوحة حالياً — ابدأ جلسة برصيد الفتح."));
+        m_header->setSubtitle(tr("لا توجد جلسة مفتوحة حالياً — ابدأ جلسة برصيد الفتح."));
         for (StatCard* card : {m_floatCard, m_movementsCard, m_expectedCard, m_varianceCard}) {
-            card->setValue(QStringLiteral("—"));
+            card->setValue(tr("—"));
         }
         if (m_lastVarianceCents != 0) {
             m_varianceCard->setDelta(m_lastVarianceCents);
-            m_header->setSubtitle(QStringLiteral("آخر جلسة أُغلقت بفرق %1")
+            m_header->setSubtitle(tr("آخر جلسة أُغلقت بفرق %1")
                                       .arg(formatMoney(m_lastVarianceCents)));
         }
-        m_summary->setText(QStringLiteral("لا توجد جلسة مفتوحة حالياً."));
+        m_summary->setText(tr("لا توجد جلسة مفتوحة حالياً."));
         m_openButton->setEnabled(true);
         m_closeButton->setEnabled(false);
         return;
@@ -151,14 +152,14 @@ void CashSessionPage::refresh()
     data::CashMovementRepository movements(m_db);
     const long long movementSum = movements.sumBySessionId(session->id);
     m_expectedCents = core::CashSessionCalculator::expectedTotalCents(session->openingFloatCents, movementSum);
-    m_header->setSubtitle(QStringLiteral("الجلسة #%1 مفتوحة منذ %2")
+    m_header->setSubtitle(tr("الجلسة #%1 مفتوحة منذ %2")
                               .arg(session->id)
                               .arg(session->openedAt.toString(QStringLiteral("HH:mm"))));
     m_floatCard->setCents(session->openingFloatCents);
     m_movementsCard->setCents(movementSum);
     m_expectedCard->setCents(m_expectedCents);
-    m_varianceCard->setValue(m_hasOpen ? QStringLiteral("جارية") : QStringLiteral("—"));
-    m_summary->setText(QStringLiteral("الجلسة #%1 — مفتوحة: %2  |  %3  |  %4")
+    m_varianceCard->setValue(m_hasOpen ? tr("جارية") : tr("—"));
+    m_summary->setText(tr("الجلسة #%1 — مفتوحة: %2  |  %3  |  %4")
                            .arg(session->id)
                            .arg(formatMoney(session->openingFloatCents))
                            .arg(formatMoney(movementSum))
@@ -211,7 +212,7 @@ void CashSessionPage::openSession(long long openingFloatCents)
     }
     const int id = sessions.open(openingFloatCents);
     if (id == 0) {
-        m_summary->setText(QStringLiteral("تعذر فتح الجلسة."));
+        m_summary->setText(tr("تعذر فتح الجلسة."));
         return;
     }
     m_lastVarianceCents = 0;
@@ -232,15 +233,15 @@ void CashSessionPage::closeSession(long long closingCountedCents)
     const long long expected = core::CashSessionCalculator::expectedTotalCents(session->openingFloatCents, movementSum);
     const long long variance = core::CashSessionCalculator::varianceCents(closingCountedCents, expected);
     if (!sessions.close(session->id, closingCountedCents, expected, variance)) {
-        m_summary->setText(QStringLiteral("تعذر إغلاق الجلسة."));
+        m_summary->setText(tr("تعذر إغلاق الجلسة."));
         return;
     }
     m_lastVarianceCents = variance;
-    m_variance->setText(QStringLiteral("المعدود: %1  |  المتوقع: %2  |  الفرق: %3 (%4)")
+    m_variance->setText(tr("المعدود: %1  |  المتوقع: %2  |  الفرق: %3 (%4)")
                             .arg(formatMoney(closingCountedCents))
                             .arg(formatMoney(expected))
                             .arg(formatMoney(variance),
-                                 variance < 0 ? QStringLiteral("عجز في الصندوق") : QStringLiteral("زيادة في الصندوق")));
+                                 variance < 0 ? tr("عجز في الصندوق") : tr("زيادة في الصندوق")));
     refresh();
 }
 
@@ -248,13 +249,13 @@ void CashSessionPage::onOpenClicked()
 {
     bool ok = false;
     const QString text = QInputDialog::getText(
-        this, QStringLiteral("بدء جلسة"), QStringLiteral("رصيد الفتح:"), QLineEdit::Normal, QString(), &ok);
+        this, tr("بدء جلسة"), tr("رصيد الفتح:"), QLineEdit::Normal, QString(), &ok);
     if (!ok) {
         return;
     }
     const auto cents = parseMoney(text);
     if (!cents) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("المبلغ غير صالح"));
+        QMessageBox::warning(this, tr("خطأ"), tr("المبلغ غير صالح"));
         return;
     }
     openSession(*cents);
@@ -268,14 +269,14 @@ void CashSessionPage::onCloseClicked()
     }
     bool ok = false;
     const QString text = QInputDialog::getText(
-        this, QStringLiteral("إغلاق الجلسة"), QStringLiteral("المبلغ المعدود في الصندوق:"), QLineEdit::Normal,
+        this, tr("إغلاق الجلسة"), tr("المبلغ المعدود في الصندوق:"), QLineEdit::Normal,
         QString(), &ok);
     if (!ok) {
         return;
     }
     const auto cents = parseMoney(text);
     if (!cents) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("المبلغ غير صالح"));
+        QMessageBox::warning(this, tr("خطأ"), tr("المبلغ غير صالح"));
         return;
     }
     closeSession(*cents);

@@ -57,14 +57,14 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_salesTable->setShowGrid(false);
     m_salesTable->setColumnCount(4);
     m_salesTable->setHorizontalHeaderLabels(
-        {QStringLiteral("الوقت"), QStringLiteral("المصدر"), QStringLiteral("الإجمالي"), QStringLiteral("الحالة")});
+        {tr("الوقت"), tr("المصدر"), tr("الإجمالي"), tr("الحالة")});
     m_salesTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_salesTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_salesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_salesTable->horizontalHeader()->setStretchLastSection(true);
     m_salesTable->verticalHeader()->setDefaultSectionSize(42);
 
-    m_refundSale = new QPushButton(QStringLiteral("استرداد المبيع"));
+    m_refundSale = new QPushButton(tr("استرداد المبيع"));
     m_refundSale->setObjectName(QStringLiteral("danger"));
     m_refundSale->setIcon(appIcon(Icon::Return, QColor(QStringLiteral("#ffffff")), 18));
     m_refundSale->setEnabled(false);
@@ -73,7 +73,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
             [this]() { m_refundSale->setEnabled(m_salesTable->currentRow() >= 0); });
 
     auto* refundSaleRow = new QHBoxLayout;
-    refundSaleRow->addWidget(new QLabel(QStringLiteral("مبيعات اليوم (تُعرض الأصول فقط):")));
+    refundSaleRow->addWidget(new QLabel(tr("مبيعات اليوم (تُعرض الأصول فقط):")));
     refundSaleRow->addStretch(1);
     refundSaleRow->addWidget(m_refundSale);
 
@@ -81,7 +81,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     auto* salesLayout = new QVBoxLayout(salesCard);
     salesLayout->setContentsMargins(18, 16, 18, 16);
     salesLayout->setSpacing(10);
-    salesLayout->addWidget(makeCardTitle(QStringLiteral("استرداد مبيع")));
+    salesLayout->addWidget(makeCardTitle(tr("استرداد مبيع")));
     salesLayout->addLayout(refundSaleRow);
     salesLayout->addWidget(m_salesTable, 1);
 
@@ -91,14 +91,14 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_paymentsTable->setFrameShape(QFrame::NoFrame);
     m_paymentsTable->setShowGrid(false);
     m_paymentsTable->setColumnCount(3);
-    m_paymentsTable->setHorizontalHeaderLabels({QStringLiteral("الوقت"), QStringLiteral("العميل"), QStringLiteral("المبلغ")});
+    m_paymentsTable->setHorizontalHeaderLabels({tr("الوقت"), tr("العميل"), tr("المبلغ")});
     m_paymentsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_paymentsTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_paymentsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_paymentsTable->horizontalHeader()->setStretchLastSection(true);
     m_paymentsTable->verticalHeader()->setDefaultSectionSize(42);
 
-    m_refundPayment = new QPushButton(QStringLiteral("استرداد السداد"));
+    m_refundPayment = new QPushButton(tr("استرداد السداد"));
     m_refundPayment->setObjectName(QStringLiteral("danger"));
     m_refundPayment->setIcon(appIcon(Icon::Return, QColor(QStringLiteral("#ffffff")), 18));
     m_refundPayment->setEnabled(false);
@@ -107,7 +107,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
             [this]() { m_refundPayment->setEnabled(m_paymentsTable->currentRow() >= 0); });
 
     auto* refundPaymentRow = new QHBoxLayout;
-    refundPaymentRow->addWidget(new QLabel(QStringLiteral("سدايدات العملاء اليوم:")));
+    refundPaymentRow->addWidget(new QLabel(tr("سدايدات العملاء اليوم:")));
     refundPaymentRow->addStretch(1);
     refundPaymentRow->addWidget(m_refundPayment);
 
@@ -115,7 +115,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     auto* paymentsLayout = new QVBoxLayout(paymentsCard);
     paymentsLayout->setContentsMargins(18, 16, 18, 16);
     paymentsLayout->setSpacing(10);
-    paymentsLayout->addWidget(makeCardTitle(QStringLiteral("استرداد سداد عميل")));
+    paymentsLayout->addWidget(makeCardTitle(tr("استرداد سداد عميل")));
     paymentsLayout->addLayout(refundPaymentRow);
     paymentsLayout->addWidget(m_paymentsTable, 1);
 
@@ -126,8 +126,8 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
 
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
-    root->addWidget(new PageHeader(QStringLiteral("الاستردادات"),
-                                   QStringLiteral("عكس مبيع أو إرجاع سداد عميل")));
+    root->addWidget(new PageHeader(tr("الاستردادات"),
+                                   tr("عكس مبيع أو إرجاع سداد عميل")));
     root->addWidget(salesCard, 1);
     root->addWidget(paymentsCard, 1);
     root->addWidget(m_notice);
@@ -164,10 +164,10 @@ void RefundsPage::refresh()
         m_salesTable->setItem(row, 0, new QTableWidgetItem(sale.createdAt.toString(QStringLiteral("HH:mm"))));
         m_salesTable->setItem(row, 1,
                               new QTableWidgetItem(sale.deviceId == QLatin1String("desktop")
-                                                       ? QStringLiteral("الحاسوب")
-                                                       : QStringLiteral("جهاز %1").arg(sale.deviceId.left(8))));
+                                                       ? tr("الحاسوب")
+                                                       : tr("جهاز %1").arg(sale.deviceId.left(8))));
         m_salesTable->setItem(row, 2, new QTableWidgetItem(formatMoney(sale.totalCents)));
-        m_salesTable->setItem(row, 3, new QTableWidgetItem(QStringLiteral("بيع")));
+        m_salesTable->setItem(row, 3, new QTableWidgetItem(tr("بيع")));
         m_salesTable->item(row, 0)->setData(Qt::UserRole, sale.id);
     }
 
@@ -191,7 +191,7 @@ void RefundsPage::refresh()
         m_paymentsTable->setItem(row, 0, new QTableWidgetItem(payment.createdAt.toString(QStringLiteral("HH:mm"))));
         m_paymentsTable->setItem(row, 1,
                                  new QTableWidgetItem(customer ? customer->name
-                                                               : QStringLiteral("زبون #%1").arg(payment.customerId)));
+                                                               : tr("زبون #%1").arg(payment.customerId)));
         m_paymentsTable->setItem(row, 2, new QTableWidgetItem(formatMoney(payment.amountCents)));
         m_paymentsTable->item(row, 0)->setData(Qt::UserRole, payment.id);
     }
@@ -219,8 +219,8 @@ void RefundsPage::onRefundSaleClicked()
         return;
     }
     const int saleId = m_salesTable->item(row, 0)->data(Qt::UserRole).toInt();
-    if (QMessageBox::question(this, QStringLiteral("استرداد"),
-                              QStringLiteral("هل تريد استرداد هذا المبيع وإرجاع البضاعة للرف؟")) ==
+    if (QMessageBox::question(this, tr("استرداد"),
+                              tr("هل تريد استرداد هذا المبيع وإرجاع البضاعة للرف؟")) ==
         QMessageBox::Yes) {
         refundSale(saleId);
     }
@@ -233,11 +233,11 @@ void RefundsPage::onRefundPaymentClicked()
         return;
     }
     const auto payment = m_paymentsTable->item(row, 0)->data(Qt::UserRole).toInt();
-    if (QMessageBox::question(this, QStringLiteral("استرداد"),
-                              QStringLiteral("هل تريد استرداد مبلغ هذا السداد للعميل؟")) == QMessageBox::Yes) {
+    if (QMessageBox::question(this, tr("استرداد"),
+                              tr("هل تريد استرداد مبلغ هذا السداد للعميل؟")) == QMessageBox::Yes) {
         bool ok = false;
         const QString note =
-            QInputDialog::getText(this, QStringLiteral("استرداد سداد"), QStringLiteral("ملاحظة (اختياري):"),
+            QInputDialog::getText(this, tr("استرداد سداد"), tr("ملاحظة (اختياري):"),
                                   QLineEdit::Normal, QString(), &ok);
         refundPayment(payment, ok ? note : QString());
     }
@@ -249,21 +249,21 @@ void RefundsPage::refundSale(int saleId)
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        m_notice->setText(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
         return;
     }
     data::SaleService service(m_db);
     const int reversalId = service.reverseSale(saleId, session->id);
     if (reversalId == 0) {
-        m_notice->setText(QStringLiteral("تعذر استرداد المبيع"));
+        m_notice->setText(tr("تعذر استرداد المبيع"));
         return;
     }
     data::SaleRepository sales(m_db);
     const auto original = sales.findById(saleId);
     writeAudit(m_db, QStringLiteral("sale_refund"),
-               original ? QStringLiteral("مبيع #%1 (%2)").arg(saleId).arg(formatMoney(original->totalCents))
-                        : QStringLiteral("مبيع #%1").arg(saleId));
-    m_notice->setText(QStringLiteral("تم الاسترداد وعادت البضاعة للرف"));
+original ? tr("مبيع #%1 (%2)").arg(saleId).arg(formatMoney(original->totalCents))
+                         : tr("مبيع #%1").arg(saleId));
+    m_notice->setText(tr("تم الاسترداد وعادت البضاعة للرف"));
     refresh();
 }
 
@@ -273,18 +273,18 @@ void RefundsPage::refundPayment(int paymentId, const QString& note)
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        m_notice->setText(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
         return;
     }
     data::PaymentService service(m_db);
     const data::PaymentResult result = service.refundCustomerPayment(paymentId, session->id, note);
     if (!result.ok) {
-        m_notice->setText(QStringLiteral("تعذر استرداد السداد: %1").arg(result.error));
+        m_notice->setText(tr("تعذر استرداد السداد: %1").arg(result.error));
         return;
     }
     writeAudit(m_db, QStringLiteral("customer_payment_refund"),
-               QStringLiteral("سداد #%1").arg(paymentId));
-    m_notice->setText(QStringLiteral("تم استرداد السداد"));
+               tr("سداد #%1").arg(paymentId));
+    m_notice->setText(tr("تم استرداد السداد"));
     refresh();
 }
 

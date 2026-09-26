@@ -1,11 +1,11 @@
 #include "sales_page.h"
 
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
-#include <QRegularExpression>
 #include <QTableWidget>
 #include <QTime>
 #include <QVBoxLayout>
@@ -28,12 +28,12 @@ namespace {
 QString deviceLabel(const QString& deviceId)
 {
     if (deviceId == QLatin1String("desktop")) {
-        return QStringLiteral("الحاسوب");
+        return QCoreApplication::translate("app::ui::SalesPage", "الحاسوب");
     }
     if (deviceId.isEmpty()) {
-        return QStringLiteral("—");
+        return QCoreApplication::translate("app::ui::SalesPage", "—");
     }
-    return QStringLiteral("جهاز %1").arg(deviceId.left(8));
+    return QCoreApplication::translate("app::ui::SalesPage", "جهاز %1").arg(deviceId.left(8));
 }
 
 long long cogsFor(int saleId, app::data::SaleItemRepository& items)
@@ -51,13 +51,13 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
-    auto* header = new PageHeader(QStringLiteral("المبيعات"),
-                                  QStringLiteral("سجل مبيعات اليوم مصنّفاً حسب الجهاز"));
-    m_countCard = new StatCard(QStringLiteral("فواتير اليوم"));
+    auto* header = new PageHeader(tr("المبيعات"),
+                                  tr("سجل مبيعات اليوم مصنّفاً حسب الجهاز"));
+    m_countCard = new StatCard(tr("فواتير اليوم"));
     m_countCard->setIcon(Icon::Receipt, QStringLiteral("#c8860f"));
-    m_totalCard = new StatCard(QStringLiteral("الإجمالي (الصافي)"));
+    m_totalCard = new StatCard(tr("الإجمالي (الصافي)"));
     m_totalCard->setIcon(Icon::Wallet, QStringLiteral("#0e7c75"));
-    m_profitCard = new StatCard(QStringLiteral("الربح التقريبي"));
+    m_profitCard = new StatCard(tr("الربح التقريبي"));
     m_profitCard->setIcon(Icon::BarChart, QStringLiteral("#1d5f9e"));
 
     auto* cards = new QHBoxLayout;
@@ -78,7 +78,7 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_table->setShowGrid(false);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("الوقت"), QStringLiteral("المصدر"), QStringLiteral("الإجمالي"), QStringLiteral("الحالة")});
+        {tr("الوقت"), tr("المصدر"), tr("الإجمالي"), tr("الحالة")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -92,7 +92,7 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     auto* tableLayout = new QVBoxLayout(tableCard);
     tableLayout->setContentsMargins(18, 16, 18, 16);
     tableLayout->setSpacing(10);
-    tableLayout->addWidget(makeCardTitle(QStringLiteral("سجل فواتير اليوم")));
+    tableLayout->addWidget(makeCardTitle(tr("سجل فواتير اليوم")));
     tableLayout->addWidget(m_table, 1);
     tableLayout->addWidget(m_summary);
 
@@ -131,8 +131,8 @@ void SalesPage::refresh()
         m_table->setItem(row, 1, new QTableWidgetItem(deviceLabel(sale.deviceId)));
         m_table->setItem(row, 2, new QTableWidgetItem(formatMoney(sale.totalCents)));
         m_table->setItem(row, 3,
-                         new QTableWidgetItem(sale.reversedSaleId != 0 ? QStringLiteral("مسترد")
-                                                                       : QStringLiteral("بيع")));
+                         new QTableWidgetItem(sale.reversedSaleId != 0 ? tr("مسترد")
+                                                                       : tr("بيع")));
         m_table->item(row, 0)->setData(Qt::UserRole, sale.id);
 
         total += sale.totalCents;
@@ -145,7 +145,12 @@ void SalesPage::refresh()
     m_totalCard->setCents(total);
     m_profitCard->setDelta(total - cogs);
 
-    m_summary->setText(QStringLiteral("مبيعات اليوم: %1  |  الإجمالي (الصافي): %2  |  الربح التقريبي: %3")
+    // Cache the figures before rendering: grandTotalCents()/profitCents() must not
+    // scrape them back out of the (translatable) summary text.
+    m_cachedGrandTotalCents = total;
+    m_cachedProfitCents = total - cogs;
+
+    m_summary->setText(tr("مبيعات اليوم: %1  |  الإجمالي (الصافي): %2  |  الربح التقريبي: %3")
                            .arg(ordered.size())
                            .arg(formatMoney(total))
                            .arg(formatMoney(total - cogs)));
@@ -156,27 +161,14 @@ int SalesPage::rowCount() const
     return m_table->rowCount();
 }
 
-long long SalesPage::grandTotalCents() const
+qint64 SalesPage::grandTotalCents() const
 {
-    long long total = 0;
-    for (int i = 0; i < m_table->rowCount(); ++i) {
-        total += parseMoney(m_table->item(i, 2)->text()).value_or(0);
-    }
-    return total;
+    return m_cachedGrandTotalCents;
 }
 
-long long SalesPage::profitCents() const
+qint64 SalesPage::profitCents() const
 {
-    // Parsed back out of the summary label for simplicity; grandTotal is exact.
-    const QRegularExpression totalRe(QStringLiteral("الإجمالي \\(الصافي\\): (-?[0-9.]+)"));
-    const auto match = totalRe.match(m_summary->text());
-    long long total = 0;
-    if (match.hasMatch()) {
-        total = parseMoney(match.captured(1)).value_or(0);
-    }
-    const QRegularExpression profitRe(QStringLiteral("الربح التقريبي: (-?[0-9.]+)"));
-    const auto profitMatch = profitRe.match(m_summary->text());
-    return profitMatch.hasMatch() ? parseMoney(profitMatch.captured(1)).value_or(0) : total;
+    return m_cachedProfitCents;
 }
 
 void SalesPage::showDetails()
@@ -193,13 +185,13 @@ void SalesPage::showDetails()
     }
 
     QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("تفاصيل البيع #%1 (%2)").arg(sale->id).arg(formatMoney(sale->totalCents)));
+    dialog.setWindowTitle(tr("تفاصيل البيع #%1 (%2)").arg(sale->id).arg(formatMoney(sale->totalCents)));
     dialog.setModal(true);
 
     auto* items = new QTableWidget;
     items->setColumnCount(4);
     items->setHorizontalHeaderLabels(
-        {QStringLiteral("المنتج"), QStringLiteral("الكمية"), QStringLiteral("سعر الوحدة"), QStringLiteral("الإجمالي")});
+        {tr("المنتج"), tr("الكمية"), tr("سعر الوحدة"), tr("الإجمالي")});
     items->setEditTriggers(QAbstractItemView::NoEditTriggers);
     items->horizontalHeader()->setStretchLastSection(true);
 

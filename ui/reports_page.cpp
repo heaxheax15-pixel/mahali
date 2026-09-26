@@ -1,5 +1,6 @@
 #include "reports_page.h"
 
+#include <QCoreApplication>
 #include <QDate>
 #include <QDateEdit>
 #include <QHBoxLayout>
@@ -22,19 +23,19 @@ namespace {
 QString cashTypeLabel(const QString& type)
 {
     if (type == QLatin1String("sale")) {
-        return QStringLiteral("بيع");
+        return QCoreApplication::translate("app::ui::ReportsPage", "بيع");
     }
     if (type == QLatin1String("customer_payment")) {
-        return QStringLiteral("دفع عميل");
+        return QCoreApplication::translate("app::ui::ReportsPage", "دفع عميل");
     }
     if (type == QLatin1String("expense")) {
-        return QStringLiteral("مصروف");
+        return QCoreApplication::translate("app::ui::ReportsPage", "مصروف");
     }
     if (type == QLatin1String("drawing")) {
-        return QStringLiteral("سحب مالك");
+        return QCoreApplication::translate("app::ui::ReportsPage", "سحب مالك");
     }
     if (type == QLatin1String("refund")) {
-        return QStringLiteral("استرداد");
+        return QCoreApplication::translate("app::ui::ReportsPage", "استرداد");
     }
     return type;
 }
@@ -62,11 +63,11 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     m_toEdit->setCalendarPopup(true);
     m_toEdit->setMinimumHeight(42);
 
-    auto* todayButton = new QPushButton(QStringLiteral("اليوم"));
-    auto* yesterdayButton = new QPushButton(QStringLiteral("أمس"));
-    auto* weekButton = new QPushButton(QStringLiteral("هذا الأسبوع"));
-    auto* monthButton = new QPushButton(QStringLiteral("هذا الشهر"));
-    auto* allButton = new QPushButton(QStringLiteral("الكل"));
+    auto* todayButton = new QPushButton(tr("اليوم"));
+    auto* yesterdayButton = new QPushButton(tr("أمس"));
+    auto* weekButton = new QPushButton(tr("هذا الأسبوع"));
+    auto* monthButton = new QPushButton(tr("هذا الشهر"));
+    auto* allButton = new QPushButton(tr("الكل"));
     for (QPushButton* button : {todayButton, yesterdayButton, weekButton, monthButton, allButton}) {
         button->setObjectName(QStringLiteral("secondary"));
     }
@@ -90,7 +91,7 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     m_cashTable->setShowGrid(false);
     m_cashTable->setColumnCount(3);
     m_cashTable->setHorizontalHeaderLabels(
-        {QStringLiteral("العملية"), QStringLiteral("العدد"), QStringLiteral("المجموع")});
+        {tr("العملية"), tr("العدد"), tr("المجموع")});
     m_cashTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_cashTable->horizontalHeader()->setStretchLastSection(true);
     m_cashTable->verticalHeader()->setDefaultSectionSize(42);
@@ -105,7 +106,7 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     auto* range = new QHBoxLayout;
     range->setSpacing(10);
     range->addWidget(m_fromEdit);
-    range->addWidget(new QLabel(QStringLiteral("إلى:")));
+    range->addWidget(new QLabel(tr("إلى:")));
     range->addWidget(m_toEdit);
     range->addStretch(1);
 
@@ -113,7 +114,7 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     auto* summaryLayout = new QVBoxLayout(summaryCard);
     summaryLayout->setContentsMargins(18, 16, 18, 16);
     summaryLayout->setSpacing(10);
-    summaryLayout->addWidget(makeCardTitle(QStringLiteral("الملخص")));
+    summaryLayout->addWidget(makeCardTitle(tr("الملخص")));
     summaryLayout->addWidget(m_summary);
     summaryLayout->addWidget(m_costs);
     summaryLayout->addWidget(m_bottom);
@@ -122,13 +123,13 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     auto* tableLayout = new QVBoxLayout(tableCard);
     tableLayout->setContentsMargins(18, 16, 18, 16);
     tableLayout->setSpacing(10);
-    tableLayout->addWidget(makeCardTitle(QStringLiteral("تفاصيل العمليات")));
+    tableLayout->addWidget(makeCardTitle(tr("تفاصيل العمليات")));
     tableLayout->addWidget(m_cashTable, 1);
 
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
-    root->addWidget(new PageHeader(QStringLiteral("التقارير"),
-                                   QStringLiteral("ملخص حركات الصندوق خلال فترة محددة")));
+    root->addWidget(new PageHeader(tr("التقارير"),
+                                   tr("ملخص حركات الصندوق خلال فترة محددة")));
     root->addLayout(quick);
     root->addLayout(range);
     root->addWidget(summaryCard);
@@ -200,18 +201,18 @@ void ReportsPage::fromTo(const QDateTime& from, const QDateTime& to)
 
 void ReportsPage::rebuild()
 {
-    m_summary->setText(QStringLiteral("المبيعات: %1 عملية (الصافي: %2)  |  الربح الإجمالي: %3  |  صافي الربح: %4")
+    m_summary->setText(tr("المبيعات: %1 عملية (الصافي: %2)  |  الربح الإجمالي: %3  |  صافي الربح: %4")
                            .arg(m_report.salesCount)
                            .arg(formatMoney(m_report.revenueCents))
                            .arg(formatMoney(m_report.grossProfitCents))
                            .arg(formatMoney(m_report.netProfitCents)));
 
-    m_costs->setText(QStringLiteral("تكلفة المبيعات: %1  |  المصاريف: %2  |  السحوبات: %3")
+    m_costs->setText(tr("تكلفة المبيعات: %1  |  المصاريف: %2  |  السحوبات: %3")
                          .arg(formatMoney(m_report.cogsCents))
                          .arg(formatMoney(m_report.expensesCents))
                          .arg(formatMoney(m_report.drawingsCents)));
 
-    m_bottom->setText(QStringLiteral("وعاء الزكاة: %1  |  الزكاة (2.5%): %2   —   جلسات في الفترة: %3 (رأس الفتح: %4)"
+    m_bottom->setText(tr("وعاء الزكاة: %1  |  الزكاة (2.5%): %2   —   جلسات في الفترة: %3 (رأس الفتح: %4)"
                                      "   —   ديون العملاء المستحقة اليوم: %5")
                           .arg(formatMoney(m_report.zakatBaseCents))
                           .arg(formatMoney(m_report.zakatCents))

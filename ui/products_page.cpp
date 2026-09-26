@@ -2,6 +2,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -35,7 +36,8 @@ struct StockAdjustment {
 std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const core::Product& initial)
 {
     QDialog dialog(parent);
-    dialog.setWindowTitle(forNew ? QStringLiteral("منتج جديد") : QStringLiteral("تعديل المنتج"));
+    dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::ProductsPage", "منتج جديد")
+                                 : QCoreApplication::translate("app::ui::ProductsPage", "تعديل المنتج"));
     dialog.setModal(true);
 
     auto* barcode = new QLineEdit(initial.barcode);
@@ -50,13 +52,13 @@ std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const c
     active->setChecked(forNew || initial.active);
 
     QFormLayout* form = new QFormLayout;
-    form->addRow(QStringLiteral("الباركود"), barcode);
-    form->addRow(QStringLiteral("الاسم"), name);
-    form->addRow(QStringLiteral("سعر التكلفة"), cost);
-    form->addRow(QStringLiteral("سعر البيع"), sale);
-    form->addRow(QStringLiteral("الوحدة"), unit);
-    form->addRow(QStringLiteral("المحتوى (عدد وحدات الوجبة)"), package);
-    form->addRow(QStringLiteral("مُفعّل"), active);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "الباركود"), barcode);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "الاسم"), name);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "سعر التكلفة"), cost);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "سعر البيع"), sale);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "الوحدة"), unit);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "المحتوى (عدد وحدات الوجبة)"), package);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "مُفعّل"), active);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -92,20 +94,23 @@ std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const c
 std::optional<StockAdjustment> stockDialog(QWidget* parent, const QString& productName)
 {
     QDialog dialog(parent);
-    dialog.setWindowTitle(QStringLiteral("تعديل المخزون — %1").arg(productName));
+    dialog.setWindowTitle(QCoreApplication::translate("app::ui::ProductsPage", "تعديل المخزون — %1").arg(productName));
     dialog.setModal(true);
 
     auto* delta = new QSpinBox;
     delta->setRange(-100000000, 100000000);
     delta->setValue(0);
     auto* reason = new QComboBox;
-    reason->addItem(QStringLiteral("توريد جديد"), QStringLiteral("purchase"));
-    reason->addItem(QStringLiteral("تعديل يدوي"), QStringLiteral("manual_adjustment"));
-    reason->addItem(QStringLiteral("تالف / منتهي"), QStringLiteral("spoilage"));
+    reason->addItem(QCoreApplication::translate("app::ui::ProductsPage", "توريد جديد"),
+                    QStringLiteral("purchase"));
+    reason->addItem(QCoreApplication::translate("app::ui::ProductsPage", "تعديل يدوي"),
+                    QStringLiteral("manual_adjustment"));
+    reason->addItem(QCoreApplication::translate("app::ui::ProductsPage", "تالف / منتهي"),
+                    QStringLiteral("spoilage"));
 
     QFormLayout* form = new QFormLayout;
-    form->addRow(QStringLiteral("الكمية (+توريد / -خسارة)"), delta);
-    form->addRow(QStringLiteral("السبب"), reason);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "الكمية (+توريد / -خسارة)"), delta);
+    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "السبب"), reason);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -133,15 +138,15 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     m_search = new QLineEdit;
     m_search->setObjectName(QStringLiteral("searchField"));
     m_search->setMinimumHeight(48);
-    m_search->setPlaceholderText(QStringLiteral("بحث بالباركود أو الاسم..."));
+    m_search->setPlaceholderText(tr("بحث بالباركود أو الاسم..."));
     m_search->setClearButtonEnabled(true);
     m_search->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
                         QLineEdit::LeadingPosition);
-    m_add = new QPushButton(QStringLiteral("إضافة منتج"));
+    m_add = new QPushButton(tr("إضافة منتج"));
     m_add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
-    m_edit = new QPushButton(QStringLiteral("تعديل"));
+    m_edit = new QPushButton(tr("تعديل"));
     m_edit->setObjectName(QStringLiteral("secondary"));
-    m_stock = new QPushButton(QStringLiteral("تعديل المخزون"));
+    m_stock = new QPushButton(tr("تعديل المخزون"));
     m_stock->setObjectName(QStringLiteral("secondary"));
 
     m_table = new QTableWidget;
@@ -150,10 +155,10 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(false);
     m_table->setColumnCount(7);
-    m_table->setHorizontalHeaderLabels({QStringLiteral("الباركود"), QStringLiteral("الاسم"),
-                                        QStringLiteral("سعر التكلفة"), QStringLiteral("سعر البيع"),
-                                        QStringLiteral("الكمية"), QStringLiteral("الوحدة"),
-                                        QStringLiteral("الحالة")});
+    m_table->setHorizontalHeaderLabels({tr("الباركود"), tr("الاسم"),
+                                        tr("سعر التكلفة"), tr("سعر البيع"),
+                                        tr("الكمية"), tr("الوحدة"),
+                                        tr("الحالة")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -172,14 +177,14 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     auto* cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(18, 16, 18, 16);
     cardLayout->setSpacing(12);
-    cardLayout->addWidget(makeCardTitle(QStringLiteral("المنتجات")));
+    cardLayout->addWidget(makeCardTitle(tr("المنتجات")));
     cardLayout->addLayout(toolbar);
     cardLayout->addWidget(m_table, 1);
 
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
-    root->addWidget(new PageHeader(QStringLiteral("المنتجات"),
-                                   QStringLiteral("إدارة الأصناف، الأسعار والمخزون")));
+    root->addWidget(new PageHeader(tr("المنتجات"),
+                                   tr("إدارة الأصناف، الأسعار والمخزون")));
     root->addWidget(card, 1);
 
     connect(m_search, &QLineEdit::textChanged, this, &ProductsPage::onSearchChanged);
@@ -214,8 +219,8 @@ void ProductsPage::refresh()
         m_table->setItem(row, 3, new QTableWidgetItem(formatMoney(product.salePriceCents)));
         m_table->setItem(row, 4, new QTableWidgetItem(QString::number(product.quantity)));
         m_table->setItem(row, 5, new QTableWidgetItem(product.unit));
-        m_table->setItem(row, 6, new QTableWidgetItem(product.active ? QStringLiteral("مُفعل")
-                                                                     : QStringLiteral("موقوف")));
+        m_table->setItem(row, 6, new QTableWidgetItem(product.active ? tr("مُفعل")
+                                                                     : tr("موقوف")));
         m_table->item(row, 0)->setData(Qt::UserRole, product.id);
     }
     onSelectionChanged();
@@ -257,8 +262,8 @@ void ProductsPage::onAddClicked()
     data::ProductRepository products(m_db);
     const int id = products.save(*maybeProduct);
     if (id == 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"),
-                             QStringLiteral("تعذر حفظ المنتج — الباركود مستخدم مسبقاً أو بيانات ناقصة"));
+        QMessageBox::warning(this, tr("خطأ"),
+                             tr("تعذر حفظ المنتج — الباركود مستخدم مسبقاً أو بيانات ناقصة"));
         return;
     }
     refresh();
@@ -281,8 +286,8 @@ void ProductsPage::onEditClicked()
     }
     const int saved = products.save(*maybeProduct);
     if (saved == 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"),
-                             QStringLiteral("تعذر حفظ التعديل — الباركود مستخدم مسبقاً"));
+        QMessageBox::warning(this, tr("خطأ"),
+                             tr("تعذر حفظ التعديل — الباركود مستخدم مسبقاً"));
         return;
     }
     refresh();
@@ -304,8 +309,8 @@ void ProductsPage::onStockClicked()
         return;
     }
     if (maybeAdj->delta < 0 && existing->quantity + maybeAdj->delta < 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"),
-                             QStringLiteral("الكمية السالبة أكبر من المتوفر (الكثافة %1)")
+        QMessageBox::warning(this, tr("خطأ"),
+                             tr("الكمية السالبة أكبر من المتوفر (الكثافة %1)")
                                  .arg(existing->quantity));
         return;
     }

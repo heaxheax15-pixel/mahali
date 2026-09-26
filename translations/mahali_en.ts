@@ -562,117 +562,117 @@
     <message>
         <location filename="../ui/login_dialog.cpp" line="+28"/>
         <source>تسجيل الدخول — محلي</source>
-        <translation type="unfinished"></translation>
+        <translation>Login — Mahali</translation>
     </message>
     <message>
         <location line="+12"/>
         <location line="+141"/>
         <location line="+12"/>
         <source>محلي</source>
-        <translation type="unfinished"></translation>
+        <translation>Mahali</translation>
     </message>
     <message>
         <location line="-144"/>
         <source>اختر مستخدمًا وأدخل رمز PIN</source>
-        <translation type="unfinished"></translation>
+        <translation>Select a user and enter the PIN code</translation>
     </message>
     <message>
         <location line="+23"/>
         <location line="+55"/>
         <source>رمز PIN (حرفان)</source>
-        <translation type="unfinished"></translation>
+        <translation>PIN code (2 letters)</translation>
     </message>
     <message>
         <location line="-36"/>
         <source>دخول</source>
-        <translation type="unfinished"></translation>
+        <translation>Login</translation>
     </message>
     <message>
         <location line="+10"/>
         <location line="+42"/>
         <source>كلمة الاستعادة</source>
-        <translation type="unfinished"></translation>
+        <translation>Recovery word</translation>
     </message>
     <message>
         <location line="-28"/>
         <source>إعداد المدير الأول</source>
-        <translation type="unfinished"></translation>
+        <translation>First administrator setup</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>الاسم</source>
-        <translation type="unfinished"></translation>
+        <translation>Name</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>مثال: المدير</source>
-        <translation type="unfinished"></translation>
+        <translation>Example: Administrator</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>كلمة الاستعادة (4 أحرف على الأقل)</source>
-        <translation type="unfinished"></translation>
+        <translation>Recovery word (at least 4 letters)</translation>
     </message>
     <message>
         <location line="+8"/>
         <location line="+5"/>
         <source>تأكيد كلمة الاستعادة</source>
-        <translation type="unfinished"></translation>
+        <translation>Confirm recovery word</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>إنشاء</source>
-        <translation type="unfinished"></translation>
+        <translation>Create</translation>
     </message>
     <message>
         <location line="+115"/>
         <source>أدخل حرفين فقط</source>
-        <translation type="unfinished"></translation>
+        <translation>Enter only two letters</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>PIN خاطئ</source>
-        <translation type="unfinished"></translation>
+        <translation>Incorrect PIN</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>أدخل اسماً</source>
-        <translation type="unfinished"></translation>
+        <translation>Enter a name</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>PIN يجب أن يكون حرفين</source>
-        <translation type="unfinished"></translation>
+        <translation>The PIN must be two letters</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>كلمة الاستعادة: 4 أحرف على الأقل</source>
-        <translation type="unfinished"></translation>
+        <translation>Recovery word: at least 4 letters</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>كلمة الاستعادة غير متطابقة</source>
-        <translation type="unfinished"></translation>
+        <translation>Recovery words do not match</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>فشل إنشاء المستخدم</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to create the user</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>فشل حفظ PIN</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to save the PIN</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>فشل حفظ كلمة الاستعادة</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to save the recovery word</translation>
     </message>
     <message>
         <location line="+48"/>
         <source>كلمة الاستعادة غير صحيحة</source>
-        <translation type="unfinished"></translation>
+        <translation>Incorrect recovery word</translation>
     </message>
 </context>
 <context>
@@ -680,128 +680,128 @@
     <message>
         <location filename="../ui/main_window.cpp" line="+56"/>
         <source>محلي — نظام نقاط البيع والمحاسبة</source>
-        <translation type="unfinished"></translation>
+        <translation>Mahali — point of sale and accounting</translation>
     </message>
     <message>
         <location line="+28"/>
         <source>محلي</source>
-        <translation type="unfinished"></translation>
+        <translation>Mahali</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>نظام البيع والمحاسبة</source>
-        <translation type="unfinished"></translation>
+        <translation>Sales and accounting system</translation>
     </message>
     <message>
         <location line="+15"/>
         <source>حول محلي…</source>
-        <translation type="unfinished"></translation>
+        <translation>About Mahali…</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>حول محلي</source>
-        <translation type="unfinished"></translation>
+        <translation>About Mahali</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>&lt;h3&gt;محلي — نظام نقاط البيع والمحاسبة&lt;/h3&gt;&lt;p&gt;إدارة البيع السريع، الجرد، حسابات العملاء والموردين، جلسات الصندوق، المصاريف، التقارير والاستردادات — بدون اتصال وبثيَمَين فاتح/داكن.&lt;/p&gt;&lt;p&gt;&lt;b&gt;الإصدار:&lt;/b&gt; %1&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;h3&gt;Mahali — point of sale and accounting&lt;/h3&gt;&lt;p&gt;Fast sales, inventory, customer and supplier accounts, cash sessions, expenses, reports and refunds — works offline, in light or dark theme.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Version:&lt;/b&gt; %1&lt;/p&gt;</translation>
     </message>
     <message>
         <location line="+66"/>
         <location line="+153"/>
         <source>المستخدم: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>User: %1</translation>
     </message>
     <message>
         <location line="-149"/>
         <source>تبديل المستخدم</source>
-        <translation type="unfinished"></translation>
+        <translation>Switch user</translation>
     </message>
     <message>
         <location line="+83"/>
         <source>البيع السريع</source>
-        <translation type="unfinished"></translation>
+        <translation>Quick sale</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>المنتجات</source>
-        <translation type="unfinished"></translation>
+        <translation>Products</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>العملاء</source>
-        <translation type="unfinished"></translation>
+        <translation>Customers</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الموردون</source>
-        <translation type="unfinished"></translation>
+        <translation>Suppliers</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>جلسة الصندوق</source>
-        <translation type="unfinished"></translation>
+        <translation>Cash session</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>مبيعات اليوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Today's sales</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>المصاريف والسحوبات</source>
-        <translation type="unfinished"></translation>
+        <translation>Expenses and drawings</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>التقارير</source>
-        <translation type="unfinished"></translation>
+        <translation>Reports</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الاستردادات</source>
-        <translation type="unfinished"></translation>
+        <translation>Refunds</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>سجل المراجعة</source>
-        <translation type="unfinished"></translation>
+        <translation>Audit log</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الإعدادات</source>
-        <translation type="unfinished"></translation>
+        <translation>Settings</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>إدارة المستخدمين</source>
-        <translation type="unfinished"></translation>
+        <translation>User management</translation>
     </message>
     <message>
         <location line="+23"/>
         <source>خادم المزامنة: يعمل على المنفذ %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Sync server: running on port %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>خادم المزامنة: متوقف</source>
-        <translation type="unfinished"></translation>
+        <translation>Sync server: stopped</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>  |  عمليات منفّذة حتى اليوم: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  |  Operations performed today: %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>  |  أجهزة متصلة: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>  |  Connected devices: %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>  |  مبيعات اليوم: %1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>  |  Today's sales: %1 (%2)</translation>
     </message>
 </context>
 <context>
@@ -817,107 +817,107 @@
     <message>
         <location filename="../ui/pos_page.cpp" line="+37"/>
         <source>البيع السريع</source>
-        <translation type="unfinished"></translation>
+        <translation>Quick sale</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>باركود أو اسم المنتج — Enter يضيف، و Enter فارغ يحفظ البيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Barcode or product name — Enter adds, empty Enter saves the sale</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الجلسة</source>
-        <translation type="unfinished"></translation>
+        <translation>Session</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>باركود أو اسم المنتج — Enter يضيف، Enter فارغ يحفظ البيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Barcode or product name — Enter adds, empty Enter saves the sale</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>المنتج</source>
-        <translation type="unfinished"></translation>
+        <translation>Product</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>الكمية</source>
-        <translation type="unfinished"></translation>
+        <translation>Quantity</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>سعر الوحدة</source>
-        <translation type="unfinished"></translation>
+        <translation>Unit price</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>الإجمالي</source>
-        <translation type="unfinished"></translation>
+        <translation>Total</translation>
     </message>
     <message>
         <location line="+19"/>
         <source>إجمالي الفاتورة</source>
-        <translation type="unfinished"></translation>
+        <translation>Invoice total</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>حفظ البيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Save sale</translation>
     </message>
     <message>
         <location line="+117"/>
         <source>لا يوجد منتج بالباركود/الاسم: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>No product found by barcode/name: %1</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>أضيف: %1 × %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Added: %1 × %2</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>أضيف: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Added: %1</translation>
     </message>
     <message>
         <location line="+67"/>
         <source>الجلسة مفتوحة #%1</source>
-        <translation type="unfinished"></translation>
+        <translation>Open session #%1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>لا توجد جلسة مفتوحة</source>
-        <translation type="unfinished"></translation>
+        <translation>No open session</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>الأصناف: %1   قطع: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Items: %1   units: %2</translation>
     </message>
     <message>
         <location line="+65"/>
         <source>لا يوجد بنود للبيع</source>
-        <translation type="unfinished"></translation>
+        <translation>No items to sell</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>الكمية أو السعر غير صالح في أحد الأسطر</source>
-        <translation type="unfinished"></translation>
+        <translation>Invalid quantity or price in one of the lines</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة من قسم &quot;جلسة الصندوق&quot; أولاً</source>
-        <translation type="unfinished"></translation>
+        <translation>No open session — open a session from the "Cash session" section first</translation>
     </message>
     <message>
         <location line="+30"/>
         <source>تعذر حفظ البيع: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to save the sale: %1</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>تم البيع: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Sale completed: %1</translation>
     </message>
 </context>
 <context>
@@ -1680,73 +1680,73 @@
         <location filename="../ui/users_page.cpp" line="+31"/>
         <location line="+77"/>
         <source>إضافة كاشير</source>
-        <translation type="unfinished"></translation>
+        <translation>Add a cashier</translation>
     </message>
     <message>
         <location line="-77"/>
         <source>تعديل المستخدم</source>
-        <translation type="unfinished"></translation>
+        <translation>Edit user</translation>
     </message>
     <message>
         <location line="+5"/>
         <location line="+26"/>
         <location line="+61"/>
         <source>الاسم</source>
-        <translation type="unfinished"></translation>
+        <translation>Name</translation>
     </message>
     <message>
         <location line="-85"/>
         <source>PIN (حرفان)</source>
-        <translation type="unfinished"></translation>
+        <translation>PIN (2 letters)</translation>
     </message>
     <message>
         <location line="+11"/>
         <location line="+15"/>
         <source>تأكيد PIN</source>
-        <translation type="unfinished"></translation>
+        <translation>Confirm PIN</translation>
     </message>
     <message>
         <location line="-1"/>
         <location line="+60"/>
         <source>PIN</source>
-        <translation type="unfinished"></translation>
+        <translation>PIN</translation>
     </message>
     <message>
         <location line="-58"/>
         <location line="+58"/>
         <source>الدور</source>
-        <translation type="unfinished"></translation>
+        <translation>Role</translation>
     </message>
     <message>
         <location line="-57"/>
         <location line="+57"/>
         <source>نشط</source>
-        <translation type="unfinished"></translation>
+        <translation>Active</translation>
     </message>
     <message>
         <location line="-18"/>
         <source>إدارة المستخدمين</source>
-        <translation type="unfinished"></translation>
+        <translation>User management</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>إدارة حسابات الكاشيرين وصلاحياتهم</source>
-        <translation type="unfinished"></translation>
+        <translation>Manage cashier accounts and their permissions</translation>
     </message>
     <message>
         <location line="+17"/>
         <source>إجراءات</source>
-        <translation type="unfinished"></translation>
+        <translation>Actions</translation>
     </message>
     <message>
         <location line="+69"/>
         <source>تعديل</source>
-        <translation type="unfinished"></translation>
+        <translation>Edit</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>حذف</source>
-        <translation type="unfinished"></translation>
+        <translation>Delete</translation>
     </message>
     <message>
         <location line="+30"/>
@@ -1756,47 +1756,47 @@
         <location line="+30"/>
         <location line="+20"/>
         <source>خطأ</source>
-        <translation type="unfinished"></translation>
+        <translation>Error</translation>
     </message>
     <message>
         <location line="-94"/>
         <source>فشل إنشاء المستخدم</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to create the user</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>فشل حفظ PIN</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to save the PIN</translation>
     </message>
     <message>
         <location line="+35"/>
         <source>فشل تحديث المستخدم</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to update the user</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>فشل تحديث PIN</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to update the PIN</translation>
     </message>
     <message>
         <location line="+21"/>
         <source>تأكيد الحذف</source>
-        <translation type="unfinished"></translation>
+        <translation>Confirm deletion</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>هل أنت متأكد من حذف هذا المستخدم؟</source>
-        <translation type="unfinished"></translation>
+        <translation>Are you sure you want to delete this user?</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>فشل حذف المستخدم</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to delete the user</translation>
     </message>
     <message>
         <location line="+20"/>
         <source>فشل تحديث حالة المستخدم</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to update the user status</translation>
     </message>
 </context>
 <context>
@@ -1805,20 +1805,21 @@
         <location filename="../apps/desktop/main.cpp" line="+24"/>
         <location filename="../apps/screenshot/main.cpp" line="+34"/>
         <source>محلي</source>
-        <translation type="unfinished"></translation>
+        <translation>Mahali</translation>
     </message>
     <message>
         <location line="+34"/>
         <location filename="../apps/screenshot/main.cpp" line="+11"/>
         <source>محلي — خطأ</source>
-        <translation type="unfinished"></translation>
+        <translation>Mahali — error</translation>
     </message>
     <message>
         <location line="+1"/>
         <location filename="../apps/screenshot/main.cpp" line="+1"/>
         <source>تعذر فتح قاعدة البيانات:
 %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Failed to open the database:
+%1</translation>
     </message>
 </context>
 </TS>

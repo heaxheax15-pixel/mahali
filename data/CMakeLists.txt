@@ -13,6 +13,12 @@ target_link_libraries(mahali-data
         Qt${QT_VERSION_MAJOR}::Sql
         Qt${QT_VERSION_MAJOR}::Network)
 
+# Needed only by core/i18n.cpp (applyLanguage pins the layout direction).
+# PRIVATE on a static library still propagates the link to consumers.
+target_link_libraries(mahali-data
+    PRIVATE
+        Qt${QT_VERSION_MAJOR}::Gui)
+
 target_sources(mahali-data PRIVATE
     database.cpp
     admin_secret_repository.cpp
@@ -24,6 +30,10 @@ target_sources(mahali-data PRIVATE
     customer_repository.cpp
     customer_transaction_item_repository.cpp
     customer_transaction_repository.cpp
+    # core/i18n.cpp is compiled here rather than in mahali-core because
+    # currentLanguage() reads SettingRepository, and data depends on core.
+    ../core/i18n.cpp
+    ../core/i18n.h
     device_ledger_service.cpp
     device_identity.cpp
     device_repository.cpp

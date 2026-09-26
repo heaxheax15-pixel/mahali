@@ -28,6 +28,11 @@ namespace app::ui {
 
 namespace {
 
+// Stable type tokens kept in the type cell's Qt::UserRole. These are compared, never
+// displayed: reading the visible label instead would break the moment it is translated.
+const QString kExpenseType = QStringLiteral("expense");
+const QString kDrawingType = QStringLiteral("drawing");
+
 void writeAudit(app::data::Database& db, const QString& action, const QString& target)
 {
     core::AuditLogEntry entry;
@@ -44,11 +49,11 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
-    auto* header = new PageHeader(QStringLiteral("المصروفات"),
-                                  QStringLiteral("المصاريف وسحوبات المالك خارجة من الصندوق"));
-    m_expensesCard = new StatCard(QStringLiteral("مصاريف اليوم"));
+    auto* header = new PageHeader(tr("المصروفات"),
+                                  tr("المصاريف وسحوبات المالك خارجة من الصندوق"));
+    m_expensesCard = new StatCard(tr("مصاريف اليوم"));
     m_expensesCard->setIcon(Icon::Receipt, QStringLiteral("#c8860f"));
-    m_drawingsCard = new StatCard(QStringLiteral("سحوبات اليوم"));
+    m_drawingsCard = new StatCard(tr("سحوبات اليوم"));
     m_drawingsCard->setIcon(Icon::Wallet, QStringLiteral("#c84444"));
 
     auto* cards = new QHBoxLayout;
@@ -56,11 +61,11 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     cards->addWidget(m_expensesCard, 1);
     cards->addWidget(m_drawingsCard, 1);
 
-    m_expenseButton = new QPushButton(QStringLiteral("مصروف جديد"));
+    m_expenseButton = new QPushButton(tr("مصروف جديد"));
     m_expenseButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
-    m_drawingButton = new QPushButton(QStringLiteral("سحب مالك"));
+    m_drawingButton = new QPushButton(tr("سحب مالك"));
     m_drawingButton->setObjectName(QStringLiteral("secondary"));
-    m_reverseButton = new QPushButton(QStringLiteral("عكس المحدد"));
+    m_reverseButton = new QPushButton(tr("عكس المحدد"));
     m_reverseButton->setObjectName(QStringLiteral("secondary"));
     m_reverseButton->setEnabled(false);
 
@@ -86,7 +91,7 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     m_table->setShowGrid(false);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("الوقت"), QStringLiteral("النوع"), QStringLiteral("المبلغ"), QStringLiteral("بيان")});
+        {tr("الوقت"), tr("النوع"), tr("المبلغ"), tr("بيان")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
@@ -96,7 +101,7 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     auto* tableLayout = new QVBoxLayout(tableCard);
     tableLayout->setContentsMargins(18, 16, 18, 16);
     tableLayout->setSpacing(10);
-    tableLayout->addWidget(makeCardTitle(QStringLiteral("سجل مصاريف وسحوبات اليوم")));
+    tableLayout->addWidget(makeCardTitle(tr("سجل مصاريف وسحوبات اليوم")));
     tableLayout->addLayout(toolbar);
     tableLayout->addWidget(m_table, 1);
     tableLayout->addWidget(m_summary);
@@ -133,7 +138,8 @@ void ExpensesPage::refresh()
         const int row = m_table->rowCount();
         m_table->insertRow(row);
         m_table->setItem(row, 0, new QTableWidgetItem(expense.createdAt.toString(QStringLiteral("HH:mm"))));
-        m_table->setItem(row, 1, new QTableWidgetItem(QStringLiteral("مصروف")));
+        m_table->setItem(row, 1, new QTableWidgetItem(tr("مصروف")));
+        m_table->item(row, 1)->setData(Qt::UserRole, kExpenseType);
         m_table->setItem(row, 2, new QTableWidgetItem(formatMoney(expense.amountCents)));
         m_table->setItem(row, 3, new QTableWidgetItem(expense.label));
         m_table->item(row, 0)->setData(Qt::UserRole, expense.id);
@@ -144,7 +150,8 @@ void ExpensesPage::refresh()
         const int row = m_table->rowCount();
         m_table->insertRow(row);
         m_table->setItem(row, 0, new QTableWidgetItem(drawing.createdAt.toString(QStringLiteral("HH:mm"))));
-        m_table->setItem(row, 1, new QTableWidgetItem(QStringLiteral("سحب")));
+        m_table->setItem(row, 1, new QTableWidgetItem(tr("سحب")));
+        m_table->item(row, 1)->setData(Qt::UserRole, kDrawingType);
         m_table->setItem(row, 2, new QTableWidgetItem(formatMoney(drawing.amountCents)));
         m_table->setItem(row, 3, new QTableWidgetItem(drawing.note));
         m_table->item(row, 0)->setData(Qt::UserRole, drawing.id);
@@ -154,7 +161,7 @@ void ExpensesPage::refresh()
     m_expensesCard->setCents(expenseTotal);
     m_drawingsCard->setCents(drawingTotal);
 
-    m_summary->setText(QStringLiteral("مصاريف اليوم: %1  |  سحوبات اليوم: %2")
+    m_summary->setText(tr("مصاريف اليوم: %1  |  سحوبات اليوم: %2")
                            .arg(formatMoney(expenseTotal))
                            .arg(formatMoney(drawingTotal)));
 }
@@ -168,7 +175,7 @@ long long ExpensesPage::expensesTotalCents() const
 {
     long long total = 0;
     for (int i = 0; i < m_table->rowCount(); ++i) {
-        if (m_table->item(i, 1)->text() == QStringLiteral("مصروف")) {
+        if (m_table->item(i, 1)->data(Qt::UserRole).toString() == kExpenseType) {
             total += parseMoney(m_table->item(i, 2)->text()).value_or(0);
         }
     }
@@ -184,19 +191,19 @@ void ExpensesPage::onExpenseClicked()
 {
     bool ok = false;
     const QString label =
-        QInputDialog::getText(this, QStringLiteral("مصروف جديد"), QStringLiteral("البيان (مثل: كهرباء):"),
+        QInputDialog::getText(this, tr("مصروف جديد"), tr("البيان (مثل: كهرباء):"),
                               QLineEdit::Normal, QString(), &ok);
     if (!ok || label.trimmed().isEmpty()) {
         return;
     }
-    const QString amount = QInputDialog::getText(this, QStringLiteral("مصروف جديد"),
-                                                 QStringLiteral("المبلغ:"), QLineEdit::Normal, QString(), &ok);
+    const QString amount = QInputDialog::getText(this, tr("مصروف جديد"),
+                                                 tr("المبلغ:"), QLineEdit::Normal, QString(), &ok);
     if (!ok) {
         return;
     }
     const auto cents = parseMoney(amount);
     if (!cents || *cents <= 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("المبلغ غير صالح"));
+        QMessageBox::warning(this, tr("خطأ"), tr("المبلغ غير صالح"));
         return;
     }
     recordExpense(label.trimmed(), *cents);
@@ -206,20 +213,20 @@ void ExpensesPage::onDrawingClicked()
 {
     bool ok = false;
     const QString note =
-        QInputDialog::getText(this, QStringLiteral("سحب مالك"), QStringLiteral("ملاحظة (اختياري):"), QLineEdit::Normal,
+        QInputDialog::getText(this, tr("سحب مالك"), tr("ملاحظة (اختياري):"), QLineEdit::Normal,
                               QString(), &ok);
     if (!ok) {
         return;
     }
     const QString amount =
-        QInputDialog::getText(this, QStringLiteral("سحب مالك"), QStringLiteral("المبلغ:"), QLineEdit::Normal,
+        QInputDialog::getText(this, tr("سحب مالك"), tr("المبلغ:"), QLineEdit::Normal,
                               QString(), &ok);
     if (!ok) {
         return;
     }
     const auto cents = parseMoney(amount);
     if (!cents || *cents <= 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("المبلغ غير صالح"));
+        QMessageBox::warning(this, tr("خطأ"), tr("المبلغ غير صالح"));
         return;
     }
     recordDrawing(note.trimmed(), *cents);
@@ -231,16 +238,16 @@ void ExpensesPage::recordExpense(const QString& label, long long amountCents)
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        m_notice->setText(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
         return;
     }
     data::CashEntryService service(m_db);
     const data::CashEntryResult result = service.recordExpense(label, amountCents, session->id);
     if (!result.ok) {
-        m_notice->setText(QStringLiteral("تعذر تسجيل المصروف: %1").arg(result.error));
+        m_notice->setText(tr("تعذر تسجيل المصروف: %1").arg(result.error));
         return;
     }
-    m_notice->setText(QStringLiteral("سُجّل مصروف: %1 — %2").arg(formatMoney(result.amountCents), label));
+    m_notice->setText(tr("سُجّل مصروف: %1 — %2").arg(formatMoney(result.amountCents), label));
     refresh();
 }
 
@@ -250,16 +257,16 @@ void ExpensesPage::recordDrawing(const QString& note, long long amountCents)
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        m_notice->setText(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
         return;
     }
     data::CashEntryService service(m_db);
     const data::CashEntryResult result = service.recordDrawing(note, amountCents, session->id);
     if (!result.ok) {
-        m_notice->setText(QStringLiteral("تعذر تسجيل السحب: %1").arg(result.error));
+        m_notice->setText(tr("تعذر تسجيل السحب: %1").arg(result.error));
         return;
     }
-    m_notice->setText(QStringLiteral("سُجّل سحب: %1").arg(formatMoney(result.amountCents)));
+    m_notice->setText(tr("سُجّل سحب: %1").arg(formatMoney(result.amountCents)));
     refresh();
 }
 
@@ -270,7 +277,8 @@ void ExpensesPage::reverseRow(int row)
         return;
     }
     const int entryId = m_table->item(row, 0)->data(Qt::UserRole).toInt();
-    const QString type = m_table->item(row, 1)->text();
+    const QString typeToken = m_table->item(row, 1)->data(Qt::UserRole).toString();
+    const QString typeLabel = m_table->item(row, 1)->text();
     if (entryId <= 0) {
         return;
     }
@@ -278,24 +286,24 @@ void ExpensesPage::reverseRow(int row)
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        m_notice->setText(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
         return;
     }
 
     data::CashEntryService service(m_db);
     const data::CashEntryResult result =
-        type == QStringLiteral("مصروف") ? service.reverseExpense(entryId, session->id)
-                                        : service.reverseDrawing(entryId, session->id);
+        typeToken == kExpenseType ? service.reverseExpense(entryId, session->id)
+                                  : service.reverseDrawing(entryId, session->id);
     if (!result.ok) {
-        m_notice->setText(QStringLiteral("تعذر العكس: %1").arg(result.error));
+        m_notice->setText(tr("تعذر العكس: %1").arg(result.error));
         return;
     }
     writeAudit(m_db, QStringLiteral("entry_reversal"),
                QStringLiteral("%1 #%2 (%3)")
-                   .arg(type)
+                   .arg(typeLabel)
                    .arg(entryId)
                    .arg(formatMoney(result.amountCents)));
-    m_notice->setText(QStringLiteral("أُلغي: %1").arg(formatMoney(result.amountCents)));
+    m_notice->setText(tr("أُلغي: %1").arg(formatMoney(result.amountCents)));
     refresh();
 }
 

@@ -16,7 +16,7 @@ QString formatCompact(long long cents)
 
 MiniBarChart::MiniBarChart(QWidget* parent)
     : QWidget(parent)
-    , m_emptyMessage(QStringLiteral("لا بيانات"))
+    , m_emptyMessage(tr("لا بيانات"))
 {
     setMinimumHeight(150);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);

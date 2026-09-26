@@ -46,24 +46,6 @@ struct NavEntry {
     int pageIndex;
 };
 
-const std::vector<NavEntry>& navEntries()
-{
-    static const std::vector<NavEntry> entries = {
-        {Icon::Cart, QStringLiteral("البيع السريع"), 0},
-        {Icon::Box, QStringLiteral("المنتجات"), 1},
-        {Icon::People, QStringLiteral("العملاء"), 2},
-        {Icon::Truck, QStringLiteral("الموردون"), 3},
-        {Icon::Wallet, QStringLiteral("جلسة الصندوق"), 4},
-        {Icon::Receipt, QStringLiteral("مبيعات اليوم"), 5},
-        {Icon::Tag, QStringLiteral("المصاريف والسحوبات"), 6},
-        {Icon::BarChart, QStringLiteral("التقارير"), 7},
-        {Icon::Return, QStringLiteral("الاستردادات"), 8},
-        {Icon::History, QStringLiteral("سجل المراجعة"), 9},
-        {Icon::Gear, QStringLiteral("الإعدادات"), 10},
-    };
-    return entries;
-}
-
 } // namespace
 
 MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QWidget* parent)
@@ -71,7 +53,7 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     , m_db(db)
     , m_controller(controller)
 {
-    setWindowTitle(QStringLiteral("محلي — نظام نقاط البيع والمحاسبة"));
+    setWindowTitle(tr("محلي — نظام نقاط البيع والمحاسبة"));
     setLayoutDirection(Qt::RightToLeft);
 
     setMinimumSize(900, 600);
@@ -99,9 +81,9 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     brandIcon->setFixedSize(42, 42);
     brandIcon->setAlignment(Qt::AlignCenter);
     brandIcon->setPixmap(appIcon(Icon::Shop, QColor(QStringLiteral("#ffffff")), 24).pixmap(24, 24));
-    auto* brandTitle = new QLabel(QStringLiteral("محلي"));
+    auto* brandTitle = new QLabel(tr("محلي"));
     brandTitle->setObjectName(QStringLiteral("appTitle"));
-    auto* brandSub = new QLabel(QStringLiteral("نظام البيع والمحاسبة"));
+    auto* brandSub = new QLabel(tr("نظام البيع والمحاسبة"));
     brandSub->setObjectName(QStringLiteral("appSub"));
 
     auto* brandTexts = new QVBoxLayout;
@@ -116,13 +98,13 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     brandRow->addWidget(brandIcon);
     brandRow->addLayout(brandTexts, 1);
 
-    auto* about = new QPushButton(QStringLiteral("حول محلي…"));
+    auto* about = new QPushButton(tr("حول محلي…"));
     about->setObjectName(QStringLiteral("about"));
     about->setCursor(Qt::PointingHandCursor);
     connect(about, &QPushButton::clicked, this, [this]() {
         QMessageBox::about(
-            this, QStringLiteral("حول محلي"),
-            QStringLiteral("<h3>محلي — نظام نقاط البيع والمحاسبة</h3>"
+            this, tr("حول محلي"),
+            tr("<h3>محلي — نظام نقاط البيع والمحاسبة</h3>"
                            "<p>إدارة البيع السريع، الجرد، حسابات العملاء والموردين، "
                            "جلسات الصندوق، المصاريف، التقارير والاستردادات — "
                            "بدون اتصال وبثيَمَين فاتح/داكن.</p>"
@@ -188,11 +170,11 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     m_userLabel = new QLabel;
     m_userLabel->setObjectName(QStringLiteral("userLabel"));
-    m_userLabel->setText(QStringLiteral("المستخدم: %1").arg(app::core::Session::instance().actorName()));
+    m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
     m_userLabel->setStyleSheet(QStringLiteral("font-size: 12px; font-weight: 600; color: #475569; padding-right: 12px;"));
     statusBar()->addPermanentWidget(m_userLabel);
 
-    auto* switchUserBtn = new QPushButton(QStringLiteral("تبديل المستخدم"));
+    auto* switchUserBtn = new QPushButton(tr("تبديل المستخدم"));
     switchUserBtn->setCursor(Qt::PointingHandCursor);
     switchUserBtn->setFixedHeight(32);
     switchUserBtn->setStyleSheet(
@@ -275,21 +257,21 @@ void MainWindow::buildNavForRole(const QString& role)
     };
 
     std::vector<NavEntry> entries = {
-        {Icon::Cart, QStringLiteral("البيع السريع"), 0},
-        {Icon::Box, QStringLiteral("المنتجات"), 1},
-        {Icon::People, QStringLiteral("العملاء"), 2},
-        {Icon::Truck, QStringLiteral("الموردون"), 3},
-        {Icon::Wallet, QStringLiteral("جلسة الصندوق"), 4},
-        {Icon::Receipt, QStringLiteral("مبيعات اليوم"), 5},
-        {Icon::Tag, QStringLiteral("المصاريف والسحوبات"), 6},
-        {Icon::BarChart, QStringLiteral("التقارير"), 7},
-        {Icon::Return, QStringLiteral("الاستردادات"), 8},
-        {Icon::History, QStringLiteral("سجل المراجعة"), 9},
-        {Icon::Gear, QStringLiteral("الإعدادات"), 10},
+        {Icon::Cart, tr("البيع السريع"), 0},
+        {Icon::Box, tr("المنتجات"), 1},
+        {Icon::People, tr("العملاء"), 2},
+        {Icon::Truck, tr("الموردون"), 3},
+        {Icon::Wallet, tr("جلسة الصندوق"), 4},
+        {Icon::Receipt, tr("مبيعات اليوم"), 5},
+        {Icon::Tag, tr("المصاريف والسحوبات"), 6},
+        {Icon::BarChart, tr("التقارير"), 7},
+        {Icon::Return, tr("الاستردادات"), 8},
+        {Icon::History, tr("سجل المراجعة"), 9},
+        {Icon::Gear, tr("الإعدادات"), 10},
     };
 
     if (role == QStringLiteral("admin")) {
-        entries.push_back({Icon::People, QStringLiteral("إدارة المستخدمين"), 11});
+        entries.push_back({Icon::People, tr("إدارة المستخدمين"), 11});
     }
 
     for (const NavEntry& entry : entries) {
@@ -312,13 +294,13 @@ void MainWindow::onSyncStatusChanged()
     const ServerController::Stats stats = m_controller.stats();
     QString text;
     if (stats.listening) {
-        text = QStringLiteral("خادم المزامنة: يعمل على المنفذ %1").arg(stats.port);
+        text = tr("خادم المزامنة: يعمل على المنفذ %1").arg(stats.port);
     } else {
-        text = QStringLiteral("خادم المزامنة: متوقف");
+        text = tr("خادم المزامنة: متوقف");
     }
-    text += QStringLiteral("  |  عمليات منفّذة حتى اليوم: %1").arg(stats.appliedOps);
-    text += QStringLiteral("  |  أجهزة متصلة: %1").arg(stats.devices);
-    text += QStringLiteral("  |  مبيعات اليوم: %1 (%2)")
+    text += tr("  |  عمليات منفّذة حتى اليوم: %1").arg(stats.appliedOps);
+    text += tr("  |  أجهزة متصلة: %1").arg(stats.devices);
+    text += tr("  |  مبيعات اليوم: %1 (%2)")
                 .arg(stats.salesToday)
                 .arg(formatMoney(stats.revenueTodayCents));
     m_statusLabel->setText(text);
@@ -341,7 +323,7 @@ void MainWindow::onSwitchUserClicked()
         m_settings->refresh();
         m_usersPage->refresh();
         if (m_userLabel) {
-            m_userLabel->setText(QStringLiteral("المستخدم: %1").arg(app::core::Session::instance().actorName()));
+            m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
         }
         rebuildNav();
         show();

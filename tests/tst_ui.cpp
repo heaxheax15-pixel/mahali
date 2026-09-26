@@ -83,6 +83,7 @@ private slots:
     void posSaleRequiresOpenSession();
     void cashSessionLifecycle();
     void salesPageShowsToday();
+    void profit_cents_survives_translation();
     void customerCreditAndPayment();
     void expensesAndDrawings();
     void reportBuilds();
@@ -525,6 +526,55 @@ void UiTest::salesPageShowsToday()
     QCOMPARE(page.rowCount(), 2);
     QCOMPARE(page.grandTotalCents(), 25000LL);
     QCOMPARE(page.profitCents(), 7000LL);
+}
+
+// grandTotalCents()/profitCents() used to scrape the numbers back out of the Arabic
+// summary label with a regex, so a translated UI silently reported the grand total
+// as the profit. Overwrite the label with non-Arabic text and both must hold steady.
+void UiTest::profit_cents_survives_translation()
+{
+    const QString path = m_dir.filePath(QStringLiteral("sales-translated.sqlite"));
+    int seededSessionId = 0;
+    const int productId = seedProduct(path, &seededSessionId, 10000);
+    QVERIFY(productId > 0);
+
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    const auto session = sessions.findOpen();
+    QVERIFY(session.has_value());
+    data::SaleService service(db);
+
+    core::SaleItem desktopItem;
+    desktopItem.productId = productId;
+    desktopItem.quantity = 2;
+    desktopItem.unitPriceCents = 7500; // override
+    QVERIFY(service.recordSale({ desktopItem }, session->id, "desktop", false).ok);
+
+    core::SaleItem deviceItem;
+    deviceItem.productId = productId;
+    deviceItem.quantity = 1;
+    deviceItem.unitPriceCents = 10000;
+    QVERIFY(service.recordSale({ deviceItem }, session->id, "dev-1", false).ok);
+
+    ui::SalesPage page(db);
+    const qint64 total = page.grandTotalCents();
+    const qint64 profit = page.profitCents();
+    QCOMPARE(total, 25000LL);
+    QCOMPARE(profit, 7000LL);
+    QVERIFY(total != profit); // otherwise the old fallback would be indistinguishable
+
+    QLabel* summary = page.findChild<QLabel*>(QStringLiteral("infoBar"));
+    QVERIFY(summary);
+    summary->setText(QStringLiteral("Ventes: 2  |  Total (net): 999.99  |  Benefice: 888.88"));
+
+    QCOMPARE(page.grandTotalCents(), total);
+    QCOMPARE(page.profitCents(), profit);
+
+    // A refresh re-renders the label in the source language; the cache must be rebuilt
+    // to the same figures.
+    page.refresh();
+    QCOMPARE(page.grandTotalCents(), total);
+    QCOMPARE(page.profitCents(), profit);
 }
 
 void UiTest::customerCreditAndPayment()

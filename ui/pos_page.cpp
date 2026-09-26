@@ -34,15 +34,15 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
 
-    auto* header = new PageHeader(QStringLiteral("البيع السريع"),
-                                  QStringLiteral("باركود أو اسم المنتج — Enter يضيف، و Enter فارغ يحفظ البيع"));
-    m_sessionChip = makeChip(QStringLiteral("الجلسة"), QStringLiteral("info"));
+    auto* header = new PageHeader(tr("البيع السريع"),
+                                  tr("باركود أو اسم المنتج — Enter يضيف، و Enter فارغ يحفظ البيع"));
+    m_sessionChip = makeChip(tr("الجلسة"), QStringLiteral("info"));
     header->addAction(m_sessionChip);
     root->addWidget(header);
 
     m_entry = new QLineEdit;
     m_entry->setObjectName(QStringLiteral("searchField"));
-    m_entry->setPlaceholderText(QStringLiteral("باركود أو اسم المنتج — Enter يضيف، Enter فارغ يحفظ البيع"));
+    m_entry->setPlaceholderText(tr("باركود أو اسم المنتج — Enter يضيف، Enter فارغ يحفظ البيع"));
     m_entry->setClearButtonEnabled(true);
     m_entry->setMinimumHeight(48);
     m_entry->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
@@ -56,7 +56,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_table->setShowGrid(false);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("المنتج"), QStringLiteral("الكمية"), QStringLiteral("سعر الوحدة"), QStringLiteral("الإجمالي")});
+        {tr("المنتج"), tr("الكمية"), tr("سعر الوحدة"), tr("الإجمالي")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked
@@ -75,7 +75,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     heroLayout->setContentsMargins(18, 18, 18, 18);
     heroLayout->setSpacing(8);
 
-    auto* heroCaption = new QLabel(QStringLiteral("إجمالي الفاتورة"));
+    auto* heroCaption = new QLabel(tr("إجمالي الفاتورة"));
     heroCaption->setObjectName(QStringLiteral("heroCaption"));
     heroCaption->setAlignment(Qt::AlignCenter);
 
@@ -87,7 +87,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_itemsLabel->setObjectName(QStringLiteral("heroCaption"));
     m_itemsLabel->setAlignment(Qt::AlignCenter);
 
-    m_save = new QPushButton(QStringLiteral("حفظ البيع"));
+    m_save = new QPushButton(tr("حفظ البيع"));
     m_save->setMinimumHeight(46);
     m_save->setIcon(appIcon(Icon::Check, QColor(QStringLiteral("#ffffff")), 20));
 
@@ -204,14 +204,14 @@ void PosPage::addEntry()
         }
     }
     if (!product) {
-        setNotice(QStringLiteral("لا يوجد منتج بالباركود/الاسم: %1").arg(text), false);
+        setNotice(tr("لا يوجد منتج بالباركود/الاسم: %1").arg(text), false);
         return;
     }
 
     for (PosLine& line : m_lines) {
         if (line.productId == product->id) {
             ++line.quantity;
-            setNotice(QStringLiteral("أضيف: %1 × %2")
+            setNotice(tr("أضيف: %1 × %2")
                           .arg(line.name, formatMoney(line.unitPriceCents)),
                       true);
             rebuildTable();
@@ -229,7 +229,7 @@ void PosPage::addEntry()
     line.unitPriceCents = product->salePriceCents;
     line.basePriceCents = product->salePriceCents;
     m_lines.append(line);
-    setNotice(QStringLiteral("أضيف: %1").arg(line.name), true);
+    setNotice(tr("أضيف: %1").arg(line.name), true);
     rebuildTable();
     m_entry->setFocus();
 }
@@ -296,10 +296,10 @@ void PosPage::refreshSessionChip()
     const auto session = sessions.findOpen();
     if (session) {
         setChipState(m_sessionChip, QStringLiteral("ok"));
-        m_sessionChip->setText(QStringLiteral("الجلسة مفتوحة #%1").arg(session->id));
+        m_sessionChip->setText(tr("الجلسة مفتوحة #%1").arg(session->id));
     } else {
         setChipState(m_sessionChip, QStringLiteral("danger"));
-        m_sessionChip->setText(QStringLiteral("لا توجد جلسة مفتوحة"));
+        m_sessionChip->setText(tr("لا توجد جلسة مفتوحة"));
     }
 }
 
@@ -311,7 +311,7 @@ void PosPage::refreshTotals()
         total += line.unitPriceCents * line.quantity;
         items += line.quantity;
     }
-    m_itemsLabel->setText(QStringLiteral("الأصناف: %1   قطع: %2").arg(m_lines.size()).arg(items));
+    m_itemsLabel->setText(tr("الأصناف: %1   قطع: %2").arg(m_lines.size()).arg(items));
     m_totalLabel->setText(formatMoney(total));
 }
 
@@ -376,18 +376,18 @@ void PosPage::completeSale()
 {
     m_notice->clear();
     if (m_lines.isEmpty()) {
-        setNotice(QStringLiteral("لا يوجد بنود للبيع"), false);
+        setNotice(tr("لا يوجد بنود للبيع"), false);
         return;
     }
     if (!syncFromTable()) {
-        setNotice(QStringLiteral("الكمية أو السعر غير صالح في أحد الأسطر"), false);
+        setNotice(tr("الكمية أو السعر غير صالح في أحد الأسطر"), false);
         return;
     }
 
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        setNotice(QStringLiteral("لا توجد جلسة مفتوحة — افتح جلسة من قسم \"جلسة الصندوق\" أولاً"), false);
+        setNotice(tr("لا توجد جلسة مفتوحة — افتح جلسة من قسم \"جلسة الصندوق\" أولاً"), false);
         return;
     }
 
@@ -417,7 +417,7 @@ if (line.unitPriceCents != line.basePriceCents) {
     const data::SaleRecordResult result =
         service.recordSale(items, session->id, app::core::Session::instance().actorName(), /*allowOversold=*/false);
     if (!result.ok) {
-        setNotice(QStringLiteral("تعذر حفظ البيع: %1").arg(result.error), false);
+        setNotice(tr("تعذر حفظ البيع: %1").arg(result.error), false);
         return;
     }
 
@@ -425,7 +425,7 @@ if (line.unitPriceCents != line.basePriceCents) {
     for (const core::AuditLogEntry& entry : priceOverrides) {
         audit.insert(entry);
     }
-    setNotice(QStringLiteral("تم البيع: %1").arg(formatMoney(result.totalCents)), true);
+    setNotice(tr("تم البيع: %1").arg(formatMoney(result.totalCents)), true);
     m_lines.clear();
     rebuildTable();
     refreshSessionChip();

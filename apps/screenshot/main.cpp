@@ -1,6 +1,7 @@
 // Dev tool: renders each MainWindow page and saves a PNG per page so the UI
 // can be reviewed without a display. Built only when MAHALI_TOOLS=ON.
 #include <QApplication>
+#include <QCoreApplication>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPixmap>
@@ -30,7 +31,7 @@ int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("mahali"));
-    app.setApplicationDisplayName(QStringLiteral("محلي"));
+    app.setApplicationDisplayName(QCoreApplication::translate("main", "محلي"));
     app.setLayoutDirection(Qt::RightToLeft);
 
     const QString dbPath = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QStringLiteral(":memory:");
@@ -40,8 +41,10 @@ int main(int argc, char* argv[])
     try {
         db = std::make_unique<app::data::Database>(dbPath, app::data::DatabaseMode::Server);
     } catch (const std::exception& e) {
-        QMessageBox::critical(nullptr, QStringLiteral("محلي — خطأ"),
-                              QStringLiteral("تعذر فتح قاعدة البيانات:\n%1").arg(QString::fromUtf8(e.what())));
+        QMessageBox::critical(
+            nullptr, QCoreApplication::translate("main", "محلي — خطأ"),
+            QCoreApplication::translate("main", "تعذر فتح قاعدة البيانات:\n%1")
+                .arg(QString::fromUtf8(e.what())));
         return 1;
     }
 

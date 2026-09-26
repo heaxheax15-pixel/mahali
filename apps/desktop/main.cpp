@@ -1,10 +1,12 @@
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QIcon>
 #include <QMessageBox>
 #include <QStandardPaths>
 
+#include "core/i18n.h"
 #include "core/session.h"
 #include "data/database.h"
 #include "data/setting_repository.h"
@@ -19,10 +21,9 @@ int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("mahali"));
-    app.setApplicationDisplayName(QStringLiteral("محلي"));
+    app.setApplicationDisplayName(QCoreApplication::translate("main", "محلي"));
     app.setOrganizationName(QStringLiteral("mahali"));
     app.setApplicationVersion(QStringLiteral(MAHALI_VERSION));
-    app.setLayoutDirection(Qt::RightToLeft);
 
     QIcon appIcon;
     appIcon.addFile(QStringLiteral(":/mahali/icons/app-512.png"), QSize(512, 512));
@@ -53,8 +54,10 @@ int main(int argc, char* argv[])
     try {
         db = std::make_unique<app::data::Database>(dbPath, app::data::DatabaseMode::Server);
     } catch (const std::exception& e) {
-        QMessageBox::critical(nullptr, QStringLiteral("محلي — خطأ"),
-                              QStringLiteral("تعذر فتح قاعدة البيانات:\n%1").arg(QString::fromUtf8(e.what())));
+        QMessageBox::critical(
+            nullptr, QCoreApplication::translate("main", "محلي — خطأ"),
+            QCoreApplication::translate("main", "تعذر فتح قاعدة البيانات:\n%1")
+                .arg(QString::fromUtf8(e.what())));
         return 1;
     }
 
@@ -63,6 +66,13 @@ int main(int argc, char* argv[])
     const QByteArray hmacKey = settings.value(QStringLiteral("sync_hmac_key"))
                                    .value_or(QStringLiteral("mahali-local-key"))
                                    .toUtf8();
+
+    // Language: persist the default on first launch, then load the catalogue and
+    // pin the layout direction before any window is built.
+    if (!settings.value(QStringLiteral("language")).has_value()) {
+        settings.set(QStringLiteral("language"), app::core::defaultLanguage());
+    }
+    app::core::applyLanguage(app::core::currentLanguage(*db));
 
     app::ui::setCurrencySymbol(settings.value(QStringLiteral("currency_symbol")).value_or(QString()));
 

@@ -21,7 +21,7 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
-    m_todayOnly = new QCheckBox(QStringLiteral("اليوم فقط"));
+    m_todayOnly = new QCheckBox(tr("اليوم فقط"));
     m_todayOnly->setChecked(true);
     m_todayOnly->setObjectName(QStringLiteral("secondary"));
 
@@ -36,7 +36,7 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
     m_table->setShowGrid(false);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("الوقت"), QStringLiteral("المسؤول"), QStringLiteral("العملية"), QStringLiteral("التفاصيل")});
+        {tr("الوقت"), tr("المسؤول"), tr("العملية"), tr("التفاصيل")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
@@ -58,8 +58,8 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
 
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
-    root->addWidget(new PageHeader(QStringLiteral("سجل التدقيق"),
-                                   QStringLiteral("كل العمليات الحساسة — تغييرات، أخطاء ومخالفات أسعار")));
+    root->addWidget(new PageHeader(tr("سجل التدقيق"),
+                                   tr("كل العمليات الحساسة — تغييرات، أخطاء ومخالفات أسعار")));
     root->addWidget(card, 1);
 
     connect(m_todayOnly, &QCheckBox::toggled, this, &AuditLogPage::onTodayToggled);
@@ -99,7 +99,7 @@ void AuditLogPage::refresh()
         m_table->setItem(row, 3, new QTableWidgetItem(entry.target));
     }
 
-    m_summary->setText(QStringLiteral("عدد الأحداث: %1").arg(entries.size()));
+    m_summary->setText(tr("عدد الأحداث: %1").arg(entries.size()));
 }
 
 int AuditLogPage::rowCount() const

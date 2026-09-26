@@ -2,6 +2,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -27,14 +28,14 @@ namespace {
 std::optional<core::User> userDialog(QWidget* parent, bool forNew, const core::User& initial)
 {
     QDialog dialog(parent);
-    dialog.setWindowTitle(forNew ? QStringLiteral("إضافة كاشير") : QStringLiteral("تعديل المستخدم"));
+    dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::UsersPage", "إضافة كاشير") : QCoreApplication::translate("app::ui::UsersPage", "تعديل المستخدم"));
     dialog.setModal(true);
     dialog.setLayoutDirection(Qt::RightToLeft);
 
     auto* name = new QLineEdit(initial.name);
-    name->setPlaceholderText(QStringLiteral("الاسم"));
+    name->setPlaceholderText(QCoreApplication::translate("app::ui::UsersPage", "الاسم"));
     auto* pin = new QLineEdit(initial.pin);
-    pin->setPlaceholderText(QStringLiteral("PIN (حرفان)"));
+    pin->setPlaceholderText(QCoreApplication::translate("app::ui::UsersPage", "PIN (حرفان)"));
     pin->setMaxLength(2);
     pin->setEchoMode(QLineEdit::Password);
     pin->setAlignment(Qt::AlignCenter);
@@ -45,7 +46,7 @@ std::optional<core::User> userDialog(QWidget* parent, bool forNew, const core::U
         pin->selectAll();
     }
     auto* confirm = new QLineEdit;
-    confirm->setPlaceholderText(QStringLiteral("تأكيد PIN"));
+    confirm->setPlaceholderText(QCoreApplication::translate("app::ui::UsersPage", "تأكيد PIN"));
     confirm->setMaxLength(2);
     confirm->setEchoMode(QLineEdit::Password);
     confirm->setAlignment(Qt::AlignCenter);
@@ -58,11 +59,11 @@ std::optional<core::User> userDialog(QWidget* parent, bool forNew, const core::U
     active->setChecked(initial.active);
 
     QFormLayout* form = new QFormLayout;
-    form->addRow(QStringLiteral("الاسم"), name);
-    form->addRow(QStringLiteral("PIN"), pin);
-    form->addRow(QStringLiteral("تأكيد PIN"), confirm);
-    form->addRow(QStringLiteral("الدور"), role);
-    form->addRow(QStringLiteral("نشط"), active);
+    form->addRow(QCoreApplication::translate("app::ui::UsersPage", "الاسم"), name);
+    form->addRow(QCoreApplication::translate("app::ui::UsersPage", "PIN"), pin);
+    form->addRow(QCoreApplication::translate("app::ui::UsersPage", "تأكيد PIN"), confirm);
+    form->addRow(QCoreApplication::translate("app::ui::UsersPage", "الدور"), role);
+    form->addRow(QCoreApplication::translate("app::ui::UsersPage", "نشط"), active);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -101,10 +102,10 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     auto* header = new PageHeader(
-        QStringLiteral("إدارة المستخدمين"),
-        QStringLiteral("إدارة حسابات الكاشيرين وصلاحياتهم"));
+        tr("إدارة المستخدمين"),
+        tr("إدارة حسابات الكاشيرين وصلاحياتهم"));
 
-    m_add = new QPushButton(QStringLiteral("إضافة كاشير"));
+    m_add = new QPushButton(tr("إضافة كاشير"));
     m_add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     connect(m_add, &QPushButton::clicked, this, &UsersPage::onAddClicked);
 
@@ -119,7 +120,7 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->setShowGrid(false);
     m_table->setColumnCount(5);
     m_table->setHorizontalHeaderLabels(
-        {QStringLiteral("الاسم"), QStringLiteral("الدور"), QStringLiteral("PIN"), QStringLiteral("نشط"), QStringLiteral("إجراءات")});
+        {tr("الاسم"), tr("الدور"), tr("PIN"), tr("نشط"), tr("إجراءات")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -188,7 +189,7 @@ void UsersPage::rebuildTable()
         actionsLayout->setContentsMargins(4, 2, 4, 2);
         actionsLayout->setSpacing(6);
 
-        auto* editBtn = new QPushButton(QStringLiteral("تعديل"));
+        auto* editBtn = new QPushButton(tr("تعديل"));
         editBtn->setObjectName(QStringLiteral("secondary"));
         editBtn->setFixedWidth(70);
         editBtn->setProperty("userId", user.id);
@@ -196,7 +197,7 @@ void UsersPage::rebuildTable()
             onEditClicked(row);
         });
 
-        auto* removeBtn = new QPushButton(QStringLiteral("حذف"));
+        auto* removeBtn = new QPushButton(tr("حذف"));
         removeBtn->setObjectName(QStringLiteral("danger"));
         removeBtn->setFixedWidth(70);
         removeBtn->setProperty("userId", user.id);
@@ -226,11 +227,11 @@ void UsersPage::onAddClicked()
     data::UserRepository repo(m_db);
     const int id = repo.save(*result);
     if (id <= 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("فشل إنشاء المستخدم"));
+        QMessageBox::warning(this, tr("خطأ"), tr("فشل إنشاء المستخدم"));
         return;
     }
     if (!repo.savePin(id, result->pin)) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("فشل حفظ PIN"));
+        QMessageBox::warning(this, tr("خطأ"), tr("فشل حفظ PIN"));
         return;
     }
 
@@ -265,12 +266,12 @@ void UsersPage::onEditClicked(int row)
     updated.active = result->active;
 
     if (repo.save(updated) <= 0) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("فشل تحديث المستخدم"));
+        QMessageBox::warning(this, tr("خطأ"), tr("فشل تحديث المستخدم"));
         return;
     }
     if (!result->pin.isEmpty() && result->pin != user->pin) {
         if (!repo.savePin(userId, result->pin)) {
-            QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("فشل تحديث PIN"));
+            QMessageBox::warning(this, tr("خطأ"), tr("فشل تحديث PIN"));
             return;
         }
     }
@@ -291,8 +292,8 @@ void UsersPage::onRemoveClicked(int row)
 
     const auto reply = QMessageBox::question(
         this,
-        QStringLiteral("تأكيد الحذف"),
-        QStringLiteral("هل أنت متأكد من حذف هذا المستخدم؟"),
+        tr("تأكيد الحذف"),
+        tr("هل أنت متأكد من حذف هذا المستخدم؟"),
         QMessageBox::Yes | QMessageBox::No);
     if (reply != QMessageBox::Yes) {
         return;
@@ -300,7 +301,7 @@ void UsersPage::onRemoveClicked(int row)
 
     data::UserRepository repo(m_db);
     if (!repo.remove(userId)) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("فشل حذف المستخدم"));
+        QMessageBox::warning(this, tr("خطأ"), tr("فشل حذف المستخدم"));
         return;
     }
 
@@ -320,7 +321,7 @@ void UsersPage::onActiveChanged(int row, int state)
 
     data::UserRepository repo(m_db);
     if (!repo.setActive(userId, state == Qt::Checked)) {
-        QMessageBox::warning(this, QStringLiteral("خطأ"), QStringLiteral("فشل تحديث حالة المستخدم"));
+        QMessageBox::warning(this, tr("خطأ"), tr("فشل تحديث حالة المستخدم"));
         rebuildTable();
     }
 }

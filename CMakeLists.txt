@@ -20,6 +20,31 @@ option(MAHALI_ANDROID "Build the Android POS target (requires Qt for Android too
 find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test)
 
+# Translation catalogues. Consumed by apps/desktop/CMakeLists.txt, which
+# compiles them with lrelease and embeds the resulting .qm under /i18n.
+set(TS_FILES
+    translations/mahali_ar.ts
+    translations/mahali_fr.ts
+    translations/mahali_en.ts)
+
+# Qt6LinguistTools (and therefore qt_add_translations) is not shipped by every
+# Qt6 package set, so resolve the lrelease tool directly and fall back to the
+# classic add_custom_command pipeline in apps/desktop.
+find_program(MAHALI_LRELEASE
+    NAMES lrelease-qt6 lrelease6 lrelease
+    HINTS
+        ${QT6_INSTALL_PREFIX}/libexec
+        ${QT6_INSTALL_PREFIX}/bin
+        /usr/lib/qt6/bin
+        /usr/lib/qt6/libexec
+    DOC "Qt lrelease tool used to compile the .ts catalogues")
+if(NOT MAHALI_LRELEASE)
+    message(FATAL_ERROR
+        "lrelease not found. Install qt6-l10n-tools (or the Qt LinguistTools "
+        "development package) to build mahali-desktop.")
+endif()
+message(STATUS "mahali: lrelease = ${MAHALI_LRELEASE}")
+
 add_subdirectory(core)
 add_subdirectory(data)
 add_subdirectory(network)
