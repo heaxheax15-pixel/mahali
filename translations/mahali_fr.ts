@@ -6,42 +6,42 @@
     <message>
         <location filename="../ui/audit_log_page.cpp" line="+24"/>
         <source>اليوم فقط</source>
-        <translation type="unfinished"></translation>
+        <translation>Aujourd'hui uniquement</translation>
     </message>
     <message>
         <location line="+15"/>
         <source>الوقت</source>
-        <translation type="unfinished"></translation>
+        <translation>Heure</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>المسؤول</source>
-        <translation type="unfinished"></translation>
+        <translation>Responsable</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>العملية</source>
-        <translation type="unfinished"></translation>
+        <translation>Opération</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>التفاصيل</source>
-        <translation type="unfinished"></translation>
+        <translation>Détails</translation>
     </message>
     <message>
         <location line="+22"/>
         <source>سجل التدقيق</source>
-        <translation type="unfinished"></translation>
+        <translation>Journal d'audit</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>كل العمليات الحساسة — تغييرات، أخطاء ومخالفات أسعار</source>
-        <translation type="unfinished"></translation>
+        <translation>Toutes les opérations sensibles — modifications, erreurs et écarts de prix</translation>
     </message>
     <message>
         <location line="+40"/>
         <source>عدد الأحداث: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Nombre d'événements : %1</translation>
     </message>
 </context>
 <context>
@@ -49,185 +49,185 @@
     <message>
         <location filename="../ui/cash_session_page.cpp" line="+34"/>
         <source>بيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Vente</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>دفعة عميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Paiement client</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>مصروف</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépense</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>سحب</source>
-        <translation type="unfinished"></translation>
+        <translation>Retrait</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>استرداد</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>ابدأ جلسة</source>
-        <translation type="unfinished"></translation>
+        <translation>Démarrer une session</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>أغلق الجلسة</source>
-        <translation type="unfinished"></translation>
+        <translation>Clôturer la session</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>جلسة الصندوق</source>
-        <translation type="unfinished"></translation>
+        <translation>Session de caisse</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>جلسة يومية مشتركة — تفتح بالرأس المبدئي وتُغلق بالجرد</source>
-        <translation type="unfinished"></translation>
+        <translation>Session quotidienne partagée — s'ouvre avec le fonds de départ et se clôture par inventaire</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>رأس الفتح</source>
-        <translation type="unfinished"></translation>
+        <translation>Fonds de départ</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>مجموع الحركات</source>
-        <translation type="unfinished"></translation>
+        <translation>Total des mouvements</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>الموجود المتوقع</source>
-        <translation type="unfinished"></translation>
+        <translation>Attendu en caisse</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>الفرق (عند الجرد)</source>
-        <translation type="unfinished"></translation>
+        <translation>Écart (à l'inventaire)</translation>
     </message>
     <message>
         <location line="+23"/>
         <source>الوقت</source>
-        <translation type="unfinished"></translation>
+        <translation>Heure</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>النوع</source>
-        <translation type="unfinished"></translation>
+        <translation>Type</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>المبلغ</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>ملاحظة</source>
-        <translation type="unfinished"></translation>
+        <translation>Note</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>حركات الجلسة</source>
-        <translation type="unfinished"></translation>
+        <translation>Mouvements de la session</translation>
     </message>
     <message>
         <location line="+26"/>
         <source>لا توجد جلسة مفتوحة حالياً — ابدأ جلسة برصيد الفتح.</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucune session ouverte pour le moment — démarrez une session avec un fonds de départ.</translation>
     </message>
     <message>
         <location line="+2"/>
         <location line="+25"/>
         <source>—</source>
-        <translation type="unfinished"></translation>
+        <translation>—</translation>
     </message>
     <message>
         <location line="-21"/>
         <source>آخر جلسة أُغلقت بفرق %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Dernière session clôturée avec un écart de %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>لا توجد جلسة مفتوحة حالياً.</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucune session ouverte pour le moment.</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>الجلسة #%1 مفتوحة منذ %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Session n° %1 ouverte depuis %2</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>جارية</source>
-        <translation type="unfinished"></translation>
+        <translation>En cours</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الجلسة #%1 — مفتوحة: %2  |  %3  |  %4</source>
-        <translation type="unfinished"></translation>
+        <translation>Session n° %1 — ouverte : %2  |  %3  |  %4</translation>
     </message>
     <message>
         <location line="+53"/>
         <source>تعذر فتح الجلسة.</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'ouvrir la session.</translation>
     </message>
     <message>
         <location line="+21"/>
         <source>تعذر إغلاق الجلسة.</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible de clôturer la session.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>المعدود: %1  |  المتوقع: %2  |  الفرق: %3 (%4)</source>
-        <translation type="unfinished"></translation>
+        <translation>Compté : %1  |  Attendu : %2  |  Écart : %3 (%4)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>عجز في الصندوق</source>
-        <translation type="unfinished"></translation>
+        <translation>Déficit en caisse</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>زيادة في الصندوق</source>
-        <translation type="unfinished"></translation>
+        <translation>Excédent en caisse</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>بدء جلسة</source>
-        <translation type="unfinished"></translation>
+        <translation>Démarrer une session</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>رصيد الفتح:</source>
-        <translation type="unfinished"></translation>
+        <translation>Fonds de départ :</translation>
     </message>
     <message>
         <location line="+6"/>
         <location line="+21"/>
         <source>خطأ</source>
-        <translation type="unfinished"></translation>
+        <translation>Erreur</translation>
     </message>
     <message>
         <location line="-21"/>
         <location line="+21"/>
         <source>المبلغ غير صالح</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant invalide</translation>
     </message>
     <message>
         <location line="-7"/>
         <source>إغلاق الجلسة</source>
-        <translation type="unfinished"></translation>
+        <translation>Clôturer la session</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>المبلغ المعدود في الصندوق:</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant compté en caisse :</translation>
     </message>
 </context>
 <context>
@@ -235,80 +235,80 @@
     <message>
         <location filename="../ui/customers_page.cpp" line="+42"/>
         <source>عميل جديد</source>
-        <translation type="unfinished"></translation>
+        <translation>Nouveau client</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>تعديل العميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifier le client</translation>
     </message>
     <message>
         <location line="+7"/>
         <location line="+207"/>
         <source>الاسم</source>
-        <translation type="unfinished"></translation>
+        <translation>Nom</translation>
     </message>
     <message>
         <location line="-206"/>
         <location line="+206"/>
         <source>الهاتف</source>
-        <translation type="unfinished"></translation>
+        <translation>Téléphone</translation>
     </message>
     <message>
         <location line="-160"/>
         <location line="+140"/>
         <source>بيع آجل</source>
-        <translation type="unfinished"></translation>
+        <translation>Vente à crédit</translation>
     </message>
     <message>
         <location line="-122"/>
         <source>اضغط لتغيير سعر/كغ</source>
-        <translation type="unfinished"></translation>
+        <translation>Cliquez pour modifier le prix/kg</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>أضف سطر</source>
-        <translation type="unfinished"></translation>
+        <translation>Ajouter une ligne</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>حذف السطر المحدد</source>
-        <translation type="unfinished"></translation>
+        <translation>Supprimer la ligne sélectionnée</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>المنتج</source>
-        <translation type="unfinished"></translation>
+        <translation>Produit</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الكمية</source>
-        <translation type="unfinished"></translation>
+        <translation>Quantité</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>سعر الوحدة</source>
-        <translation type="unfinished"></translation>
+        <translation>Prix unitaire</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الإجمالي</source>
-        <translation type="unfinished"></translation>
+        <translation>Total</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>الكمية والسعر عشري؟ عدّل في الأسطر قبل الحفظ.</source>
-        <translation type="unfinished"></translation>
+        <translation>Quantité et prix décimaux ? Modifiez les lignes avant d'enregistrer.</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>حفظ البيع الآجل</source>
-        <translation type="unfinished"></translation>
+        <translation>Enregistrer la vente à crédit</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>الإجمالي: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Total : %1</translation>
     </message>
     <message>
         <location line="+7"/>
@@ -316,98 +316,98 @@
         <location line="+177"/>
         <location line="+53"/>
         <source>خطأ</source>
-        <translation type="unfinished"></translation>
+        <translation>Erreur</translation>
     </message>
     <message>
         <location line="-242"/>
         <source>اختر منتجاً من القائمة</source>
-        <translation type="unfinished"></translation>
+        <translation>Sélectionnez un produit dans la liste</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>السعر غير صالح</source>
-        <translation type="unfinished"></translation>
+        <translation>Prix invalide</translation>
     </message>
     <message>
         <location line="+52"/>
         <source>إضافة عميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Ajouter un client</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>تعديل</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifier</translation>
     </message>
     <message>
         <location line="+4"/>
         <location line="+164"/>
         <source>سداد</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement</translation>
     </message>
     <message>
         <location line="-146"/>
         <source>المطلوب (رصيد)</source>
-        <translation type="unfinished"></translation>
+        <translation>Dû (solde)</translation>
     </message>
     <message>
         <location line="+19"/>
         <source>العملاء والرصيد</source>
-        <translation type="unfinished"></translation>
+        <translation>Clients et solde</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>العملاء</source>
-        <translation type="unfinished"></translation>
+        <translation>Clients</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>المبيعات الآجلة وسداد الأرصدة</source>
-        <translation type="unfinished"></translation>
+        <translation>Ventes à crédit et remboursement des soldes</translation>
     </message>
     <message>
         <location line="+74"/>
         <source>تعذر حفظ العميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer le client</translation>
     </message>
     <message>
         <location line="+47"/>
         <source>المبلغ الذي دفعه العميل الآن:</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant versé par le client maintenant :</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>المبلغ غير صالح</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant invalide</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>لا يوجد بنود للبيع الآجل</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucun article à vendre à crédit</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>تعذر تسجيل البيع الآجل: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer la vente à crédit : %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>سُجّل دين: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Dette enregistrée : %1</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucune session ouverte — ouvrez d'abord une session de caisse</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>تعذر تسجيل السداد: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer le remboursement : %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>سُجّل سداد: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement enregistré : %1</translation>
     </message>
 </context>
 <context>
@@ -415,146 +415,146 @@
     <message>
         <location filename="../ui/expenses_page.cpp" line="+52"/>
         <source>المصروفات</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépenses</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>المصاريف وسحوبات المالك خارجة من الصندوق</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépenses et retraits du propriétaire hors caisse</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>مصاريف اليوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépenses du jour</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>سحوبات اليوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Retraits du jour</translation>
     </message>
     <message>
         <location line="+8"/>
         <location line="+130"/>
         <location line="+5"/>
         <source>مصروف جديد</source>
-        <translation type="unfinished"></translation>
+        <translation>Nouvelle dépense</translation>
     </message>
     <message>
         <location line="-133"/>
         <location line="+150"/>
         <location line="+6"/>
         <source>سحب مالك</source>
-        <translation type="unfinished"></translation>
+        <translation>Retrait du propriétaire</translation>
     </message>
     <message>
         <location line="-154"/>
         <source>عكس المحدد</source>
-        <translation type="unfinished"></translation>
+        <translation>Annuler la sélection</translation>
     </message>
     <message>
         <location line="+26"/>
         <source>الوقت</source>
-        <translation type="unfinished"></translation>
+        <translation>Heure</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>النوع</source>
-        <translation type="unfinished"></translation>
+        <translation>Type</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>المبلغ</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>بيان</source>
-        <translation type="unfinished"></translation>
+        <translation>Libellé</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>سجل مصاريف وسحوبات اليوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Journal des dépenses et retraits du jour</translation>
     </message>
     <message>
         <location line="+37"/>
         <source>مصروف</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépense</translation>
     </message>
     <message>
         <location line="+12"/>
         <source>سحب</source>
-        <translation type="unfinished"></translation>
+        <translation>Retrait</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>مصاريف اليوم: %1  |  سحوبات اليوم: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépenses du jour : %1  |  Retraits du jour : %2</translation>
     </message>
     <message>
         <location line="+30"/>
         <source>البيان (مثل: كهرباء):</source>
-        <translation type="unfinished"></translation>
+        <translation>Libellé (par ex. : électricité) :</translation>
     </message>
     <message>
         <location line="+6"/>
         <location line="+22"/>
         <source>المبلغ:</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant :</translation>
     </message>
     <message>
         <location line="-16"/>
         <location line="+23"/>
         <source>خطأ</source>
-        <translation type="unfinished"></translation>
+        <translation>Erreur</translation>
     </message>
     <message>
         <location line="-23"/>
         <location line="+23"/>
         <source>المبلغ غير صالح</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant invalide</translation>
     </message>
     <message>
         <location line="-13"/>
         <source>ملاحظة (اختياري):</source>
-        <translation type="unfinished"></translation>
+        <translation>Note (facultatif) :</translation>
     </message>
     <message>
         <location line="+25"/>
         <location line="+19"/>
         <location line="+29"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucune session ouverte — ouvrez d'abord une session de caisse</translation>
     </message>
     <message>
         <location line="-42"/>
         <source>تعذر تسجيل المصروف: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer la dépense : %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>سُجّل مصروف: %1 — %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépense enregistrée : %1 — %2</translation>
     </message>
     <message>
         <location line="+16"/>
         <source>تعذر تسجيل السحب: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer le retrait : %1</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>سُجّل سحب: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Retrait enregistré : %1</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>تعذر العكس: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'annuler : %1</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>أُلغي: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Annulé : %1</translation>
     </message>
 </context>
 <context>
@@ -809,7 +809,7 @@
     <message>
         <location filename="../ui/widgets/mini_bar_chart.cpp" line="+19"/>
         <source>لا بيانات</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucune donnée</translation>
     </message>
 </context>
 <context>
@@ -925,155 +925,155 @@
     <message>
         <location filename="../ui/products_page.cpp" line="+39"/>
         <source>منتج جديد</source>
-        <translation type="unfinished"></translation>
+        <translation>Nouveau produit</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>تعديل المنتج</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifier le produit</translation>
     </message>
     <message>
         <location line="+15"/>
         <location line="+103"/>
         <source>الباركود</source>
-        <translation type="unfinished"></translation>
+        <translation>Code-barres</translation>
     </message>
     <message>
         <location line="-102"/>
         <location line="+102"/>
         <source>الاسم</source>
-        <translation type="unfinished"></translation>
+        <translation>Nom</translation>
     </message>
     <message>
         <location line="-101"/>
         <location line="+102"/>
         <source>سعر التكلفة</source>
-        <translation type="unfinished"></translation>
+        <translation>Prix de revient</translation>
     </message>
     <message>
         <location line="-101"/>
         <location line="+101"/>
         <source>سعر البيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Prix de vente</translation>
     </message>
     <message>
         <location line="-100"/>
         <location line="+101"/>
         <source>الوحدة</source>
-        <translation type="unfinished"></translation>
+        <translation>Unité</translation>
     </message>
     <message>
         <location line="-100"/>
         <source>المحتوى (عدد وحدات الوجبة)</source>
-        <translation type="unfinished"></translation>
+        <translation>Contenu (nombre d'unités par colis)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>مُفعّل</source>
-        <translation type="unfinished"></translation>
+        <translation>Activé</translation>
     </message>
     <message>
         <location line="+36"/>
         <source>تعديل المخزون — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Ajustement du stock — %1</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>توريد جديد</source>
-        <translation type="unfinished"></translation>
+        <translation>Nouveau réapprovisionnement</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>تعديل يدوي</source>
-        <translation type="unfinished"></translation>
+        <translation>Ajustement manuel</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>تالف / منتهي</source>
-        <translation type="unfinished"></translation>
+        <translation>Abîmé / périmé</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>الكمية (+توريد / -خسارة)</source>
-        <translation type="unfinished"></translation>
+        <translation>Quantité (+réappro / -perte)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>السبب</source>
-        <translation type="unfinished"></translation>
+        <translation>Motif</translation>
     </message>
     <message>
         <location line="+28"/>
         <source>بحث بالباركود أو الاسم...</source>
-        <translation type="unfinished"></translation>
+        <translation>Rechercher par code-barres ou nom...</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>إضافة منتج</source>
-        <translation type="unfinished"></translation>
+        <translation>Ajouter un produit</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>تعديل</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifier</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>تعديل المخزون</source>
-        <translation type="unfinished"></translation>
+        <translation>Ajuster le stock</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>الكمية</source>
-        <translation type="unfinished"></translation>
+        <translation>Quantité</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الحالة</source>
-        <translation type="unfinished"></translation>
+        <translation>État</translation>
     </message>
     <message>
         <location line="+19"/>
         <location line="+6"/>
         <source>المنتجات</source>
-        <translation type="unfinished"></translation>
+        <translation>Produits</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>إدارة الأصناف، الأسعار والمخزون</source>
-        <translation type="unfinished"></translation>
+        <translation>Gérer les articles, les prix et le stock</translation>
     </message>
     <message>
         <location line="+35"/>
         <source>مُفعل</source>
-        <translation type="unfinished"></translation>
+        <translation>Actif</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>موقوف</source>
-        <translation type="unfinished"></translation>
+        <translation>Désactivé</translation>
     </message>
     <message>
         <location line="+42"/>
         <location line="+24"/>
         <location line="+23"/>
         <source>خطأ</source>
-        <translation type="unfinished"></translation>
+        <translation>Erreur</translation>
     </message>
     <message>
         <location line="-46"/>
         <source>تعذر حفظ المنتج — الباركود مستخدم مسبقاً أو بيانات ناقصة</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer le produit — code-barres déjà utilisé ou données incomplètes</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>تعذر حفظ التعديل — الباركود مستخدم مسبقاً</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer la modification — code-barres déjà utilisé</translation>
     </message>
     <message>
         <location line="+23"/>
         <source>الكمية السالبة أكبر من المتوفر (الكثافة %1)</source>
-        <translation type="unfinished"></translation>
+        <translation>La quantité négative dépasse le stock disponible (densité %1)</translation>
     </message>
 </context>
 <context>
@@ -1082,159 +1082,159 @@
         <location filename="../ui/refunds_page.cpp" line="+60"/>
         <location line="+34"/>
         <source>الوقت</source>
-        <translation type="unfinished"></translation>
+        <translation>Heure</translation>
     </message>
     <message>
         <location line="-34"/>
         <source>المصدر</source>
-        <translation type="unfinished"></translation>
+        <translation>Origine</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>الإجمالي</source>
-        <translation type="unfinished"></translation>
+        <translation>Total</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>الحالة</source>
-        <translation type="unfinished"></translation>
+        <translation>État</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>استرداد المبيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement d'une vente</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>مبيعات اليوم (تُعرض الأصول فقط):</source>
-        <translation type="unfinished"></translation>
+        <translation>Ventes du jour (articles en stock uniquement) :</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>استرداد مبيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Rembourser une vente</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>العميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Client</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>المبلغ</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>استرداد السداد</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement d'un règlement</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>سدايدات العملاء اليوم:</source>
-        <translation type="unfinished"></translation>
+        <translation>Règlements clients du jour :</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>استرداد سداد عميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Rembourser le règlement d'un client</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>الاستردادات</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursements</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>عكس مبيع أو إرجاع سداد عميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Annuler une vente ou rembourser un règlement client</translation>
     </message>
     <message>
         <location line="+37"/>
         <source>الحاسوب</source>
-        <translation type="unfinished"></translation>
+        <translation>Poste</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>جهاز %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Appareil %1</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>بيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Vente</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>زبون #%1</source>
-        <translation type="unfinished"></translation>
+        <translation>Client n° %1</translation>
     </message>
     <message>
         <location line="+28"/>
         <location line="+14"/>
         <source>استرداد</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement</translation>
     </message>
     <message>
         <location line="-13"/>
         <source>هل تريد استرداد هذا المبيع وإرجاع البضاعة للرف؟</source>
-        <translation type="unfinished"></translation>
+        <translation>Voulez-vous rembourser cette vente et remettre les articles en rayon ?</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>هل تريد استرداد مبلغ هذا السداد للعميل؟</source>
-        <translation type="unfinished"></translation>
+        <translation>Voulez-vous rembourser ce règlement au client ?</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>استرداد سداد</source>
-        <translation type="unfinished"></translation>
+        <translation>Rembourser un règlement</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>ملاحظة (اختياري):</source>
-        <translation type="unfinished"></translation>
+        <translation>Note (facultatif) :</translation>
     </message>
     <message>
         <location line="+12"/>
         <location line="+24"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً</source>
-        <translation type="unfinished"></translation>
+        <translation>Aucune session ouverte — ouvrez d'abord une session de caisse</translation>
     </message>
     <message>
         <location line="-18"/>
         <source>تعذر استرداد المبيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible de rembourser la vente</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>مبيع #%1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>Vente n° %1 (%2)</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>مبيع #%1</source>
-        <translation type="unfinished"></translation>
+        <translation>Vente n° %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>تم الاسترداد وعادت البضاعة للرف</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement effectué, les articles sont retournés en rayon</translation>
     </message>
     <message>
         <location line="+16"/>
         <source>تعذر استرداد السداد: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible de rembourser le règlement : %1</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>سداد #%1</source>
-        <translation type="unfinished"></translation>
+        <translation>Règlement n° %1</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>تم استرداد السداد</source>
-        <translation type="unfinished"></translation>
+        <translation>Règlement remboursé</translation>
     </message>
 </context>
 <context>
@@ -1242,107 +1242,107 @@
     <message>
         <location filename="../ui/reports_page.cpp" line="+26"/>
         <source>بيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Vente</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>دفع عميل</source>
-        <translation type="unfinished"></translation>
+        <translation>Paiement client</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>مصروف</source>
-        <translation type="unfinished"></translation>
+        <translation>Dépense</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>سحب مالك</source>
-        <translation type="unfinished"></translation>
+        <translation>Retrait du propriétaire</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>استرداد</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursement</translation>
     </message>
     <message>
         <location line="+28"/>
         <source>اليوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Aujourd'hui</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>أمس</source>
-        <translation type="unfinished"></translation>
+        <translation>Hier</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>هذا الأسبوع</source>
-        <translation type="unfinished"></translation>
+        <translation>Cette semaine</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>هذا الشهر</source>
-        <translation type="unfinished"></translation>
+        <translation>Ce mois-ci</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>الكل</source>
-        <translation type="unfinished"></translation>
+        <translation>Tout</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>العملية</source>
-        <translation type="unfinished"></translation>
+        <translation>Opération</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>العدد</source>
-        <translation type="unfinished"></translation>
+        <translation>Nombre</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>المجموع</source>
-        <translation type="unfinished"></translation>
+        <translation>Somme</translation>
     </message>
     <message>
         <location line="+15"/>
         <source>إلى:</source>
-        <translation type="unfinished"></translation>
+        <translation>Au :</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>الملخص</source>
-        <translation type="unfinished"></translation>
+        <translation>Résumé</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>تفاصيل العمليات</source>
-        <translation type="unfinished"></translation>
+        <translation>Détail des opérations</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>التقارير</source>
-        <translation type="unfinished"></translation>
+        <translation>Rapports</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>ملخص حركات الصندوق خلال فترة محددة</source>
-        <translation type="unfinished"></translation>
+        <translation>Récapitulatif des mouvements de caisse sur une période</translation>
     </message>
     <message>
         <location line="+72"/>
         <source>المبيعات: %1 عملية (الصافي: %2)  |  الربح الإجمالي: %3  |  صافي الربح: %4</source>
-        <translation type="unfinished"></translation>
+        <translation>Ventes : %1 opérations (net : %2)  |  Bénéfice brut : %3  |  Bénéfice net : %4</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>تكلفة المبيعات: %1  |  المصاريف: %2  |  السحوبات: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>Coût des ventes : %1  |  Dépenses : %2  |  Retraits : %3</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>وعاء الزكاة: %1  |  الزكاة (2.5%): %2   —   جلسات في الفترة: %3 (رأس الفتح: %4)   —   ديون العملاء المستحقة اليوم: %5</source>
-        <translation type="unfinished"></translation>
+        <translation>Base de la Zakat : %1  |  Zakat (2,5 %) : %2   —   Sessions sur la période : %3 (fonds de départ : %4)   —   Dettes clients dues aujourd'hui : %5</translation>
     </message>
 </context>
 <context>
@@ -1350,103 +1350,103 @@
     <message>
         <location filename="../ui/sales_page.cpp" line="+31"/>
         <source>الحاسوب</source>
-        <translation type="unfinished"></translation>
+        <translation>Poste</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>—</source>
-        <translation type="unfinished"></translation>
+        <translation>—</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>جهاز %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Appareil %1</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>المبيعات</source>
-        <translation type="unfinished"></translation>
+        <translation>Ventes</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>سجل مبيعات اليوم مصنّفاً حسب الجهاز</source>
-        <translation type="unfinished"></translation>
+        <translation>Journal des ventes du jour par appareil</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>فواتير اليوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Factures du jour</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>الإجمالي (الصافي)</source>
-        <translation type="unfinished"></translation>
+        <translation>Total (net)</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>الربح التقريبي</source>
-        <translation type="unfinished"></translation>
+        <translation>Bénéfice estimé</translation>
     </message>
     <message>
         <location line="+21"/>
         <source>الوقت</source>
-        <translation type="unfinished"></translation>
+        <translation>Heure</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>المصدر</source>
-        <translation type="unfinished"></translation>
+        <translation>Origine</translation>
     </message>
     <message>
         <location line="+0"/>
         <location line="+113"/>
         <source>الإجمالي</source>
-        <translation type="unfinished"></translation>
+        <translation>Total</translation>
     </message>
     <message>
         <location line="-113"/>
         <source>الحالة</source>
-        <translation type="unfinished"></translation>
+        <translation>État</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>سجل فواتير اليوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Journal des factures du jour</translation>
     </message>
     <message>
         <location line="+39"/>
         <source>مسترد</source>
-        <translation type="unfinished"></translation>
+        <translation>Remboursé</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>بيع</source>
-        <translation type="unfinished"></translation>
+        <translation>Vente</translation>
     </message>
     <message>
         <location line="+18"/>
         <source>مبيعات اليوم: %1  |  الإجمالي (الصافي): %2  |  الربح التقريبي: %3</source>
-        <translation type="unfinished"></translation>
+        <translation>Ventes du jour : %1  |  Total (net) : %2  |  Bénéfice estimé : %3</translation>
     </message>
     <message>
         <location line="+35"/>
         <source>تفاصيل البيع #%1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>Détails de la vente n° %1 (%2)</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>المنتج</source>
-        <translation type="unfinished"></translation>
+        <translation>Produit</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>الكمية</source>
-        <translation type="unfinished"></translation>
+        <translation>Quantité</translation>
     </message>
     <message>
         <location line="+0"/>
         <source>سعر الوحدة</source>
-        <translation type="unfinished"></translation>
+        <translation>Prix unitaire</translation>
     </message>
 </context>
 <context>
@@ -1454,22 +1454,22 @@
     <message>
         <location filename="../ui/server_controller.cpp" line="+37"/>
         <source>تعذر تشغيل خادم المزامنة</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible de démarrer le serveur de synchronisation</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>خادم المزامنة يعمل على المنفذ %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Serveur de synchronisation actif sur le port %1</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>تم إيقاف خادم المزامنة</source>
-        <translation type="unfinished"></translation>
+        <translation>Serveur de synchronisation arrêté</translation>
     </message>
     <message>
         <location line="+23"/>
         <source>تم تنظيف سجل العمليات: %1 صفاً أقدم من %2 يوم</source>
-        <translation type="unfinished"></translation>
+        <translation>Journal des opérations nettoyé : %1 lignes de plus de %2 jours</translation>
     </message>
 </context>
 <context>
@@ -1477,104 +1477,104 @@
     <message>
         <location filename="../ui/settings_page.cpp" line="+32"/>
         <source>مثال: دج  أو  DA</source>
-        <translation type="unfinished"></translation>
+        <translation>Exemple : دج  ou  DA</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>احتساب الزكاة (2.5%) في التقارير</source>
-        <translation type="unfinished"></translation>
+        <translation>Calculer la Zakat (2,5 %) dans les rapports</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>فاتح</source>
-        <translation type="unfinished"></translation>
+        <translation>Clair</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>داكن</source>
-        <translation type="unfinished"></translation>
+        <translation>Sombre</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>العربية</source>
-        <translation type="unfinished"></translation>
+        <translation>العربية</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Français</source>
-        <translation type="unfinished"></translation>
+        <translation>Français</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>English</source>
-        <translation type="unfinished"></translation>
+        <translation>English</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>حفظ الإعدادات</source>
-        <translation type="unfinished"></translation>
+        <translation>Enregistrer les paramètres</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>اسم المتجر:</source>
-        <translation type="unfinished"></translation>
+        <translation>Nom de la boutique :</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>رمز العملة:</source>
-        <translation type="unfinished"></translation>
+        <translation>Symbole de la devise :</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>السمة:</source>
-        <translation type="unfinished"></translation>
+        <translation>Thème :</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>اللغة:</source>
-        <translation type="unfinished"></translation>
+        <translation>Langue :</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>مفتاح المزامنة (يتطلب إعادة تشغيل):</source>
-        <translation type="unfinished"></translation>
+        <translation>Clé de synchronisation (nécessite un redémarrage) :</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>الإعدادات</source>
-        <translation type="unfinished"></translation>
+        <translation>Paramètres</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>اسم المتجر، العملة، السمة ومفتاح المزامنة</source>
-        <translation type="unfinished"></translation>
+        <translation>Nom de la boutique, devise, thème et clé de synchronisation</translation>
     </message>
     <message>
         <location line="+6"/>
         <location line="+52"/>
         <location line="+61"/>
         <source>معاينة: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Aperçu : %1</translation>
     </message>
     <message>
         <location line="-107"/>
         <source>طُبّقت السمة الجديدة — احفظ للإبقاء عليها</source>
-        <translation type="unfinished"></translation>
+        <translation>Nouveau thème appliqué — enregistrez pour le conserver</translation>
     </message>
     <message>
         <location line="+13"/>
         <source>اللغة</source>
-        <translation type="unfinished"></translation>
+        <translation>Langue</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>أعد تشغيل البرنامج لتطبيق اللغة بالكامل</source>
-        <translation type="unfinished"></translation>
+        <translation>Redémarrez le programme pour appliquer complètement la langue</translation>
     </message>
     <message>
         <location line="+94"/>
         <source>حُفظت الإعدادات</source>
-        <translation type="unfinished"></translation>
+        <translation>Paramètres enregistrés</translation>
     </message>
 </context>
 <context>
@@ -1582,96 +1582,96 @@
     <message>
         <location filename="../ui/suppliers_page.cpp" line="+32"/>
         <source>مورد جديد</source>
-        <translation type="unfinished"></translation>
+        <translation>Nouveau fournisseur</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>تعديل المورد</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifier le fournisseur</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>الاسم</source>
-        <translation type="unfinished"></translation>
+        <translation>Nom</translation>
     </message>
     <message>
         <location line="+29"/>
         <source>فاتورة آجلة — %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Facture à crédit — %1</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>مثال: 4500.50</source>
-        <translation type="unfinished"></translation>
+        <translation>Exemple : 4500,50</translation>
     </message>
     <message>
         <location line="+4"/>
         <location line="+58"/>
         <source>المبلغ</source>
-        <translation type="unfinished"></translation>
+        <translation>Montant</translation>
     </message>
     <message>
         <location line="-57"/>
         <location line="+57"/>
         <source>ملاحظة</source>
-        <translation type="unfinished"></translation>
+        <translation>Note</translation>
     </message>
     <message>
         <location line="-28"/>
         <source>إضافة مورد</source>
-        <translation type="unfinished"></translation>
+        <translation>Ajouter un fournisseur</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>تعديل</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifier</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>فاتورة آجلة</source>
-        <translation type="unfinished"></translation>
+        <translation>Facture à crédit</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>المورد</source>
-        <translation type="unfinished"></translation>
+        <translation>Fournisseur</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>التاريخ</source>
-        <translation type="unfinished"></translation>
+        <translation>Date</translation>
     </message>
     <message>
         <location line="+16"/>
         <location line="+18"/>
         <source>الموردون</source>
-        <translation type="unfinished"></translation>
+        <translation>Fournisseurs</translation>
     </message>
     <message>
         <location line="-10"/>
         <source>فواتير المورد المحدد</source>
-        <translation type="unfinished"></translation>
+        <translation>Factures du fournisseur sélectionné</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>الموردون والحسابات الآجلة عندهم</source>
-        <translation type="unfinished"></translation>
+        <translation>Fournisseurs et leurs comptes à crédit</translation>
     </message>
     <message>
         <location line="+82"/>
         <location line="+48"/>
         <source>خطأ</source>
-        <translation type="unfinished"></translation>
+        <translation>Erreur</translation>
     </message>
     <message>
         <location line="-48"/>
         <source>تعذر حفظ المورد</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer le fournisseur</translation>
     </message>
     <message>
         <location line="+48"/>
         <source>تعذر حفظ الفاتورة</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossible d'enregistrer la facture</translation>
     </message>
 </context>
 <context>
