@@ -171,16 +171,12 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_userLabel = new QLabel;
     m_userLabel->setObjectName(QStringLiteral("userLabel"));
     m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
-    m_userLabel->setStyleSheet(QStringLiteral("font-size: 12px; font-weight: 600; color: #475569; padding-right: 12px;"));
     statusBar()->addPermanentWidget(m_userLabel);
 
     auto* switchUserBtn = new QPushButton(tr("تبديل المستخدم"));
+    switchUserBtn->setObjectName("primary");
     switchUserBtn->setCursor(Qt::PointingHandCursor);
     switchUserBtn->setFixedHeight(32);
-    switchUserBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background-color: #2563eb; color: white; "
-                       "border-radius: 4px; padding: 4px 12px; font-weight: bold; }"
-                       "QPushButton:hover { background-color: #1d4ed8; }"));
     connect(switchUserBtn, &QPushButton::clicked, this, &MainWindow::onSwitchUserClicked);
     statusBar()->addPermanentWidget(switchUserBtn);
 

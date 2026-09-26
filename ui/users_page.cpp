@@ -186,7 +186,6 @@ void UsersPage::rebuildTable()
         auto* checkBox = new QCheckBox;
         checkBox->setChecked(user.active);
         checkBox->setProperty("userId", user.id);
-        checkBox->setStyleSheet(QStringLiteral("QCheckBox::indicator { width: 18px; height: 18px; }"));
         connect(checkBox, &QCheckBox::stateChanged, this, [this, row](int state) {
             onActiveChanged(row, state);
         });
