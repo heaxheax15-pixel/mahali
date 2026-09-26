@@ -7,6 +7,7 @@
 #include <QPixmap>
 #include <QTimer>
 #include <QWidget>
+#include <QtGlobal>
 
 #include "data/database.h"
 #include "data/setting_repository.h"
@@ -29,6 +30,10 @@ const char* kPageNames[] = {
 
 int main(int argc, char* argv[])
 {
+    // See apps/desktop/main.cpp: app.qrc lives in the static libmahali-ui.a, so
+    // the resource has to be initialised explicitly or :/mahali/... stays empty.
+    Q_INIT_RESOURCE(app);
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("mahali"));
     app.setApplicationDisplayName(QCoreApplication::translate("main", "محلي"));

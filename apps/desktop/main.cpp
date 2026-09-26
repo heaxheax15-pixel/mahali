@@ -1,10 +1,10 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
-#include <QFile>
 #include <QIcon>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <QtGlobal>
 
 #include "core/i18n.h"
 #include "core/session.h"
@@ -19,6 +19,11 @@
 
 int main(int argc, char* argv[])
 {
+    // app.qrc is compiled into the static libmahali-ui.a, so the linker drops
+    // qrc_app.o unless the resource is initialised explicitly. Without this,
+    // :/mahali/... never resolves and applyTheme() clears the stylesheet.
+    Q_INIT_RESOURCE(app);
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("mahali"));
     app.setApplicationDisplayName(QCoreApplication::translate("main", "محلي"));
@@ -33,11 +38,6 @@ int main(int argc, char* argv[])
     appIcon.addFile(QStringLiteral(":/mahali/icons/app-48.png"), QSize(48, 48));
     appIcon.addFile(QStringLiteral(":/mahali/icons/app-32.png"), QSize(32, 32));
     app.setWindowIcon(appIcon);
-
-    QFile style(QStringLiteral(":/mahali/style.qss"));
-    if (style.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        app.setStyleSheet(QString::fromUtf8(style.readAll()));
-    }
 
     QString dbPath;
     if (argc > 1) {
