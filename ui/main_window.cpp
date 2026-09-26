@@ -15,11 +15,13 @@
 
 #include <memory>
 
+#include "core/session.h"
 #include "audit_log_page.h"
 #include "cash_session_page.h"
 #include "customers_page.h"
 #include "expenses_page.h"
 #include "format_utils.h"
+#include "login_dialog.h"
 #include "pos_page.h"
 #include "products_page.h"
 #include "refunds_page.h"
@@ -184,6 +186,14 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     statusBar()->setContentsMargins(0, 0, 0, 0);
     statusBar()->setFixedHeight(28);
     statusBar()->addWidget(m_statusLabel);
+
+    auto* switchUserBtn = new QPushButton(QStringLiteral("تبديل المستخدم"));
+    switchUserBtn->setObjectName(QStringLiteral("switchUserBtn"));
+    switchUserBtn->setCursor(Qt::PointingHandCursor);
+    switchUserBtn->setFixedHeight(24);
+    connect(switchUserBtn, &QPushButton::clicked, this, &MainWindow::onSwitchUserClicked);
+    statusBar()->addPermanentWidget(switchUserBtn);
+
     connect(&m_controller, &ServerController::statsChanged, this, &MainWindow::onSyncStatusChanged);
     onSyncStatusChanged();
 }
@@ -253,6 +263,27 @@ void MainWindow::onSyncStatusChanged()
                 .arg(stats.salesToday)
                 .arg(formatMoney(stats.revenueTodayCents));
     m_statusLabel->setText(text);
+}
+
+void MainWindow::onSwitchUserClicked()
+{
+    hide();
+    app::ui::LoginDialog login(m_db);
+    if (login.exec() == QDialog::Accepted) {
+        m_products->refresh();
+        m_customers->refresh();
+        m_suppliers->refresh();
+        m_cashSession->refresh();
+        m_sales->refresh();
+        m_expenses->refresh();
+        m_reports->refresh();
+        m_refunds->refresh();
+        m_auditLog->refresh();
+        m_settings->refresh();
+        show();
+    } else {
+        show();
+    }
 }
 
 } // namespace app::ui

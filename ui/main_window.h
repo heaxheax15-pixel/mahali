@@ -45,6 +45,7 @@ public:
 private slots:
     void onSyncStatusChanged();
     void onPageChanged(int row);
+    void onSwitchUserClicked();
 
 private:
     app::data::Database& m_db;

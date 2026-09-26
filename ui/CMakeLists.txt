@@ -44,6 +44,8 @@ target_sources(mahali-ui PRIVATE
     customers_page.h
     suppliers_page.cpp
     suppliers_page.h
+    login_dialog.cpp
+    login_dialog.h
     widgets/app_icon.cpp
     widgets/app_icon.h
     widgets/ui_helpers.cpp

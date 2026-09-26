@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <functional>
 
+#include "core/session.h"
 #include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/product_repository.h"
@@ -400,13 +401,13 @@ void PosPage::completeSale()
         item.unitPriceCents = line.unitPriceCents;
         items.append(item);
 
-        if (line.unitPriceCents != line.basePriceCents) {
+if (line.unitPriceCents != line.basePriceCents) {
             core::AuditLogEntry entry;
-            entry.actor = QStringLiteral("desktop");
+            entry.actor = app::core::Session::instance().actorName();
             entry.action = QStringLiteral("price_override");
             entry.target = QStringLiteral("%1 (%2): %3 -> %4")
-                               .arg(line.name, line.barcode, formatMoney(line.basePriceCents),
-                                    formatMoney(line.unitPriceCents));
+                           .arg(line.name, line.barcode, formatMoney(line.basePriceCents),
+                                formatMoney(line.unitPriceCents));
             entry.createdAt = QDateTime::currentDateTime();
             priceOverrides.append(entry);
         }
@@ -414,7 +415,7 @@ void PosPage::completeSale()
 
     data::SaleService service(m_db);
     const data::SaleRecordResult result =
-        service.recordSale(items, session->id, QStringLiteral("desktop"), /*allowOversold=*/false);
+        service.recordSale(items, session->id, app::core::Session::instance().actorName(), /*allowOversold=*/false);
     if (!result.ok) {
         setNotice(QStringLiteral("تعذر حفظ البيع: %1").arg(result.error), false);
         return;

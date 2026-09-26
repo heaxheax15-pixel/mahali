@@ -17,6 +17,7 @@
 #include <set>
 
 #include "core/audit_log_entry.h"
+#include "core/session.h"
 #include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
@@ -36,7 +37,7 @@ namespace {
 void writeAudit(app::data::Database& db, const QString& action, const QString& target)
 {
     core::AuditLogEntry entry;
-    entry.actor = QStringLiteral("desktop");
+    entry.actor = app::core::Session::instance().actorName();
     entry.action = action;
     entry.target = target;
     entry.createdAt = QDateTime::currentDateTime();

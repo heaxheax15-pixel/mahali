@@ -31,6 +31,8 @@ target_sources(mahali-core PRIVATE
     sale.h
     sale_item.h
     setting.h
+    session.cpp
+    session.h
     stock_movement.h
     supplier.h
     supplier_transaction.h

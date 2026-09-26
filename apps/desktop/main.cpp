@@ -5,9 +5,12 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 
+#include "core/session.h"
 #include "data/database.h"
 #include "data/setting_repository.h"
+#include "data/user_repository.h"
 #include "ui/format_utils.h"
+#include "ui/login_dialog.h"
 #include "ui/main_window.h"
 #include "ui/server_controller.h"
 #include "ui/theme.h"
@@ -65,6 +68,13 @@ int main(int argc, char* argv[])
 
     // Apply the stored theme before the window appears (default: light).
     app::ui::applyTheme(settings.value(QStringLiteral("theme")).value_or(QStringLiteral("light")), app);
+
+    // Login flow
+    app::data::UserRepository userRepo(*db);
+    app::ui::LoginDialog login(*db);
+    if (login.exec() != QDialog::Accepted) {
+        return 0;
+    }
 
     app::ui::ServerController controller(*db, hmacKey);
     controller.start();

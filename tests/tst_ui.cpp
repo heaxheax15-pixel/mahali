@@ -9,6 +9,7 @@
 #include <QTableWidget>
 #include <QUrl>
 
+#include "core/session.h"
 #include "core/sync_operation.h"
 #include "data/applied_op_repository.h"
 #include "data/audit_log_repository.h"
@@ -31,6 +32,7 @@
 #include "data/supplier_repository.h"
 #include "data/supplier_transaction_repository.h"
 #include "data/zakat_setting_repository.h"
+#include "data/user_repository.h"
 #include "network/sync_client.h"
 #include "ui/audit_log_page.h"
 #include "ui/cash_session_page.h"
@@ -77,6 +79,7 @@ private slots:
     void refundsRestoreMoneyAndStock();
     void paymentRefundRaisesBalance();
     void entryReversal();
+    void login_basic();
 
 private:
     void seedSyncDatabase(const QString& path, int* productId, int* sessionId);
@@ -920,6 +923,34 @@ void UiTest::entryReversal()
     const auto entries = audit.findBetween(dayStart, QDateTime::currentDateTime());
     QCOMPARE(static_cast<long long>(entries.size()), 1);
     QCOMPARE(entries[0].action, QStringLiteral("entry_reversal"));
+}
+
+void UiTest::login_basic()
+{
+    const QString path = m_dir.filePath(QStringLiteral("login_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::UserRepository repo(db);
+
+    core::User user;
+    user.name = QStringLiteral("اختبار");
+    user.role = QStringLiteral("cashier");
+    const int id = repo.save(user);
+    QVERIFY(id > 0);
+    QVERIFY(repo.savePin(id, QStringLiteral("12")));
+
+    const auto found = repo.findByPin(QStringLiteral("12"));
+    QVERIFY(found.has_value());
+    QCOMPARE(found->id, id);
+    QCOMPARE(found->name, QStringLiteral("اختبار"));
+
+    app::core::Session::instance().setCurrentUser(*found);
+    QVERIFY(app::core::Session::instance().hasUser());
+    QCOMPARE(app::core::Session::instance().actorName(), QStringLiteral("اختبار"));
+
+    app::core::Session::instance().clear();
+    QVERIFY(!app::core::Session::instance().hasUser());
+    QCOMPARE(app::core::Session::instance().actorName(), QStringLiteral("desktop"));
 }
 
 QTEST_MAIN(UiTest)
