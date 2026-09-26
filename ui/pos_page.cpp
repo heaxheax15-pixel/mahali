@@ -269,7 +269,7 @@ void PosPage::onCellChanged(int row, int column)
         m_lines[row].quantity = quantity;
     } else if (column == 2) {
         const auto cents = parseMoney(m_table->item(row, column)->text());
-        if (!cents || *cents < 0) {
+        if (!cents || *cents <= 0) {
             rebuildTable();
             return;
         }
@@ -391,6 +391,7 @@ void PosPage::completeSale()
     }
 
     QVector<core::SaleItem> items;
+    QVector<core::AuditLogEntry> priceOverrides;
     data::AuditLogRepository audit(m_db);
     for (const PosLine& line : m_lines) {
         core::SaleItem item;
@@ -407,7 +408,7 @@ void PosPage::completeSale()
                                .arg(line.name, line.barcode, formatMoney(line.basePriceCents),
                                     formatMoney(line.unitPriceCents));
             entry.createdAt = QDateTime::currentDateTime();
-            audit.insert(entry);
+            priceOverrides.append(entry);
         }
     }
 
@@ -420,6 +421,9 @@ void PosPage::completeSale()
     }
 
     m_lastSaleId = result.saleId;
+    for (const core::AuditLogEntry& entry : priceOverrides) {
+        audit.insert(entry);
+    }
     setNotice(QStringLiteral("تم البيع: %1").arg(formatMoney(result.totalCents)), true);
     m_lines.clear();
     rebuildTable();
