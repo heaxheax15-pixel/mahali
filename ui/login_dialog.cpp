@@ -1,5 +1,6 @@
 #include "login_dialog.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QEvent>
 #include <QGuiApplication>
@@ -217,6 +218,11 @@ void LoginDialog::buildUserList()
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFixedHeight(52);
         btn->setFont(QFont(QStringLiteral("system"), 14));
+        // This is a QDialog: without this, Enter in the PIN field would also fire
+        // the first user button. The login/setup buttons below stay the default
+        // action on purpose — submitting a form with Enter is expected there.
+        btn->setAutoDefault(false);
+        btn->setDefault(false);
         connect(btn, &QPushButton::clicked, this, [this, user]() {
             onUserButtonClicked(user.id);
         });

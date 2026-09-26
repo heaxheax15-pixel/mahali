@@ -8,6 +8,7 @@
 #include <QTime>
 #include <QTableWidget>
 #include <QUrl>
+#include <QFormLayout>
 #include <QLineEdit>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -84,6 +85,7 @@ private slots:
     void cashSessionLifecycle();
     void salesPageShowsToday();
     void profit_cents_survives_translation();
+    void barcode_dialog_does_not_close();
     void customerCreditAndPayment();
     void expensesAndDrawings();
     void reportBuilds();
@@ -575,6 +577,101 @@ void UiTest::profit_cents_survives_translation()
     page.refresh();
     QCOMPARE(page.grandTotalCents(), total);
     QCOMPARE(page.profitCents(), profit);
+}
+
+// A barcode scanner terminates every scan with Enter. In a QDialog that Enter used
+// to hit the default (OK) button, saving and closing the form mid-entry.
+void UiTest::barcode_dialog_does_not_close()
+{
+    const QString path = m_dir.filePath(QStringLiteral("barcode-dialog.sqlite"));
+    data::Database db(path);
+
+    app::ui::ProductsPage page(db);
+    page.refresh();
+
+    QPushButton* addBtn = nullptr;
+    for (QPushButton* b : page.findChildren<QPushButton*>()) {
+        if (b->text() == QStringLiteral("إضافة منتج")) {
+            addBtn = b;
+            break;
+        }
+    }
+    QVERIFY2(addBtn, "could not find the add-product button");
+
+    bool modalOpened = false;
+    bool stillOpen = false;
+    bool focusMovedToName = false;
+    bool barcodeHeldScan = false;
+    bool watchdogFired = false;
+
+    // productDialog() calls exec(), so drive it from a 0 ms timer that runs inside
+    // the dialog's nested event loop.
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        modalOpened = true;
+
+        // The fields are addressed through their form labels: the dialog sets no
+        // placeholder text, and relying on child order would be brittle.
+        QFormLayout* form = nullptr;
+        for (QFormLayout* l : modal->findChildren<QFormLayout*>()) {
+            form = l;
+            break;
+        }
+        if (!form) {
+            return;
+        }
+
+        QLineEdit* barcodeField = nullptr;
+        QLineEdit* nameField = nullptr;
+        for (int row = 0; row < form->rowCount(); ++row) {
+            QLayoutItem* labelItem = form->itemAt(row, QFormLayout::LabelRole);
+            QLayoutItem* fieldItem = form->itemAt(row, QFormLayout::FieldRole);
+            auto* label = qobject_cast<QLabel*>(labelItem ? labelItem->widget() : nullptr);
+            auto* field = qobject_cast<QLineEdit*>(fieldItem ? fieldItem->widget() : nullptr);
+            if (!label || !field) {
+                continue;
+            }
+            if (label->text() == QStringLiteral("الباركود")) {
+                barcodeField = field;
+            } else if (label->text() == QStringLiteral("الاسم")) {
+                nameField = field;
+            }
+        }
+        if (!barcodeField || !nameField) {
+            return;
+        }
+
+        barcodeField->setFocus();
+        QTest::keyClicks(barcodeField, QStringLiteral("12345"));
+        // Same event a scanner emits: the digits, then Return.
+        QTest::keyClick(barcodeField, Qt::Key_Return);
+        QTest::qWait(20);
+
+        stillOpen = modal->isVisible();
+        barcodeHeldScan = (barcodeField->text() == QStringLiteral("12345"));
+        focusMovedToName = (modal->focusWidget() == nameField);
+
+        modal->reject();
+    });
+
+    // Safety net: a stuck modal must never hang the whole suite.
+    QTimer::singleShot(3000, [&]() {
+        watchdogFired = true;
+        if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            modal->reject();
+        }
+    });
+
+    addBtn->click();
+
+    QVERIFY2(!watchdogFired, "the product dialog had to be closed by the watchdog");
+    QVERIFY2(modalOpened, "the add-product button did not open the product dialog");
+    QVERIFY2(barcodeHeldScan, "the barcode field lost the scanned digits");
+    QVERIFY2(stillOpen, "Enter from the barcode scanner closed the product dialog");
+    QVERIFY2(focusMovedToName, "Enter did not move focus from the barcode to the name field");
 }
 
 void UiTest::customerCreditAndPayment()

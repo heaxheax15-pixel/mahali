@@ -1,5 +1,6 @@
 #include "customers_page.h"
 
+#include <QAbstractButton>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
@@ -17,6 +18,7 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+#include "scan_safe_dialog.h"
 #include "core/customer_transaction.h"
 #include "core/payment.h"
 #include "core/sale_item.h"
@@ -38,7 +40,7 @@ namespace {
 
 std::optional<core::Customer> customerDialog(QWidget* parent, bool forNew, const core::Customer& initial)
 {
-    QDialog dialog(parent);
+    ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::CustomersPage", "عميل جديد")
                                  : QCoreApplication::translate("app::ui::CustomersPage", "تعديل العميل"));
     dialog.setModal(true);
@@ -51,6 +53,12 @@ std::optional<core::Customer> customerDialog(QWidget* parent, bool forNew, const
     form->addRow(QCoreApplication::translate("app::ui::CustomersPage", "الهاتف"), phone);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
@@ -93,7 +101,7 @@ bool collectDebtItems(QWidget* parent, app::data::Database& db, QVector<core::Sa
     app::data::ProductRepository products(db);
     const auto catalog = products.findAll();
 
-    QDialog dialog(parent);
+    ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(QCoreApplication::translate("app::ui::CustomersPage", "بيع آجل"));
     dialog.setModal(true);
     dialog.resize(560, 400);
@@ -115,6 +123,10 @@ bool collectDebtItems(QWidget* parent, app::data::Database& db, QVector<core::Sa
     price->setPlaceholderText(QCoreApplication::translate("app::ui::CustomersPage", "اضغط لتغيير سعر/كغ"));
     auto* addButton = new QPushButton(QCoreApplication::translate("app::ui::CustomersPage", "أضف سطر"));
     auto* removeButton = new QPushButton(QCoreApplication::translate("app::ui::CustomersPage", "حذف السطر المحدد"));
+    addButton->setAutoDefault(false);
+    addButton->setDefault(false);
+    removeButton->setAutoDefault(false);
+    removeButton->setDefault(false);
 
     auto* table = new QTableWidget;
     table->setColumnCount(4);
@@ -140,6 +152,12 @@ bool collectDebtItems(QWidget* parent, app::data::Database& db, QVector<core::Sa
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     buttons->button(QDialogButtonBox::Ok)
         ->setText(QCoreApplication::translate("app::ui::CustomersPage", "حفظ البيع الآجل"));
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 

@@ -1,5 +1,6 @@
 #include "users_page.h"
 
+#include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -15,6 +16,7 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+#include "scan_safe_dialog.h"
 #include "core/user.h"
 #include "data/user_repository.h"
 #include "widgets/app_icon.h"
@@ -27,7 +29,7 @@ namespace {
 
 std::optional<core::User> userDialog(QWidget* parent, bool forNew, const core::User& initial)
 {
-    QDialog dialog(parent);
+    ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::UsersPage", "إضافة كاشير") : QCoreApplication::translate("app::ui::UsersPage", "تعديل المستخدم"));
     dialog.setModal(true);
     dialog.setLayoutDirection(Qt::RightToLeft);
@@ -66,6 +68,12 @@ std::optional<core::User> userDialog(QWidget* parent, bool forNew, const core::U
     form->addRow(QCoreApplication::translate("app::ui::UsersPage", "نشط"), active);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 

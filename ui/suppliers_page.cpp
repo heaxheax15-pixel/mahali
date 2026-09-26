@@ -1,5 +1,6 @@
 #include "suppliers_page.h"
 
+#include <QAbstractButton>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -14,6 +15,7 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+#include "scan_safe_dialog.h"
 #include "core/supplier_transaction.h"
 #include "data/supplier_repository.h"
 #include "data/supplier_transaction_repository.h"
@@ -28,7 +30,7 @@ namespace {
 
 std::optional<core::Supplier> supplierDialog(QWidget* parent, bool forNew, const core::Supplier& initial)
 {
-    QDialog dialog(parent);
+    ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::SuppliersPage", "مورد جديد")
                                  : QCoreApplication::translate("app::ui::SuppliersPage", "تعديل المورد"));
     dialog.setModal(true);
@@ -39,6 +41,12 @@ std::optional<core::Supplier> supplierDialog(QWidget* parent, bool forNew, const
     form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "الاسم"), name);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
@@ -64,7 +72,7 @@ struct InvoiceInput {
 
 std::optional<InvoiceInput> invoiceDialog(QWidget* parent, const QString& supplierName)
 {
-    QDialog dialog(parent);
+    ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(QCoreApplication::translate("app::ui::SuppliersPage", "فاتورة آجلة — %1").arg(supplierName));
     dialog.setModal(true);
 
@@ -77,6 +85,12 @@ std::optional<InvoiceInput> invoiceDialog(QWidget* parent, const QString& suppli
     form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "ملاحظة"), note);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 

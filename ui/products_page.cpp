@@ -1,5 +1,6 @@
 #include "products_page.h"
 
+#include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -17,6 +18,7 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+#include "scan_safe_dialog.h"
 #include "data/product_repository.h"
 #include "data/stock_movement_repository.h"
 #include "widgets/app_icon.h"
@@ -35,7 +37,7 @@ struct StockAdjustment {
 
 std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const core::Product& initial)
 {
-    QDialog dialog(parent);
+    ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::ProductsPage", "منتج جديد")
                                  : QCoreApplication::translate("app::ui::ProductsPage", "تعديل المنتج"));
     dialog.setModal(true);
@@ -61,6 +63,18 @@ std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const c
     form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "مُفعّل"), active);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    // A barcode scanner appends Enter to every scan, so no button may claim the
+    // default action: Enter must walk the form instead of saving and closing.
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
+    // The scanner's Enter walks the form: barcode -> name, it must not submit.
+    QObject::connect(barcode, &QLineEdit::returnPressed, &dialog, [name]() {
+        name->setFocus();
+    });
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
@@ -93,7 +107,7 @@ std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const c
 
 std::optional<StockAdjustment> stockDialog(QWidget* parent, const QString& productName)
 {
-    QDialog dialog(parent);
+    ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(QCoreApplication::translate("app::ui::ProductsPage", "تعديل المخزون — %1").arg(productName));
     dialog.setModal(true);
 
@@ -113,6 +127,12 @@ std::optional<StockAdjustment> stockDialog(QWidget* parent, const QString& produ
     form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "السبب"), reason);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 

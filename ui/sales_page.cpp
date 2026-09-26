@@ -1,17 +1,20 @@
 #include "sales_page.h"
 
+#include <QAbstractButton>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QPushButton>
 #include <QTableWidget>
 #include <QTime>
 #include <QVBoxLayout>
 
 #include <algorithm>
 
+#include "scan_safe_dialog.h"
 #include "data/product_repository.h"
 #include "data/sale_item_repository.h"
 #include "data/sale_repository.h"
@@ -184,7 +187,7 @@ void SalesPage::showDetails()
         return;
     }
 
-    QDialog dialog(this);
+    ScanSafeDialog dialog(this);
     dialog.setWindowTitle(tr("تفاصيل البيع #%1 (%2)").arg(sale->id).arg(formatMoney(sale->totalCents)));
     dialog.setModal(true);
 
@@ -209,6 +212,12 @@ void SalesPage::showDetails()
     }
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    for (QAbstractButton* b : buttons->buttons()) {
+        if (auto* pb = qobject_cast<QPushButton*>(b)) {
+            pb->setAutoDefault(false);
+            pb->setDefault(false);
+        }
+    }
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     QVBoxLayout* layout = new QVBoxLayout(&dialog);
