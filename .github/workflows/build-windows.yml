@@ -16,10 +16,9 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.7.2'
-          arch: win64_msvc2022_64
+          version: '6.5.3'
+          arch: win64_msvc2019_64
           modules: 'qthttpserver'
-          aqtversion: '==3.2.2'
           setup-python: 'false'
           cache: true
       - name: Configure
