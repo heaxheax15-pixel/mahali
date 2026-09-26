@@ -19,6 +19,7 @@ jobs:
           version: '6.7.2'
           arch: win64_msvc2022_64
           modules: 'qthttpserver'
+          aqtversion: '==3.2.2'
           setup-python: 'false'
           cache: true
       - name: Configure
