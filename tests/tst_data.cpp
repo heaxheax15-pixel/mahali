@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 
 #include <QTemporaryDir>
+#include <QFile>
 #include <QSqlQuery>
 
 #include "database.h"
@@ -39,6 +40,9 @@ private slots:
     void initTestCase();
     void schemaContainsAllTables();
     void productSaveAndFind();
+    void quick_items_roundtrip();
+    void sold_by_weight_persists();
+    void legacy_products_migration();
     void stockInvariantIsDerived();
     void saleInsertAndItems();
     void customerTransactionAndItems();
@@ -121,6 +125,210 @@ void DataLayerTest::productSaveAndFind()
     QCOMPARE(found->quantity, 0LL);
 
     QVERIFY(!repo.findByBarcode(QStringLiteral("9999999999999")).has_value());
+}
+
+void DataLayerTest::quick_items_roundtrip()
+{
+    data::ProductRepository repo(*m_db);
+
+    core::Product scanned;
+    scanned.barcode = QStringLiteral("123");
+    scanned.name = QStringLiteral("حليب");
+    QVERIFY(repo.save(scanned) > 0);
+
+    // Quick items carry no barcode, stored as NULL: UNIQUE would reject a
+    // second blank string but allows any number of NULLs.
+    core::Product bread;
+    bread.barcode = QString();  // null -> "no barcode"
+    bread.name = QStringLiteral("خبز");
+    const int breadId = repo.save(bread);
+    QVERIFY(breadId > 0);
+
+    core::Product water;
+    water.barcode = QString();
+    water.name = QStringLiteral("ماء");
+    const int waterId = repo.save(water);
+    QVERIFY(waterId > 0);
+
+    const auto quick = repo.findQuickItems();
+    QCOMPARE(quick.size(), std::size_t(2));
+    for (const auto& product : quick) {
+        QVERIFY(product.barcode.isNull());
+        QVERIFY(product.active);
+    }
+
+    // The barcoded product is not a quick item.
+    for (const auto& product : quick) {
+        QVERIFY(product.id != scanned.id);
+    }
+
+    const auto byName = repo.findQuickItemsByName(QStringLiteral("خبز"));
+    QCOMPARE(byName.size(), std::size_t(1));
+    QCOMPARE(byName.front().id, breadId);
+    QCOMPARE(byName.front().name, QStringLiteral("خبز"));
+
+    // A name that matches no quick item returns nothing.
+    QVERIFY(repo.findQuickItemsByName(QStringLiteral("حليب")).empty());
+
+    // A LIKE wildcard typed by the user is matched literally, not as a pattern.
+    QVERIFY(repo.findQuickItemsByName(QStringLiteral("%")).empty());
+
+    // Inactive quick items drop out of the listing.
+    repo.setActive(waterId, false);
+    QCOMPARE(repo.findQuickItems().size(), std::size_t(1));
+    QCOMPARE(repo.findQuickItems().front().id, breadId);
+}
+
+void DataLayerTest::sold_by_weight_persists()
+{
+    data::ProductRepository repo(*m_db);
+
+    core::Product product;
+    product.barcode = QStringLiteral("7788990011223");
+    product.name = QStringLiteral("لحم");
+    product.soldByWeight = true;
+    const int id = repo.save(product);
+    QVERIFY(id > 0);
+
+    const auto found = repo.findById(id);
+    QVERIFY(found.has_value());
+    QVERIFY(found->soldByWeight);
+
+    repo.setSoldByWeight(id, false);
+    const auto cleared = repo.findById(id);
+    QVERIFY(cleared.has_value());
+    QVERIFY(!cleared->soldByWeight);
+
+    repo.setSoldByWeight(id, true);
+    const auto restored = repo.findById(id);
+    QVERIFY(restored.has_value());
+    QVERIFY(restored->soldByWeight);
+
+    // Defaults to false for a product that never set it.
+    core::Product plain;
+    plain.barcode = QStringLiteral("5566778899001");
+    plain.name = QStringLiteral("أرز");
+    const int plainId = repo.save(plain);
+    QVERIFY(plainId > 0);
+    const auto plainFound = repo.findById(plainId);
+    QVERIFY(plainFound.has_value());
+    QVERIFY(!plainFound->soldByWeight);
+}
+
+// Every other test starts from a fresh schema, where products is already
+// nullable and only an ADD COLUMN is needed. This one seeds a database in the
+// pre-feature shape (barcode NOT NULL, no sold_by_weight) to cover the table
+// rebuild, the trigger swap and the row copy.
+void DataLayerTest::legacy_products_migration()
+{
+    const QString path = m_dir.filePath(QStringLiteral("legacy.sqlite"));
+    const QString connection = QStringLiteral("legacy_seed");
+    {
+        QSqlDatabase seed = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection);
+        seed.setDatabaseName(path);
+        QVERIFY(seed.open());
+        {
+            QSqlQuery create(seed);
+            // The old products table: barcode was mandatory.
+            QVERIFY(create.exec(QStringLiteral(
+                "CREATE TABLE products ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "barcode TEXT UNIQUE NOT NULL,"
+                "name TEXT NOT NULL,"
+                "cost_price_cents INTEGER NOT NULL DEFAULT 0,"
+                "sale_price_cents INTEGER NOT NULL DEFAULT 0,"
+                "quantity INTEGER NOT NULL DEFAULT 0,"
+                "unit TEXT NOT NULL DEFAULT '',"
+                "package_size INTEGER NOT NULL DEFAULT 1,"
+                "active INTEGER NOT NULL DEFAULT 1)")));
+            // A child table holding a foreign key, and the trigger that is
+            // declared on stock_movements but writes to products.
+            QVERIFY(create.exec(QStringLiteral(
+                "CREATE TABLE stock_movements ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "product_id INTEGER NOT NULL REFERENCES products(id),"
+                "delta INTEGER NOT NULL,"
+                "reason TEXT NOT NULL,"
+                "created_at TEXT NOT NULL,"
+                "reversed_id INTEGER NOT NULL DEFAULT 0)")));
+            QVERIFY(create.exec(QStringLiteral(
+                "CREATE TRIGGER trg_stock_after_insert AFTER INSERT ON stock_movements BEGIN "
+                "UPDATE products SET quantity = quantity + NEW.delta WHERE id = NEW.product_id; END")));
+            QVERIFY(create.exec(QStringLiteral(
+                "INSERT INTO products (id, barcode, name, quantity) VALUES (1, '111', 'قديم', 4)")));
+            QVERIFY(create.exec(QStringLiteral(
+                "INSERT INTO stock_movements (product_id, delta, reason, created_at) "
+                "VALUES (1, 3, 'opening', '2026-01-01')")));
+        }
+        seed.close();
+    }
+    QSqlDatabase::removeDatabase(connection);
+    QVERIFY(QFile::exists(path));
+
+    data::Database db(path);
+    QVERIFY2(db.lastError().isEmpty(), qPrintable(db.lastError()));
+
+    // The swap added the column and made barcode nullable, keeping the data.
+    bool hasWeightColumn = false;
+    {
+        QSqlQuery info(db.handle());
+        QVERIFY(info.exec(QStringLiteral("PRAGMA table_info(products)")));
+        while (info.next()) {
+            if (info.value(1).toString() == QStringLiteral("barcode")) {
+                QCOMPARE(info.value(3).toInt(), 0);
+            }
+            if (info.value(1).toString() == QStringLiteral("sold_by_weight")) {
+                hasWeightColumn = true;
+                QCOMPARE(info.value(3).toInt(), 1);
+            }
+        }
+    }
+    QVERIFY(hasWeightColumn);
+
+    data::ProductRepository repo(db);
+    const auto migrated = repo.findById(1);
+    QVERIFY(migrated.has_value());
+    QCOMPARE(migrated->barcode, QStringLiteral("111"));
+    QCOMPARE(migrated->name, QStringLiteral("قديم"));
+    QVERIFY(!migrated->soldByWeight);
+
+    // The trigger survived the swap and still drives the quantity.
+    repo.adjustStock(1, 2, QStringLiteral("restock"));
+    const auto restocked = repo.findById(1);
+    QVERIFY(restocked.has_value());
+    QCOMPARE(restocked->quantity, 9LL);
+
+    // Nothing dangles: the child table still resolves its foreign key.
+    {
+        QSqlQuery check(db.handle());
+        QVERIFY(check.exec(QStringLiteral("PRAGMA foreign_key_check")));
+        QVERIFY(!check.next());
+    }
+
+    // Quick items are finally insertable on the migrated database.
+    core::Product first;
+    first.barcode = QString();
+    first.name = QStringLiteral("خبز");
+    const int firstId = repo.save(first);
+    QVERIFY(firstId > 0);
+    core::Product second;
+    second.barcode = QString();
+    second.name = QStringLiteral("ماء");
+    const int secondId = repo.save(second);
+    QVERIFY(secondId > 0);
+    QCOMPARE(repo.findQuickItems().size(), std::size_t(2));
+
+    // Re-opening is idempotent: the migration sees the finished schema and
+    // leaves the data alone.
+    {
+        data::Database reopened(path);
+        QVERIFY2(reopened.lastError().isEmpty(), qPrintable(reopened.lastError()));
+        data::ProductRepository reopenedRepo(reopened);
+        const auto again = reopenedRepo.findById(1);
+        QVERIFY(again.has_value());
+        QCOMPARE(again->quantity, 9LL);
+        QCOMPARE(reopenedRepo.findQuickItems().size(), std::size_t(2));
+    }
 }
 
 void DataLayerTest::stockInvariantIsDerived()

@@ -543,6 +543,40 @@ QFrame#heroPanel {
     border-radius: 16px;
 }
 
+/* شريط المنتجات السريعة: بطاقات 140x100 داخل شريط أفقي */
+QWidget#quickItemsBar {
+    background: #292524;
+    border: 1px solid #44403c;
+    border-radius: 16px;
+}
+
+QWidget#quickItemsBar QFrame#quickCard {
+    background: #3f3a37;
+    border: 1px solid #44403c;
+    border-radius: 10px;
+}
+
+QWidget#quickItemsBar QFrame#quickCard:hover {
+    background: #431407;
+    border: 1px solid #fb923c;
+}
+
+QWidget#quickItemsBar QLabel#quickName {
+    color: #f5f5f4;
+    font-size: 13px;
+}
+
+QWidget#quickItemsBar QLabel#quickPrice {
+    color: #f5f5f4;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+QWidget#quickItemsBar QLabel#quickEmpty {
+    color: #78716c;
+    font-size: 14px;
+}
+
 QLabel#statIcon {
     background: #431407;
     border: 1px solid #431407;

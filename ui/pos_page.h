@@ -13,6 +13,8 @@ class QTableWidget;
 
 namespace app::ui {
 
+class QuickItemsBar;
+
 struct PosLine {
     int productId = 0;
     QString barcode;
@@ -45,6 +47,7 @@ public:
     void setEntryText(const QString& text);
     QTableWidget* table() const { return m_table; }
     QLineEdit* entryField() const { return m_entry; }
+    QuickItemsBar* quickItemsBar() const { return m_quickItems; }
 
 public slots:
     void addEntry();
@@ -68,6 +71,7 @@ private:
 
     app::data::Database& m_db;
     QVector<PosLine> m_lines;
+    QuickItemsBar* m_quickItems = nullptr;
     QLineEdit* m_entry;
     QPushButton* m_save;
     QTableWidget* m_table;

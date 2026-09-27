@@ -21,6 +21,7 @@
 #include "data/product_repository.h"
 #include "data/sale_service.h"
 #include "format_utils.h"
+#include "quick_items_bar.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
 #include "widgets/ui_helpers.h"
@@ -39,6 +40,11 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_sessionChip = makeChip(tr("الجلسة"), QStringLiteral("info"));
     header->addAction(m_sessionChip);
     root->addWidget(header);
+
+    // Quick items sit right above the barcode field: pick one with a click, or
+    // keep typing barcodes below.
+    m_quickItems = new QuickItemsBar(m_db, this);
+    root->addWidget(m_quickItems);
 
     m_entry = new QLineEdit;
     m_entry->setObjectName(QStringLiteral("searchField"));
@@ -120,6 +126,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
 
     refreshTotals();
     refreshSessionChip();
+    m_quickItems->refresh();
     m_entry->setFocus();
 }
 

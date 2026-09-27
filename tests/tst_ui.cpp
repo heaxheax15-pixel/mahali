@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QMouseEvent>
 #include <QTimer>
 #include <QPushButton>
 #include <QLabel>
@@ -52,6 +53,7 @@
 #include "ui/format_utils.h"
 #include "ui/pos_page.h"
 #include "ui/products_page.h"
+#include "ui/quick_items_bar.h"
 #include "ui/refunds_page.h"
 #include "ui/reports_page.h"
 #include "ui/sales_page.h"
@@ -86,6 +88,7 @@ private slots:
     void salesPageShowsToday();
     void profit_cents_survives_translation();
     void barcode_dialog_does_not_close();
+    void quick_items_bar_lists_products();
     void customerCreditAndPayment();
     void expensesAndDrawings();
     void reportBuilds();
@@ -672,6 +675,72 @@ void UiTest::barcode_dialog_does_not_close()
     QVERIFY2(barcodeHeldScan, "the barcode field lost the scanned digits");
     QVERIFY2(stillOpen, "Enter from the barcode scanner closed the product dialog");
     QVERIFY2(focusMovedToName, "Enter did not move focus from the barcode to the name field");
+}
+
+void UiTest::quick_items_bar_lists_products()
+{
+    const QString path = m_dir.filePath(QStringLiteral("quick-items.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product scanned;
+    scanned.barcode = QStringLiteral("6130000000009");
+    scanned.name = QStringLiteral("معجون");
+    scanned.salePriceCents = 10000;
+    QVERIFY(products.save(scanned) > 0);
+
+    core::Product bread;
+    bread.barcode = QString();  // null -> no barcode -> a quick item
+    bread.name = QStringLiteral("خبز شعير");
+    bread.salePriceCents = 2500;
+    const int breadId = products.save(bread);
+    QVERIFY(breadId > 0);
+
+    core::Product water;
+    water.barcode = QString();
+    water.name = QStringLiteral("ماء");
+    water.salePriceCents = 1500;
+    const int waterId = products.save(water);
+    QVERIFY(waterId > 0);
+
+    app::ui::QuickItemsBar bar(db);
+    bar.refresh();
+
+    // Only the two products without a barcode are listed.
+    QCOMPARE(bar.cardCount(), 2);
+    QVERIFY(!bar.isEmptyMessageVisible());
+
+    // Typing filters the strip down to the matching card.
+    bar.searchField()->setText(QStringLiteral("خبز"));
+    QCOMPARE(bar.cardCount(), 1);
+    QVERIFY(!bar.isEmptyMessageVisible());
+
+    // A search that matches nothing clears the strip and shows the message.
+    bar.searchField()->setText(QStringLiteral("شاي"));
+    QCOMPARE(bar.cardCount(), 0);
+    QVERIFY(bar.isEmptyMessageVisible());
+
+    // Clearing the search brings both cards back.
+    bar.searchField()->clear();
+    QCOMPARE(bar.cardCount(), 2);
+
+    // A click reports the product id, and nothing else: the cart is not wired
+    // up yet, so the bar must not touch the sale.
+    QSignalSpy clicks(&bar, &app::ui::QuickItemsBar::productClicked);
+    app::ui::QuickItemCard* card = bar.findChildren<app::ui::QuickItemCard*>().value(0);
+    QVERIFY(card);
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(5, 5), QPointF(5, 5), Qt::LeftButton, Qt::LeftButton,
+                      Qt::NoModifier);
+    QApplication::sendEvent(card, &press);
+    QCOMPARE(clicks.size(), 1);
+    QVERIFY(clicks.at(0).at(0).toInt() == breadId || clicks.at(0).at(0).toInt() == waterId);
+
+    // An inactive quick item drops out of the listing.
+    products.setActive(waterId, false);
+    bar.refresh();
+    QCOMPARE(bar.cardCount(), 1);
+    QCOMPARE(bar.findChildren<app::ui::QuickItemCard*>().value(0)->productId(), breadId);
 }
 
 void UiTest::customerCreditAndPayment()

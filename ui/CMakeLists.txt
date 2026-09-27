@@ -24,6 +24,8 @@ target_sources(mahali-ui PRIVATE
     server_controller.h
     pos_page.cpp
     pos_page.h
+    quick_items_bar.cpp
+    quick_items_bar.h
     cash_session_page.cpp
     cash_session_page.h
     sales_page.cpp

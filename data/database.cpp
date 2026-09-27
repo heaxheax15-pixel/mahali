@@ -1,5 +1,7 @@
 #include "database.h"
 
+#include <QPair>
+
 #include <QCryptographicHash>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -51,6 +53,138 @@ void migrateUsersTable(const QSqlDatabase& db)
         QSqlQuery alter(db);
         alter.exec(statement);
     }
+}
+
+// Reports whether `column` of `table` is declared NOT NULL. PRAGMA table_info
+// rows are (cid, name, type, notnull, dflt_value, pk).
+bool columnIsNotNull(const QSqlDatabase& db, const QString& table, const QString& column)
+{
+    QSqlQuery query(db);
+    if (!query.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table))) {
+        return false;
+    }
+    while (query.next()) {
+        if (query.value(1).toString() == column) {
+            return query.value(3).toInt() != 0;
+        }
+    }
+    return false;
+}
+
+// Idempotent, runs on every open. Two upgrades for products:
+//  1. sold_by_weight, a plain ADD COLUMN (SQLite forbids expression defaults in
+//     ALTER, but a literal 0 is fine).
+//  2. barcode becomes nullable so several quick items can share "no barcode".
+//     UNIQUE still permits only one '' and any number of NULLs, so quick items
+//     are stored as NULL. SQLite cannot drop NOT NULL in place, so the table is
+//     rebuilt following the documented 12-step ALTER procedure.
+//
+// The rebuild is not a plain rename dance: trg_stock_after_insert is declared on
+// stock_movements yet its body writes to products, so DROP TABLE products leaves
+// it dangling and the following RENAME fails with "no such table: main.products".
+// Every trigger is therefore snapshotted and recreated around the swap.
+//
+// Returns an empty string on success, otherwise the failing statement.
+QString migrateProductsTable(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("products"));
+    if (columns.isEmpty()) {
+        return QString();
+    }
+
+    const bool barcodeNullable = !columnIsNotNull(db, QStringLiteral("products"), QStringLiteral("barcode"));
+    const bool hasWeightColumn = columns.contains(QStringLiteral("sold_by_weight"));
+    if (barcodeNullable && hasWeightColumn) {
+        return QString();
+    }
+
+    // ADD COLUMN covers the common case: barcode is already nullable and only
+    // sold_by_weight is missing.
+    if (barcodeNullable) {
+        QSqlQuery alter(db);
+        if (alter.exec(QStringLiteral(
+                "ALTER TABLE products ADD COLUMN sold_by_weight INTEGER NOT NULL DEFAULT 0"))) {
+            return QString();
+        }
+        return alter.lastError().text();
+    }
+
+    // Triggers that touch the table, wherever they are declared. Saved, dropped
+    // before the swap and replayed after it: a trigger left in place would be
+    // re-parsed by RENAME and fail against the half-swapped schema.
+    QList<QPair<QString, QString>> triggers;
+    {
+        QSqlQuery query(db);
+        if (query.exec(QStringLiteral(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND sql IS NOT NULL "
+                "AND (tbl_name IN ('products', 'stock_movements', 'sale_items', "
+                "'customer_transaction_items') OR sql LIKE '%products%')"))) {
+            while (query.next()) {
+                triggers.append(qMakePair(query.value(0).toString(), query.value(1).toString()));
+            }
+        }
+    }
+
+    QSqlQuery pragma(db);
+    pragma.exec(QStringLiteral("PRAGMA foreign_keys = OFF"));
+
+    QStringList statements = {
+        QStringLiteral("BEGIN"),
+    };
+    for (const auto& trigger : triggers) {
+        statements << QStringLiteral("DROP TRIGGER IF EXISTS %1").arg(trigger.first);
+    }
+    statements
+        << QStringLiteral(
+               "CREATE TABLE products_migrated ("
+               "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+               "barcode TEXT UNIQUE,"
+               "name TEXT NOT NULL,"
+               "cost_price_cents INTEGER NOT NULL DEFAULT 0,"
+               "sale_price_cents INTEGER NOT NULL DEFAULT 0,"
+               "quantity INTEGER NOT NULL DEFAULT 0,"
+               "unit TEXT NOT NULL DEFAULT '',"
+               "package_size INTEGER NOT NULL DEFAULT 1,"
+               "active INTEGER NOT NULL DEFAULT 1,"
+               "sold_by_weight INTEGER NOT NULL DEFAULT 0)")
+        // A blank barcode becomes NULL so that quick items stop colliding on
+        // the UNIQUE index; real barcodes are copied through untouched.
+        << QStringLiteral(
+               "INSERT INTO products_migrated "
+               "(id, barcode, name, cost_price_cents, sale_price_cents, quantity, unit, "
+               " package_size, active, sold_by_weight) "
+               "SELECT id, CASE WHEN TRIM(barcode) = '' THEN NULL ELSE barcode END, "
+               " name, cost_price_cents, sale_price_cents, quantity, unit, package_size, active, 0 "
+               "FROM products")
+        << QStringLiteral("DROP TABLE products")
+        << QStringLiteral("ALTER TABLE products_migrated RENAME TO products")
+        << QStringLiteral("COMMIT");
+
+    QString error;
+    for (const QString& statement : statements) {
+        QSqlQuery step(db);
+        if (!step.exec(statement)) {
+            error = QStringLiteral("%1: %2").arg(statement.left(48), step.lastError().text());
+            QSqlQuery rollback(db);
+            rollback.exec(QStringLiteral("ROLLBACK"));
+            break;
+        }
+    }
+
+    if (error.isEmpty()) {
+        for (const auto& trigger : triggers) {
+            QSqlQuery recreate(db);
+            if (!recreate.exec(trigger.second)) {
+                error = QStringLiteral("recreate trigger %1: %2")
+                            .arg(trigger.first, recreate.lastError().text());
+                break;
+            }
+        }
+    }
+
+    QSqlQuery restore(db);
+    restore.exec(QStringLiteral("PRAGMA foreign_keys = ON"));
+    return error;
 }
 
 } // namespace
@@ -138,14 +272,15 @@ void Database::createSchema()
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS products ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "barcode TEXT UNIQUE NOT NULL,"
+            "barcode TEXT UNIQUE,"
             "name TEXT NOT NULL,"
             "cost_price_cents INTEGER NOT NULL DEFAULT 0,"
             "sale_price_cents INTEGER NOT NULL DEFAULT 0,"
             "quantity INTEGER NOT NULL DEFAULT 0,"
             "unit TEXT NOT NULL DEFAULT '',"
             "package_size INTEGER NOT NULL DEFAULT 1,"
-            "active INTEGER NOT NULL DEFAULT 1);"),
+            "active INTEGER NOT NULL DEFAULT 1,"
+            "sold_by_weight INTEGER NOT NULL DEFAULT 0);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS sales ("
@@ -356,6 +491,10 @@ void Database::createSchema()
     }
 
     migrateUsersTable(m_db);
+    const QString productsError = migrateProductsTable(m_db);
+    if (!productsError.isEmpty()) {
+        m_lastError = QStringLiteral("products migration failed: %1").arg(productsError);
+    }
 }
 
 bool Database::execStatements(const QStringList& statements, const QString& source)
