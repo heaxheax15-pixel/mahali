@@ -32,6 +32,13 @@
 
 using namespace app;
 
+// The window the reversal tests read back. One hour either side of startup,
+// wide enough to cover the whole run: the suite shares a single database, so a
+// test cannot assume it is looking at an empty ledger and has to count relative
+// to what is already there.
+const QDateTime g_reversalWindowFrom = QDateTime::currentDateTime().addSecs(-3600);
+const QDateTime g_reversalWindowTo = QDateTime::currentDateTime().addSecs(3600);
+
 class DataLayerTest : public QObject
 {
     Q_OBJECT
@@ -49,6 +56,11 @@ private slots:
     void paymentInsert();
     void supplierTransactionInsert();
     void expenseAndDrawingInsert();
+    void reverse_expense_returns_true_on_success();
+    void reverse_expense_returns_false_on_missing();
+    void reverse_expense_refuses_a_second_reversal();
+    void reverse_owner_drawing_returns_false_on_missing();
+    void reverse_owner_drawing_returns_true_on_success();
     void cashSessionLifecycle();
     void settingsRoundTrip();
     void appendOnlyGuard();
@@ -495,6 +507,125 @@ void DataLayerTest::expenseAndDrawingInsert()
     drawing.amountCents = 20000;
     const int drawingId = drawingRepo.insert(drawing);
     QVERIFY(drawingId > 0);
+}
+
+void DataLayerTest::reverse_expense_returns_true_on_success()
+{
+    data::ExpenseRepository expenseRepo(*m_db);
+
+    core::Expense expense;
+    expense.label = QStringLiteral("كهرباء");
+    expense.amountCents = 5000;
+    const int expenseId = expenseRepo.insert(expense);
+    QVERIFY(expenseId > 0);
+
+    // The table is shared with the rest of the suite, so this counts relative to
+    // what is already there rather than assuming an empty ledger.
+    const int before = expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size();
+
+    // The whole point of the bool: a caller that ignored it had no way to tell a
+    // written reversal from a silently dropped one.
+    QVERIFY(expenseRepo.reverse(expenseId));
+
+    const auto all = expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo);
+    QCOMPARE(all.size(), before + 1);
+
+    // The mirrored row: same label, opposite sign, pointing back at the original.
+    const core::Expense* mirrored = nullptr;
+    for (const core::Expense& row : all) {
+        if (row.reversedId == expenseId) {
+            mirrored = &row;
+        }
+    }
+    QVERIFY2(mirrored != nullptr, "no mirrored row was written");
+    QCOMPARE(mirrored->amountCents, -5000LL);
+    QCOMPARE(mirrored->label, expense.label);
+
+    // The original keeps its own amount: a reversal adds a row, it does not
+    // rewrite history.
+    const auto original = expenseRepo.findById(expenseId);
+    QVERIFY(original.has_value());
+    QCOMPARE(original->amountCents, 5000LL);
+}
+
+void DataLayerTest::reverse_expense_returns_false_on_missing()
+{
+    data::ExpenseRepository expenseRepo(*m_db);
+
+    const int before = expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size();
+    // 99999 is not a row anyone inserted: the old void signature returned here
+    // with no signal at all, and the caller went on to report success.
+    QVERIFY(!expenseRepo.reverse(99999));
+    QCOMPARE(expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), before);
+}
+
+void DataLayerTest::reverse_expense_refuses_a_second_reversal()
+{
+    data::ExpenseRepository expenseRepo(*m_db);
+
+    core::Expense expense;
+    expense.label = QStringLiteral("ماء");
+    expense.amountCents = 3000;
+    const int expenseId = expenseRepo.insert(expense);
+    QVERIFY(expenseId > 0);
+
+    const int before = expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size();
+    QVERIFY(expenseRepo.reverse(expenseId));
+    QCOMPARE(expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), before + 1);
+
+    // Reversing the same entry twice used to succeed and write a second mirrored
+    // row, which returned the money to the till twice.
+    QVERIFY(!expenseRepo.reverse(expenseId));
+    QCOMPARE(expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), before + 1);
+
+    // And the mirrored row cannot itself be reversed: that would cancel the
+    // cancellation.
+    const auto all = expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo);
+    int mirroredId = 0;
+    for (const core::Expense& row : all) {
+        if (row.reversedId == expenseId) {
+            mirroredId = row.id;
+        }
+    }
+    QVERIFY(mirroredId != 0);
+    QVERIFY(!expenseRepo.reverse(mirroredId));
+    QCOMPARE(expenseRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), before + 1);
+}
+
+void DataLayerTest::reverse_owner_drawing_returns_true_on_success()
+{
+    data::OwnerDrawingRepository drawingRepo(*m_db);
+
+    core::OwnerDrawing drawing;
+    drawing.note = QStringLiteral("سحب شخصي");
+    drawing.amountCents = 20000;
+    const int drawingId = drawingRepo.insert(drawing);
+    QVERIFY(drawingId > 0);
+
+    const int before = drawingRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size();
+    QVERIFY(drawingRepo.reverse(drawingId));
+
+    const auto all = drawingRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo);
+    QCOMPARE(all.size(), before + 1);
+
+    const core::OwnerDrawing* mirrored = nullptr;
+    for (const core::OwnerDrawing& row : all) {
+        if (row.reversedId == drawingId) {
+            mirrored = &row;
+        }
+    }
+    QVERIFY2(mirrored != nullptr, "no mirrored row was written");
+    QCOMPARE(mirrored->amountCents, -20000LL);
+    QCOMPARE(mirrored->note, drawing.note);
+}
+
+void DataLayerTest::reverse_owner_drawing_returns_false_on_missing()
+{
+    data::OwnerDrawingRepository drawingRepo(*m_db);
+
+    const int before = drawingRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size();
+    QVERIFY(!drawingRepo.reverse(99999));
+    QCOMPARE(drawingRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), before);
 }
 
 void DataLayerTest::cashSessionLifecycle()

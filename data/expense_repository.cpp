@@ -73,18 +73,40 @@ int ExpenseRepository::insert(const core::Expense& expense)
     return query.lastInsertId().toInt();
 }
 
-void ExpenseRepository::reverse(int originalExpenseId)
+bool ExpenseRepository::reverse(int originalExpenseId)
 {
     const std::optional<core::Expense> original = findById(originalExpenseId);
     if (!original.has_value()) {
-        return;
+        return false;
     }
+    // A reversal carries the id of what it cancels, so reversing one would
+    // cancel the cancellation. The service also refuses these on the amount
+    // sign, but the repository refuses them on their own account rather than
+    // relying on every caller to check.
+    if (original->reversedId != 0 || original->amountCents <= 0) {
+        return false;
+    }
+
+    // Nothing stops the same entry being reversed twice, and reversed_id has
+    // no unique index, so the guard has to be a lookup. Without it a second
+    // click writes a second mirrored row and returns the money to the till
+    // twice.
+    QSqlQuery existing(m_db.handle());
+    existing.prepare(QStringLiteral("SELECT 1 FROM expenses WHERE reversed_id = ? LIMIT 1"));
+    existing.addBindValue(originalExpenseId);
+    if (!existing.exec()) {
+        return false;
+    }
+    if (existing.next()) {
+        return false;
+    }
+
     core::Expense reversal;
     reversal.createdAt = QDateTime::currentDateTime();
     reversal.label = original->label;
     reversal.amountCents = -original->amountCents;
     reversal.reversedId = originalExpenseId;
-    insert(reversal);
+    return insert(reversal) > 0;
 }
 
 } // namespace app::data

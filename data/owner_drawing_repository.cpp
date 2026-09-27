@@ -74,18 +74,39 @@ int OwnerDrawingRepository::insert(const core::OwnerDrawing& drawing)
     return query.lastInsertId().toInt();
 }
 
-void OwnerDrawingRepository::reverse(int originalDrawingId)
+bool OwnerDrawingRepository::reverse(int originalDrawingId)
 {
     const std::optional<core::OwnerDrawing> original = findById(originalDrawingId);
     if (!original.has_value()) {
-        return;
+        return false;
     }
+    // A reversal carries the id of what it cancels, so reversing one would
+    // cancel the cancellation. The service also refuses these on the amount
+    // sign, but the repository refuses them on their own account rather than
+    // relying on every caller to check.
+    if (original->reversedId != 0 || original->amountCents <= 0) {
+        return false;
+    }
+
+    // Nothing stops the same entry being reversed twice, and reversed_id has
+    // no unique index, so the guard has to be a lookup. Without it a second
+    // click writes a second mirrored row and pays the owner twice.
+    QSqlQuery existing(m_db.handle());
+    existing.prepare(QStringLiteral("SELECT 1 FROM owner_drawings WHERE reversed_id = ? LIMIT 1"));
+    existing.addBindValue(originalDrawingId);
+    if (!existing.exec()) {
+        return false;
+    }
+    if (existing.next()) {
+        return false;
+    }
+
     core::OwnerDrawing reversal;
     reversal.createdAt = QDateTime::currentDateTime();
     reversal.amountCents = -original->amountCents;
     reversal.note = original->note;
     reversal.reversedId = originalDrawingId;
-    insert(reversal);
+    return insert(reversal) > 0;
 }
 
 } // namespace app::data

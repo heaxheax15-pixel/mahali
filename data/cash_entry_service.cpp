@@ -163,7 +163,16 @@ CashEntryResult CashEntryService::reverseExpense(int expenseId, int cashSessionI
         return result;
     }
 
-    expenses.reverse(expenseId);
+    // The mirrored row is written inside this transaction, not one of its own:
+    // if it fails, the till must not gain the money, so the whole reversal goes
+    // and the caller is told why.
+    if (!expenses.reverse(expenseId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the expense could not be reversed")
+            : m_db.lastError();
+        return result;
+    }
 
     core::CashMovement movement;
     movement.sessionId = sessionId;
@@ -212,7 +221,15 @@ CashEntryResult CashEntryService::reverseDrawing(int drawingId, int cashSessionI
         return result;
     }
 
-    drawings.reverse(drawingId);
+    // Same as the expense above: the mirrored row and the cash movement are
+    // one atomic change, and a failed reversal must leave no trace of it.
+    if (!drawings.reverse(drawingId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the drawing could not be reversed")
+            : m_db.lastError();
+        return result;
+    }
 
     core::CashMovement movement;
     movement.sessionId = sessionId;
