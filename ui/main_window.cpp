@@ -4,6 +4,7 @@
 #include <QGuiApplication>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
@@ -58,14 +59,7 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     setMinimumSize(900, 600);
 
-    QIcon windowIcon;
-    windowIcon.addFile(QStringLiteral(":/mahali/icons/app-512.png"), QSize(512, 512));
-    windowIcon.addFile(QStringLiteral(":/mahali/icons/app-256.png"), QSize(256, 256));
-    windowIcon.addFile(QStringLiteral(":/mahali/icons/app-128.png"), QSize(128, 128));
-    windowIcon.addFile(QStringLiteral(":/mahali/icons/app-64.png"), QSize(64, 64));
-    windowIcon.addFile(QStringLiteral(":/mahali/icons/app-48.png"), QSize(48, 48));
-    windowIcon.addFile(QStringLiteral(":/mahali/icons/app-32.png"), QSize(32, 32));
-    setWindowIcon(windowIcon);
+    setWindowIcon(QIcon(QStringLiteral(":/mahali/icons/app.ico")));
 
     m_nav = new QListWidget;
     m_nav->setObjectName(QStringLiteral("nav"));

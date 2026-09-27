@@ -32,9 +32,12 @@ jobs:
           $exe = Get-ChildItem -Recurse -Filter "mahali-desktop.exe" build | Select-Object -First 1
           Copy-Item $exe.FullName dist\
           windeployqt --release "dist\mahali-desktop.exe"
+          copy apps\desktop\mahali-green.ico dist\
+          copy packaging\Installer.bat dist\
+          copy packaging\CreateShortcut.ps1 dist\
       - name: Zip
-        run: Compress-Archive -Path dist\* -DestinationPath mahali-msvc.zip
+        run: Compress-Archive -Path dist\* -DestinationPath Mahali-Setup.zip
       - uses: actions/upload-artifact@v4
         with:
           name: mahali-msvc
-          path: mahali-msvc.zip
+          path: Mahali-Setup.zip

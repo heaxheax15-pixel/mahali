@@ -3,12 +3,11 @@
   <qresource prefix="/mahali">
     <file alias="themes/light.qss">themes/light.qss</file>
     <file alias="themes/dark.qss">themes/dark.qss</file>
-    <file alias="icons/app-32.png">icons/app-32.png</file>
-    <file alias="icons/app-48.png">icons/app-48.png</file>
-    <file alias="icons/app-64.png">icons/app-64.png</file>
-    <file alias="icons/app-128.png">icons/app-128.png</file>
-    <file alias="icons/app-256.png">icons/app-256.png</file>
-    <file alias="icons/app-512.png">icons/app-512.png</file>
-    <file alias="icons/app.ico">icons/mahali.ico</file>
+    <!-- The application icon, shared with the Windows resource script. The
+         previous entry pointed at icons/mahali.ico under this same alias, so it
+         was replaced rather than added: rcc rejects a duplicate alias. The PNG
+         size set that used to sit next to it is gone: the .ico carries all six
+         sizes on its own, so the window icon loads from this one entry. -->
+    <file alias="icons/app.ico">../../apps/desktop/mahali-orange.ico</file>
   </qresource>
 </RCC>

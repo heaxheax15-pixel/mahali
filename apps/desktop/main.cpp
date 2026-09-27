@@ -30,14 +30,9 @@ int main(int argc, char* argv[])
     app.setOrganizationName(QStringLiteral("mahali"));
     app.setApplicationVersion(QStringLiteral(MAHALI_VERSION));
 
-    QIcon appIcon;
-    appIcon.addFile(QStringLiteral(":/mahali/icons/app-512.png"), QSize(512, 512));
-    appIcon.addFile(QStringLiteral(":/mahali/icons/app-256.png"), QSize(256, 256));
-    appIcon.addFile(QStringLiteral(":/mahali/icons/app-128.png"), QSize(128, 128));
-    appIcon.addFile(QStringLiteral(":/mahali/icons/app-64.png"), QSize(64, 64));
-    appIcon.addFile(QStringLiteral(":/mahali/icons/app-48.png"), QSize(48, 48));
-    appIcon.addFile(QStringLiteral(":/mahali/icons/app-32.png"), QSize(32, 32));
-    app.setWindowIcon(appIcon);
+    // The taskbar and window icon come from mahali.rc on Windows; this is the
+    // in-app icon for every other platform and for the window's own icon.
+    app.setWindowIcon(QIcon(QStringLiteral(":/mahali/icons/app.ico")));
 
     QString dbPath;
     if (argc > 1) {

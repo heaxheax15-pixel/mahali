@@ -9,6 +9,22 @@ target_compile_definitions(mahali-desktop
     PRIVATE
         MAHALI_VERSION="${PROJECT_VERSION}")
 
+# Windows-only packaging bits: the taskbar/window icon and the exe metadata come
+# from mahali.rc, which the RC compiler embeds into the binary. mahali-orange.ico
+# is resolved relative to mahali.rc, so both files must stay side by side.
+# WIN32_EXECUTABLE links the GUI subsystem so no console window appears; that
+# changes the entry point to wWinMain, which only exists in Qt's WinMain
+# library, hence the extra MSVC link.
+if(WIN32)
+    set_target_properties(mahali-desktop PROPERTIES
+        WIN32_EXECUTABLE TRUE
+        OUTPUT_NAME "mahali-desktop")
+    target_sources(mahali-desktop PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/mahali.rc")
+    if(MSVC)
+        target_link_libraries(mahali-desktop PRIVATE Qt${QT_VERSION_MAJOR}::WinMain)
+    endif()
+endif()
+
 # Classic lrelease pipeline (the Qt6LinguistTools package that provides
 # qt_add_translations is not always installed). Each .ts is compiled to a .qm
 # and the results are embedded under the /i18n resource prefix, so the
