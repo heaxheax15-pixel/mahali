@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFrame>
 #include <QMouseEvent>
 #include <QTimer>
 #include <QPushButton>
@@ -22,6 +23,7 @@
 
 #include "core/session.h"
 #include "core/sync_operation.h"
+#include "core/update_checker.h"
 #include "data/admin_secret_repository.h"
 #include "data/applied_op_repository.h"
 #include "data/audit_log_repository.h"
@@ -93,6 +95,8 @@ private slots:
     void expensesAndDrawings();
     void reportBuilds();
     void settingsCurrencyAndZakat();
+    void update_bar_hidden_by_default();
+    void update_bar_appears_on_signal();
     void refundsRestoreMoneyAndStock();
     void paymentRefundRaisesBalance();
     void entryReversal();
@@ -975,6 +979,76 @@ void UiTest::settingsCurrencyAndZakat()
     QCOMPARE(report.zakatCents, 0LL);
 
     app::ui::setCurrencySymbol(QString());
+}
+
+void UiTest::update_bar_hidden_by_default()
+{
+    const QString path = m_dir.filePath(QStringLiteral("updatebar.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    ui::ServerController controller(db, m_key);
+
+    ui::MainWindow window(db, controller);
+    window.show();
+
+    // The bar is built on demand, the first time a newer release is reported.
+    // A fresh window must not carry one, or the notice would sit there
+    // permanently on any build that happened to be older than the latest tag.
+    QFrame* bar = window.findChild<QFrame*>(QStringLiteral("updateBar"));
+    QVERIFY2(bar == nullptr, "update bar must not exist before a release is newer");
+
+    // The check itself is deferred 5s past construction, so nothing should have
+    // reached the network by the time this test ends and the window dies.
+}
+
+void UiTest::update_bar_appears_on_signal()
+{
+    const QString path = m_dir.filePath(QStringLiteral("updatebar_signal.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    ui::ServerController controller(db, m_key);
+
+    ui::MainWindow window(db, controller);
+    window.show();
+    QCoreApplication::processEvents();
+
+    QVERIFY(window.findChild<QFrame*>(QStringLiteral("updateBar")) == nullptr);
+
+    // No accessor and no friend declaration: the checker is a QObject child of
+    // the window, so it is reachable by name, and a signal is invocable through
+    // the meta-object exactly like a slot. This is the same signal a real
+    // GitHub reply produces — the v9.9.9 tag is only ever greater than the
+    // built 1.0.0, so the comparison in the checker is not bypassed.
+    auto* checker = window.findChild<core::UpdateChecker*>();
+    QVERIFY(checker != nullptr);
+
+    const QString tag = QStringLiteral("v9.9.9");
+    const bool fired = QMetaObject::invokeMethod(
+        checker, "updateAvailable", Qt::DirectConnection,
+        Q_ARG(QString, tag), Q_ARG(QString, QStringLiteral("test notes")));
+    QVERIFY2(fired, "could not fire updateAvailable on the checker");
+    QCoreApplication::processEvents();
+
+    QFrame* bar = window.findChild<QFrame*>(QStringLiteral("updateBar"));
+    QVERIFY2(bar != nullptr, "the bar was not built when a newer release arrived");
+    QVERIFY(bar->isVisible());
+
+    bool tagShown = false;
+    for (QLabel* label : bar->findChildren<QLabel*>()) {
+        if (label->text().contains(tag)) {
+            tagShown = true;
+        }
+    }
+    QVERIFY2(tagShown, "no label in the bar mentions the new tag");
+
+    // Found by object name, not by its Arabic text: the label goes through
+    // tr(), so its string is not a stable identity once translations land.
+    QPushButton* later = bar->findChild<QPushButton*>(QStringLiteral("ghost"));
+    QVERIFY2(later != nullptr, "the dismiss button is missing from the bar");
+
+    later->click();
+    QCoreApplication::processEvents();
+    QVERIFY2(!bar->isVisible(), "the bar stayed up after the dismiss button");
 }
 
 void UiTest::refundsRestoreMoneyAndStock()

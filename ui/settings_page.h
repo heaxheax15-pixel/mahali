@@ -10,6 +10,10 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 
+namespace app::core {
+class UpdateChecker;
+}
+
 namespace app::ui {
 
 // Shop settings (الإعدادات): name, currency symbol used by formatMoney, zakat
@@ -37,7 +41,13 @@ public:
 public slots:
     void save();
 
+private slots:
+    // Manual update check, reported to the user rather than logged.
+    void checkForUpdates();
+
 private:
+    void finishUpdateCheck(app::core::UpdateChecker* checker);
+
     app::data::Database& m_db;
     QLineEdit* m_shopName;
     QLineEdit* m_currency;
@@ -46,6 +56,7 @@ private:
     QComboBox* m_theme;
     QComboBox* m_language;
     QPushButton* m_save;
+    QPushButton* m_checkUpdates = nullptr;
     QLabel* m_preview;
     QLabel* m_notice;
 };

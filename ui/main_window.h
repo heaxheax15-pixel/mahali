@@ -7,8 +7,15 @@
 
 class QLabel;
 class QListWidget;
+class QFrame;
 class QPropertyAnimation;
+class QPushButton;
 class QStackedWidget;
+
+namespace app::core {
+class UpdateChecker;
+class UpdateDownloader;
+}
 
 namespace app::ui {
 
@@ -50,13 +57,38 @@ private slots:
     void onSwitchUserClicked();
     void rebuildNav();
 
+    // Update signals. Only updateAvailable touches the UI: a check that finds
+    // nothing new, or that cannot reach GitHub, is logged and otherwise
+    // ignored — an update notice must never interrupt the shop's work.
+    void onUpdateAvailable(const QString& tag, const QString& notes);
+    void onUpdateUpToDate();
+    void onUpdateFailed(const QString& reason);
+
+    // The download behind the bar's "تنزيل" button, and the batch script that
+    // unpacks it once the app has quit.
+    void onUpdateDownloadClicked();
+    void onUpdateDownloadProgress(int percent);
+    void onUpdateDownloadFinished(const QString& path);
+    void onUpdateDownloadFailed(const QString& reason);
+    void onRestartToInstall();
+
 private:
     void buildNavForRole(const QString& role);
+    void showUpdateBar(const QString& tag);
 
     app::data::Database& m_db;
     ServerController& m_controller;
     QListWidget* m_nav;
     QStackedWidget* m_pages;
+    // Created lazily, on the first newer release, so the app opens with no bar
+    // at all rather than an empty one.
+    QFrame* m_updateBar = nullptr;
+    app::core::UpdateChecker* m_updateChecker;
+    app::core::UpdateDownloader* m_updateDownloader;
+    // Both live inside the bar; kept so the download handlers can drive the
+    // button they belong to without hunting for it.
+    QPushButton* m_updateDownloadBtn = nullptr;
+    QPushButton* m_updateRestartBtn = nullptr;
     QLabel* m_statusLabel;
     QLabel* m_userLabel = nullptr;
     QPropertyAnimation* m_fade = nullptr;

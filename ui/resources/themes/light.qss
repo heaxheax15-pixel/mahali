@@ -668,3 +668,31 @@ QScrollBar::sub-line {
     height: 0;
     width: 0;
 }
+
+/* ---------- 9. شريط التحديث ---------- */
+/* Created lazily, only when a newer release exists, and spans the full width
+   above the sidebar. It carries its own colours so it reads as a notice
+   rather than as part of the page behind it. */
+QFrame#updateBar {
+    background: #ffedd5;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+QFrame#updateBar QLabel {
+    color: #ea580c;
+    font-weight: 700;
+}
+
+/* Same surface as the secondary buttons, so "لاحقًا" does not compete with
+   the primary "تنزيل" next to it. */
+QPushButton#ghost {
+    background: #ffffff;
+    color: #1c1917;
+    border-color: #e7e5e4;
+}
+
+QPushButton#ghost:hover {
+    background: #f5f5f4;
+    border-color: #e7e5e4;
+}

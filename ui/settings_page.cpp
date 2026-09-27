@@ -13,6 +13,7 @@
 #include <QVBoxLayout>
 
 #include "core/i18n.h"
+#include "core/update_checker.h"
 #include "data/setting_repository.h"
 #include "data/zakat_setting_repository.h"
 #include "format_utils.h"
@@ -64,6 +65,10 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     form->addRow(tr("اللغة:"), m_language);
     form->addRow(tr("مفتاح المزامنة (يتطلب إعادة تشغيل):"), m_syncKey);
 
+    m_checkUpdates = new QPushButton(tr("Vérifier les mises à jour"));
+    m_checkUpdates->setObjectName(QStringLiteral("secondary"));
+    m_checkUpdates->setCursor(Qt::PointingHandCursor);
+
     auto* card = makeCard();
     auto* cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(16, 14, 16, 16);
@@ -71,6 +76,7 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     cardLayout->addLayout(form);
     cardLayout->addWidget(m_preview);
     cardLayout->addWidget(m_save);
+    cardLayout->addWidget(m_checkUpdates);
     cardLayout->addWidget(m_notice);
 
     auto* root = new QVBoxLayout(this);
@@ -106,8 +112,46 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
             });
 
     connect(m_save, &QPushButton::clicked, this, &SettingsPage::save);
+    connect(m_checkUpdates, &QPushButton::clicked, this, &SettingsPage::checkForUpdates);
 
     refresh();
+}
+
+// A manual check, unlike the startup one, reports its result: the user asked,
+// so an answer — even a failure — is owed. The checker is parented to the page
+// and simply dies with it once the answer is in.
+void SettingsPage::checkForUpdates()
+{
+    m_checkUpdates->setEnabled(false);
+    m_checkUpdates->setText(tr("جارٍ التحقق..."));
+
+    auto* checker = new core::UpdateChecker(this);
+    connect(checker, &core::UpdateChecker::updateAvailable, this,
+            [this, checker](const QString& tag, const QString& notes) {
+                Q_UNUSED(notes);
+                QMessageBox::information(
+                    this, tr("تحديث متاح"),
+                    tr("الإصدار %1 متاح. افتح Mahali من جديد لاحقًا لتثبيته.").arg(tag));
+                finishUpdateCheck(checker);
+            });
+    connect(checker, &core::UpdateChecker::upToDate, this, [this, checker]() {
+        QMessageBox::information(this, tr("التحديث"), tr("أنت تستخدم أحدث إصدار."));
+        finishUpdateCheck(checker);
+    });
+    connect(checker, &core::UpdateChecker::checkFailed, this, [this, checker](const QString& reason) {
+        Q_UNUSED(reason);
+        QMessageBox::warning(this, tr("التحديث"), tr("تعذّر الاتصال. تحقق من الإنترنت."));
+        finishUpdateCheck(checker);
+    });
+
+    checker->check();
+}
+
+void SettingsPage::finishUpdateCheck(core::UpdateChecker* checker)
+{
+    m_checkUpdates->setEnabled(true);
+    m_checkUpdates->setText(tr("Vérifier les mises à jour"));
+    checker->deleteLater();
 }
 
 void SettingsPage::refresh()

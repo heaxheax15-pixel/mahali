@@ -9,7 +9,17 @@ target_include_directories(mahali-core
 
 target_link_libraries(mahali-core
     PUBLIC
-        Qt${QT_VERSION_MAJOR}::Core)
+        Qt${QT_VERSION_MAJOR}::Core
+        # UpdateChecker talks to the GitHub releases API. Network is not a GUI
+        # dependency, so the "no Qt GUI" rule above still holds.
+        Qt${QT_VERSION_MAJOR}::Network)
+
+# The version this binary was built with. PUBLIC so everything linking
+# mahali-core (including the tests) compiles against the same string, and so
+# currentVersion() can never disagree with what the app reports.
+target_compile_definitions(mahali-core
+    PUBLIC
+        MAHALI_VERSION="${PROJECT_VERSION}")
 
 target_sources(mahali-core PRIVATE
     applied_op.h
@@ -40,7 +50,15 @@ target_sources(mahali-core PRIVATE
     sync_operation_codec.cpp
     sync_operation_codec.h
     sync_outbox_entry.h
+    update_checker.cpp
+    update_checker.h
+    update_downloader.cpp
+    update_downloader.h
+    update_installer.cpp
+    update_installer.h
     user.h
+    version.cpp
+    version.h
     zakat_calculator.cpp
     zakat_calculator.h
     zakat_setting.h)

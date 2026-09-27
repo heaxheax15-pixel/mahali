@@ -1,6 +1,12 @@
 #include "main_window.h"
 
 #include <QApplication>
+#include <QCoreApplication>
+#include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QFrame>
 #include <QGuiApplication>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
@@ -8,6 +14,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QProcess>
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScreen>
@@ -20,6 +27,9 @@
 #include <memory>
 
 #include "core/session.h"
+#include "core/update_checker.h"
+#include "core/update_downloader.h"
+#include "core/update_installer.h"
 #include "audit_log_page.h"
 #include "cash_session_page.h"
 #include "customers_page.h"
@@ -144,11 +154,18 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_pages->addWidget(m_usersPage);
 
     auto* central = new QWidget;
-    auto* layout = new QHBoxLayout(central);
+    // The root is vertical: the update bar, when it exists, is a banner across
+    // the top, and the horizontal row below it holds the sidebar and the pages.
+    auto* layout = new QVBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    layout->addWidget(sidebar);
-    layout->addWidget(m_pages, 1);
+
+    auto* bodyLayout = new QHBoxLayout;
+    bodyLayout->setContentsMargins(0, 0, 0, 0);
+    bodyLayout->setSpacing(0);
+    bodyLayout->addWidget(sidebar);
+    bodyLayout->addWidget(m_pages, 1);
+    layout->addLayout(bodyLayout);
     setCentralWidget(central);
 
     connect(m_nav, &QListWidget::currentRowChanged, this, &MainWindow::onPageChanged);
@@ -176,6 +193,28 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     connect(&m_controller, &ServerController::statsChanged, this, &MainWindow::onSyncStatusChanged);
     onSyncStatusChanged();
+
+    // The update check runs on a delay so it never competes with opening the
+    // database, drawing the first page or whatever the user clicks first: the
+    // bar is only shown if there is something to say, and a failure is silent.
+    m_updateChecker = new app::core::UpdateChecker(this);
+    connect(m_updateChecker, &app::core::UpdateChecker::updateAvailable,
+            this, &MainWindow::onUpdateAvailable);
+    connect(m_updateChecker, &app::core::UpdateChecker::upToDate,
+            this, &MainWindow::onUpdateUpToDate);
+    connect(m_updateChecker, &app::core::UpdateChecker::checkFailed,
+            this, &MainWindow::onUpdateFailed);
+    QTimer::singleShot(5000, this, [this]() { m_updateChecker->check(); });
+
+    // Built up front but idle: the download only starts when the user asks for
+    // it, and a bar is only ever shown when a newer release exists.
+    m_updateDownloader = new app::core::UpdateDownloader(this);
+    connect(m_updateDownloader, &app::core::UpdateDownloader::progress,
+            this, &MainWindow::onUpdateDownloadProgress);
+    connect(m_updateDownloader, &app::core::UpdateDownloader::finished,
+            this, &MainWindow::onUpdateDownloadFinished);
+    connect(m_updateDownloader, &app::core::UpdateDownloader::failed,
+            this, &MainWindow::onUpdateDownloadFailed);
 
     QTimer::singleShot(0, this, [this]() {
         buildNavForRole(app::core::Session::instance().currentUser().role);
@@ -320,6 +359,168 @@ void MainWindow::onSwitchUserClicked()
     } else {
         show();
     }
+}
+
+void MainWindow::onUpdateAvailable(const QString& tag, const QString& notes)
+{
+    Q_UNUSED(notes);
+    showUpdateBar(tag);
+}
+
+void MainWindow::onUpdateUpToDate()
+{
+    qDebug() << "update check: up to date";
+}
+
+void MainWindow::onUpdateFailed(const QString& reason)
+{
+    qDebug() << "update check failed:" << reason;
+}
+
+void MainWindow::showUpdateBar(const QString& tag)
+{
+    if (m_updateBar) {
+        // Already on screen: keep whatever the user did with it rather than
+        // re-raising a bar they dismissed.
+        return;
+    }
+
+    m_updateBar = new QFrame;
+    m_updateBar->setObjectName(QStringLiteral("updateBar"));
+    auto* barLayout = new QHBoxLayout(m_updateBar);
+    barLayout->setContentsMargins(12, 8, 12, 8);
+    barLayout->setSpacing(8);
+
+    auto* label = new QLabel(tr("تحديث متاح: %1").arg(tag));
+    label->setObjectName(QStringLiteral("updateBarLabel"));
+    barLayout->addWidget(label, 1);
+
+    auto* download = new QPushButton(tr("تنزيل"));
+    download->setObjectName(QStringLiteral("primary"));
+    download->setCursor(Qt::PointingHandCursor);
+    barLayout->addWidget(download);
+
+    auto* later = new QPushButton(tr("لاحقًا"));
+    later->setObjectName(QStringLiteral("ghost"));
+    later->setCursor(Qt::PointingHandCursor);
+    barLayout->addWidget(later);
+
+    // The bar's own padding is cosmetic; the gap to the window edge and to the
+    // pages comes from a wrapper, since the root layout is flush by design (the
+    // sidebar relies on it) and a widget cannot carry an outer margin itself.
+    auto* wrapper = new QWidget;
+    auto* wrapperLayout = new QVBoxLayout(wrapper);
+    wrapperLayout->setContentsMargins(12, 8, 12, 8);
+    wrapperLayout->setSpacing(0);
+    wrapperLayout->addWidget(m_updateBar);
+
+    // Index 0 of the vertical root: the banner sits above the sidebar and the
+    // pages, rather than inside the content area where the layout was built
+    // around the pages.
+    qobject_cast<QVBoxLayout*>(centralWidget()->layout())->insertWidget(0, wrapper);
+
+    // Downloading and installing is phase C: the bytes are pulled by
+    // UpdateDownloader, and the restart button hands them to a batch script
+    // once this process is out of the way.
+    m_updateDownloadBtn = download;
+    connect(download, &QPushButton::clicked, this, &MainWindow::onUpdateDownloadClicked);
+
+    connect(later, &QPushButton::clicked, m_updateBar, [this]() {
+        m_updateBar->hide();
+    });
+}
+
+void MainWindow::onUpdateDownloadClicked()
+{
+    if (!m_updateDownloader) {
+        return;
+    }
+    m_updateDownloadBtn->setEnabled(false);
+    m_updateDownloadBtn->setText(tr("جاري التنزيل: 0%"));
+    m_updateDownloader->start();
+}
+
+void MainWindow::onUpdateDownloadProgress(int percent)
+{
+    m_updateDownloadBtn->setText(tr("جاري التنزيل: %1%").arg(percent));
+}
+
+void MainWindow::onUpdateDownloadFinished(const QString& path)
+{
+    qDebug() << "update downloaded to" << path;
+
+    if (m_updateRestartBtn) {
+        return;
+    }
+
+    // The download button is hidden, not disabled, and the restart button
+    // takes its slot: the download cannot be repeated by clicking the same
+    // place, and the only thing left to do is restart.
+    m_updateRestartBtn = new QPushButton(tr("إعادة التشغيل لتثبيت"));
+    m_updateRestartBtn->setObjectName(QStringLiteral("danger"));
+    m_updateRestartBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_updateRestartBtn, &QPushButton::clicked, this, &MainWindow::onRestartToInstall);
+
+    auto* barLayout = qobject_cast<QHBoxLayout*>(m_updateBar->layout());
+    const int slot = barLayout->indexOf(m_updateDownloadBtn);
+    barLayout->insertWidget(slot, m_updateRestartBtn);
+    m_updateDownloadBtn->hide();
+}
+
+void MainWindow::onUpdateDownloadFailed(const QString& reason)
+{
+    qDebug() << "update download failed:" << reason;
+    m_updateDownloadBtn->setEnabled(true);
+    m_updateDownloadBtn->setText(tr("تنزيل"));
+    QMessageBox::warning(this, tr("التحديث"),
+                          tr("فشل التنزيل. تحقق من الاتصال وحاول مرة أخرى."));
+}
+
+void MainWindow::onRestartToInstall()
+{
+#ifndef Q_OS_WIN
+    // Nothing to hand the archive to: the unpack-and-replace trick is a batch
+    // script, and there is no equivalent here that is safe enough to invent.
+    QMessageBox::information(
+        this, tr("التحديث"),
+        tr("التحديث التلقائي متاح على Windows فقط. نزّل الإصدار الجديد يدويًا."));
+#else
+    // The archive path comes from the downloader rather than from %TEMP% or a
+    // second temp lookup: one place decides where the file is, and the script
+    // is told the same answer.
+    const QString script = app::core::buildWindowsInstallBatch(
+        QCoreApplication::applicationDirPath(),
+        app::core::UpdateDownloader::defaultDestination(),
+        QFileInfo(QCoreApplication::applicationFilePath()).fileName());
+
+    // An empty script means a path that cannot be embedded safely; the builder
+    // refuses rather than writing something that would copy to the wrong place.
+    if (script.isEmpty()) {
+        QMessageBox::warning(this, tr("التحديث"),
+                              tr("تعذّر إنشاء ملف التحديث لهذا المسار."));
+        return;
+    }
+
+    const QString batPath =
+        QDir(QDir::tempPath()).filePath(QStringLiteral("mahali-update.bat"));
+    QFile batch(batPath);
+    if (!batch.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("التحديث"), tr("تعذّر إنشاء ملف التحديث."));
+        return;
+    }
+    batch.write(script.toUtf8());
+    batch.close();
+
+    if (!QProcess::startDetached(QStringLiteral("cmd.exe"),
+                                 { QStringLiteral("/c"), batPath })) {
+        QMessageBox::warning(this, tr("التحديث"), tr("تعذّر بدء التحديث."));
+        return;
+    }
+
+    // The script waits before touching anything, because the running executable
+    // cannot be overwritten while it is loaded.
+    qApp->quit();
+#endif
 }
 
 } // namespace app::ui
