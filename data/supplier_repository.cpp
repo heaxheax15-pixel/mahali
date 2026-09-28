@@ -139,9 +139,9 @@ bool SupplierRepository::setActive(int id, bool active)
 long long SupplierRepository::balanceCentsFor(int supplierId) const
 {
     // What the supplier is owed: the opening figure, every invoice recorded for
-    // them, minus everything paid against it. Invoices count whatever
-    // add_to_stock says, because a service that is billed is still a debt even
-    // when nothing lands on the shelf. Returns are subtracted in a later phase.
+    // them, minus everything paid against it and everything given back. Invoices
+    // count whatever add_to_stock says, because a service that is billed is still
+    // a debt even when nothing lands on the shelf.
     long long balance = 0;
 
     QSqlQuery q1(m_db.handle());
@@ -166,6 +166,16 @@ long long SupplierRepository::balanceCentsFor(int supplierId) const
     q3.addBindValue(supplierId);
     if (q3.exec() && q3.next()) {
         balance -= q3.value(0).toLongLong();
+    }
+
+    // Goods handed back are credited to the supplier, so they come off what is
+    // owed just as a payment does. A return is money going the other way.
+    QSqlQuery q4(m_db.handle());
+    q4.prepare(QStringLiteral(
+        "SELECT COALESCE(SUM(amount_cents), 0) FROM supplier_returns WHERE supplier_id = ?"));
+    q4.addBindValue(supplierId);
+    if (q4.exec() && q4.next()) {
+        balance -= q4.value(0).toLongLong();
     }
 
     return balance;

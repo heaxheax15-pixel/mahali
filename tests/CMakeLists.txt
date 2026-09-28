@@ -28,6 +28,24 @@ target_link_libraries(tst_purchase_service
 
 add_test(NAME purchase_service COMMAND tst_purchase_service)
 
+add_executable(tst_payment_service tst_payment_service.cpp)
+target_link_libraries(tst_payment_service
+    PRIVATE
+        mahali-core
+        mahali-data
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME payment_service COMMAND tst_payment_service)
+
+add_executable(tst_return_service tst_return_service.cpp)
+target_link_libraries(tst_return_service
+    PRIVATE
+        mahali-core
+        mahali-data
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME return_service COMMAND tst_return_service)
+
 
 add_executable(tst_device tst_device.cpp)
 target_link_libraries(tst_device

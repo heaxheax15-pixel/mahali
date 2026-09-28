@@ -592,6 +592,30 @@ void Database::createSchema()
             "FOREIGN KEY (purchase_id) REFERENCES purchases(id));"),
 
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS supplier_returns ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "supplier_id INTEGER NOT NULL,"
+            "purchase_id INTEGER,"
+            "amount_cents INTEGER NOT NULL,"
+            "returned_at TEXT NOT NULL,"
+            "remove_from_stock INTEGER NOT NULL DEFAULT 1,"
+            "note TEXT NOT NULL DEFAULT '',"
+            "created_at TEXT NOT NULL,"
+            "FOREIGN KEY (supplier_id) REFERENCES suppliers(id),"
+            "FOREIGN KEY (purchase_id) REFERENCES purchases(id));"),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS supplier_return_items ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "return_id INTEGER NOT NULL,"
+            "product_id INTEGER,"
+            "quantity INTEGER NOT NULL,"
+            "unit_price_cents INTEGER NOT NULL,"
+            "total_cents INTEGER NOT NULL,"
+            "FOREIGN KEY (return_id) REFERENCES supplier_returns(id),"
+            "FOREIGN KEY (product_id) REFERENCES products(id));"),
+
+        QStringLiteral(
             "INSERT OR IGNORE INTO sync_sequence (id, value) VALUES (1, 0);"),
 
         QStringLiteral(
@@ -623,6 +647,12 @@ void Database::createSchema()
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_supplier_payments_purchase "
             "ON supplier_payments(purchase_id);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_supplier_returns_supplier "
+            "ON supplier_returns(supplier_id, returned_at DESC);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_supplier_return_items_return "
+            "ON supplier_return_items(return_id);"),
     };
 
     if (!execStatements(schema, QStringLiteral("schema"))) {

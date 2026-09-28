@@ -17,6 +17,8 @@
 #include "customer_transaction_item_repository.h"
 #include "supplier_repository.h"
 #include "supplier_payment_repository.h"
+#include "supplier_return_repository.h"
+#include "supplier_return_item_repository.h"
 #include "purchase_repository.h"
 #include "payment_repository.h"
 #include "expense_repository.h"
@@ -57,6 +59,7 @@ private slots:
     void quick_items_roundtrip();
     void sold_by_weight_persists();
     void legacy_products_migration();
+    void update_average_cost_from_zero();
     void stockInvariantIsDerived();
     void stock_movement_reference_roundtrip();
     void saleInsertAndItems();
@@ -95,11 +98,15 @@ private slots:
     void overflow_guard_cogs();
     void supplier_new_fields_roundtrip();
     void supplier_list_active_excludes_inactive();
-    void supplier_balance_uses_opening_and_transactions();
+    void supplier_balance_from_purchases_and_payments();
     void supplier_payment_roundtrip();
     void supplier_payment_find_by_supplier();
     void supplier_payment_find_by_purchase();
     void supplier_payment_schema_exists();
+    void supplier_return_roundtrip();
+    void supplier_return_item_roundtrip();
+    void supplier_return_find_by_supplier();
+    void supplier_returns_schema_exists();
 
 private:
     QTemporaryDir m_dir;
@@ -119,7 +126,8 @@ void DataLayerTest::schemaContainsAllTables()
         QStringLiteral("customers"), QStringLiteral("customer_transactions"),
         QStringLiteral("customer_transaction_items"), QStringLiteral("suppliers"),
         QStringLiteral("purchases"), QStringLiteral("purchase_items"),
-        QStringLiteral("supplier_payments"), QStringLiteral("payments"),
+        QStringLiteral("supplier_payments"), QStringLiteral("supplier_returns"),
+        QStringLiteral("supplier_return_items"), QStringLiteral("payments"),
         QStringLiteral("expenses"), QStringLiteral("owner_drawings"),
         QStringLiteral("stock_movements"), QStringLiteral("cash_sessions"),
         QStringLiteral("cash_movements"), QStringLiteral("users"), QStringLiteral("devices"),
@@ -406,6 +414,59 @@ void DataLayerTest::stockInvariantIsDerived()
     QVERIFY(after.has_value());
     QCOMPARE(after->quantity, 90LL);
     QVERIFY(m_db->verifyStockConsistency());
+}
+
+void DataLayerTest::update_average_cost_from_zero()
+{
+    // updateAverageCost() called directly, with no purchase around it, because
+    // PurchaseService always hands it a non-zero oldQty. Starting from an empty
+    // shelf is the case the service cannot produce on its own, and it is the one
+    // that divides by whatever the first purchase brought in.
+    data::ProductRepository products(*m_db);
+
+    core::Product product;
+    product.name = QStringLiteral("دقيق");
+    const int id = products.save(product);
+    QVERIFY(id > 0);
+    // save() starts a product at zero on both fields, so this is the state the
+    // first purchase of a product that was never stocked arrives in.
+    const auto created = products.findById(id);
+    QVERIFY(created.has_value());
+    QCOMPARE(created->quantity, 0LL);
+    QCOMPARE(created->costPriceCents, 0LL);
+
+    // Nothing on the shelf, 50 at 3000: the average is the first price paid,
+    // since the old level carries no weight to weigh it against.
+    QVERIFY(products.updateAverageCost(id, 0, 0, 50, 3000));
+    const auto first = products.findById(id);
+    QVERIFY(first.has_value());
+    QCOMPARE(first->costPriceCents, 3000LL);
+
+    // 50 more at 5000 on top of 50 at 3000: (50*3000 + 50*5000) / 100.
+    QVERIFY(products.updateAverageCost(id, 50, 3000, 50, 5000));
+    const auto second = products.findById(id);
+    QVERIFY(second.has_value());
+    QCOMPARE(second->costPriceCents, 4000LL);
+
+    // oldQty 50 with addedQty -100 lands on newQty -50, which the guard treats
+    // the same as zero: there is no ratio left to weigh, so the stored cost is
+    // left alone rather than rewritten from a negative one. Returns do not go
+    // through here in practice, which is exactly why the guard matters.
+    QVERIFY2(products.updateAverageCost(id, 50, 4000, -100, 1000),
+             "a level below zero is a no-op, not a failure");
+    const auto third = products.findById(id);
+    QVERIFY(third.has_value());
+    QCOMPARE(third->costPriceCents, 4000LL);
+
+    // addedQty exactly -oldQty lands on newQty == 0, the boundary the guard is
+    // written against. One cent short of the divisor the average would be
+    // undefined, so this is the case worth pinning down: it has to be caught as
+    // a no-op rather than divide by zero.
+    QVERIFY2(products.updateAverageCost(id, 50, 4000, -50, 1000),
+             "a level at exactly zero is a no-op, not a failure");
+    const auto fourth = products.findById(id);
+    QVERIFY(fourth.has_value());
+    QCOMPARE(fourth->costPriceCents, 4000LL);
 }
 
 void DataLayerTest::stock_movement_reference_roundtrip()
@@ -1733,7 +1794,8 @@ namespace {
 // A purchase header, so a payment has a real invoice to point at. The supplier
 // and the invoice are part of the fixture because every check below is about
 // what a payment remembers, not about creating either of them.
-int addPurchase(data::PurchaseRepository& purchases, int supplierId, long long totalCents)
+int addPurchase(data::PurchaseRepository& purchases, int supplierId, long long totalCents,
+                bool addToStock = true)
 {
     core::Purchase purchase;
     purchase.supplierId = supplierId;
@@ -1744,6 +1806,7 @@ int addPurchase(data::PurchaseRepository& purchases, int supplierId, long long t
     purchase.purchasedAt = data::nowIso();
     purchase.totalCents = totalCents;
     purchase.subtotalCents = totalCents;
+    purchase.addToStock = addToStock;
     purchase.createdAt = data::nowIso();
     return purchases.insert(purchase);
 }
@@ -1757,7 +1820,7 @@ int addSupplierForPayments(data::SupplierRepository& suppliers, const QString& n
 
 } // namespace
 
-void DataLayerTest::supplier_balance_uses_opening_and_transactions()
+void DataLayerTest::supplier_balance_from_purchases_and_payments()
 {
     data::SupplierRepository suppliers(*m_db);
     data::PurchaseRepository purchases(*m_db);
@@ -1786,6 +1849,13 @@ void DataLayerTest::supplier_balance_uses_opening_and_transactions()
     QVERIFY(payments.insert(payment) > 0);
 
     QCOMPARE(suppliers.balanceCentsFor(id), 40000LL);
+
+    // add_to_stock decides what lands on the shelf, not what is owed: a service
+    // invoice that is never stocked is still a debt, so the balance moves by the
+    // invoice total either way.
+    const int serviceId = addPurchase(purchases, id, 30000, false);
+    QVERIFY(serviceId > 0);
+    QCOMPARE(suppliers.balanceCentsFor(id), 70000LL);
 
     // A second supplier shares the tables but not the ledger.
     core::Supplier other;
@@ -1946,6 +2016,202 @@ void DataLayerTest::supplier_payment_schema_exists()
     QVERIFY(indexes.contains(QStringLiteral("idx_supplier_payments_supplier")));
     QVERIFY(indexes.contains(QStringLiteral("idx_supplier_payments_purchase")));
     QCOMPARE(indexes.size(), 2);
+}
+
+void DataLayerTest::supplier_return_roundtrip()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::PurchaseRepository purchases(*m_db);
+    data::SupplierReturnRepository returns(*m_db);
+
+    const int supplierId = addSupplierForPayments(suppliers, QStringLiteral("Return Supplier"));
+    QVERIFY(supplierId > 0);
+    const int purchaseId = addPurchase(purchases, supplierId, 100000);
+    QVERIFY(purchaseId > 0);
+
+    core::SupplierReturn r;
+    r.supplierId = supplierId;
+    r.purchaseId = purchaseId;
+    r.amountCents = 5000;
+    r.returnedAt = data::nowIso();
+    r.removeFromStock = true;
+    r.note = QStringLiteral("test");
+    r.createdAt = data::nowIso();
+    const int returnId = returns.insert(r);
+    QVERIFY2(returnId > 0, qPrintable(m_db->lastError()));
+
+    const auto stored = returns.findById(returnId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->id, returnId);
+    QCOMPARE(stored->supplierId, supplierId);
+    QVERIFY(stored->purchaseId.has_value());
+    QCOMPARE(*stored->purchaseId, purchaseId);
+    QCOMPARE(stored->amountCents, 5000LL);
+    QCOMPARE(stored->returnedAt, r.returnedAt);
+    QCOMPARE(stored->removeFromStock, true);
+    QCOMPARE(stored->note, QStringLiteral("test"));
+    QCOMPARE(stored->createdAt, r.createdAt);
+
+    // remove_from_stock is stored as an integer and has to come back as the
+    // false it was written as, not as "non-zero means true".
+    core::SupplierReturn creditOnly;
+    creditOnly.supplierId = supplierId;
+    creditOnly.amountCents = 1000;
+    creditOnly.returnedAt = data::nowIso();
+    creditOnly.removeFromStock = false;
+    creditOnly.createdAt = data::nowIso();
+    const int creditId = returns.insert(creditOnly);
+    QVERIFY2(creditId > 0, qPrintable(m_db->lastError()));
+    const auto creditStored = returns.findById(creditId);
+    QVERIFY(creditStored.has_value());
+    QCOMPARE(creditStored->removeFromStock, false);
+
+    // A return with no invoice behind it stays general, so the caller can tell
+    // "not tied to a purchase" from "the id is zero".
+    QVERIFY(!creditStored->purchaseId.has_value());
+
+    QVERIFY(returns.remove(creditId));
+    QVERIFY(!returns.findById(creditId).has_value());
+    QVERIFY(!returns.remove(creditId));
+}
+
+void DataLayerTest::supplier_return_item_roundtrip()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::PurchaseRepository purchases(*m_db);
+    data::SupplierReturnRepository returns(*m_db);
+    data::SupplierReturnItemRepository items(*m_db);
+
+    const int supplierId = addSupplierForPayments(suppliers, QStringLiteral("Return Item Supplier"));
+    QVERIFY(supplierId > 0);
+    const int purchaseId = addPurchase(purchases, supplierId, 100000);
+    QVERIFY(purchaseId > 0);
+
+    core::SupplierReturn r;
+    r.supplierId = supplierId;
+    r.purchaseId = purchaseId;
+    r.amountCents = 5000;
+    r.returnedAt = data::nowIso();
+    r.createdAt = data::nowIso();
+    const int returnId = returns.insert(r);
+    QVERIFY2(returnId > 0, qPrintable(m_db->lastError()));
+
+    core::SupplierReturnItem item;
+    item.returnId = returnId;
+    item.productId = 1;
+    item.quantity = 10;
+    item.unitPriceCents = 500;
+    item.totalCents = 5000;
+    const int itemId = items.insert(item);
+    QVERIFY2(itemId > 0, qPrintable(m_db->lastError()));
+
+    const auto found = items.findByReturn(returnId);
+    QCOMPARE(found.size(), std::size_t(1));
+    QCOMPARE(found[0].id, itemId);
+    QCOMPARE(found[0].returnId, returnId);
+    QVERIFY(found[0].productId.has_value());
+    QCOMPARE(*found[0].productId, 1);
+    QCOMPARE(found[0].quantity, 10LL);
+    QCOMPARE(found[0].unitPriceCents, 500LL);
+    QCOMPARE(found[0].totalCents, 5000LL);
+
+    // A line with no product is allowed: a return can be recorded for its
+    // amount before anyone has worked out which shelf it came off.
+    core::SupplierReturnItem unlinked;
+    unlinked.returnId = returnId;
+    unlinked.quantity = 2;
+    unlinked.unitPriceCents = 250;
+    unlinked.totalCents = 500;
+    QVERIFY(items.insert(unlinked) > 0);
+    const auto both = items.findByReturn(returnId);
+    QCOMPARE(both.size(), std::size_t(2));
+    bool sawUnlinked = false;
+    for (const core::SupplierReturnItem& line : both) {
+        if (!line.productId.has_value()) {
+            sawUnlinked = true;
+        }
+    }
+    QVERIFY(sawUnlinked);
+
+    QVERIFY(items.removeByReturn(returnId));
+    QCOMPARE(items.findByReturn(returnId).size(), std::size_t(0));
+}
+
+void DataLayerTest::supplier_return_find_by_supplier()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::PurchaseRepository purchases(*m_db);
+    data::SupplierReturnRepository returns(*m_db);
+
+    const int first = addSupplierForPayments(suppliers, QStringLiteral("Return Supplier A"));
+    QVERIFY(first > 0);
+    const int second = addSupplierForPayments(suppliers, QStringLiteral("Return Supplier B"));
+    QVERIFY(second > 0);
+    const int purchaseId = addPurchase(purchases, first, 100000);
+    QVERIFY(purchaseId > 0);
+
+    // Two returns for the first supplier, one for the second: the first lookup
+    // has to see only its own two, or one supplier's returns would settle
+    // another's balance.
+    for (const long long amount : {5000LL, 7000LL}) {
+        core::SupplierReturn r;
+        r.supplierId = first;
+        r.purchaseId = purchaseId;
+        r.amountCents = amount;
+        r.returnedAt = data::nowIso();
+        r.createdAt = data::nowIso();
+        QVERIFY(returns.insert(r) > 0);
+    }
+    core::SupplierReturn other;
+    other.supplierId = second;
+    other.amountCents = 3000;
+    other.returnedAt = data::nowIso();
+    other.createdAt = data::nowIso();
+    QVERIFY(returns.insert(other) > 0);
+
+    const auto found = returns.findBySupplierId(first);
+    QCOMPARE(found.size(), std::size_t(2));
+    long long total = 0;
+    for (const core::SupplierReturn& r : found) {
+        QCOMPARE(r.supplierId, first);
+        total += r.amountCents;
+    }
+    QCOMPARE(total, 12000LL);
+    QCOMPARE(returns.findBySupplierId(second).size(), std::size_t(1));
+
+    // The invoice lookup has to be as narrow as the supplier one, since it is
+    // how a service finds what was given back against one invoice.
+    const auto byPurchase = returns.findByPurchaseId(purchaseId);
+    QCOMPARE(byPurchase.size(), std::size_t(2));
+    QCOMPARE(returns.findByPurchaseId(999999).size(), std::size_t(0));
+}
+
+void DataLayerTest::supplier_returns_schema_exists()
+{
+    QSqlQuery query(m_db->handle());
+    for (const QString& table :
+         {QStringLiteral("supplier_returns"), QStringLiteral("supplier_return_items")}) {
+        QVERIFY2(query.exec(QStringLiteral("SELECT name FROM sqlite_master WHERE type = 'table' AND name = '%1'")
+                                .arg(table)),
+                 qPrintable(table));
+        QVERIFY2(query.next(), qPrintable(table));
+    }
+
+    // Both indexes exist: one to list a supplier's returns newest first, one to
+    // pull the lines of a return together.
+    QVERIFY(query.exec(QStringLiteral("PRAGMA index_list(supplier_returns)")));
+    QStringList returnIndexes;
+    while (query.next()) {
+        returnIndexes << query.value(1).toString();
+    }
+    QVERIFY(returnIndexes.contains(QStringLiteral("idx_supplier_returns_supplier")));
+
+    QVERIFY(query.exec(QStringLiteral("PRAGMA index_list(supplier_return_items)")));
+    QStringList itemIndexes;
+    while (query.next()) {
+        itemIndexes << query.value(1).toString();
+    }
+    QVERIFY(itemIndexes.contains(QStringLiteral("idx_supplier_return_items_return")));
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)
