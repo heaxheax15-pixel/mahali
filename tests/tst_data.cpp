@@ -92,6 +92,9 @@ private slots:
     void reverseSale_refuses_double_reversal();
     void overflow_guard();
     void overflow_guard_cogs();
+    void supplier_new_fields_roundtrip();
+    void supplier_list_active_excludes_inactive();
+    void supplier_balance_uses_opening_and_transactions();
 
 private:
     QTemporaryDir m_dir;
@@ -1646,6 +1649,76 @@ void DataLayerTest::overflow_guard_cogs()
     QCOMPARE(data::cogsCentsFor(boundary),
              std::optional<long long>(std::numeric_limits<long long>::max()));
     QCOMPARE(data::cogsCentsFor({}), std::optional<long long>(0));
+}
+
+void DataLayerTest::supplier_new_fields_roundtrip()
+{
+    data::SupplierRepository suppliers(*m_db);
+
+    core::Supplier s;
+    s.name = QStringLiteral("Test Supplier");
+    s.phone = QStringLiteral("0123");
+    s.address = QStringLiteral("Rue X");
+    s.notes = QStringLiteral("test");
+    s.openingBalanceCents = 50000;
+    s.active = true;
+
+    const int id = suppliers.save(s);
+    QVERIFY(id > 0);
+
+    const auto found = suppliers.findById(id);
+    QVERIFY(found.has_value());
+    QCOMPARE(found->name, QStringLiteral("Test Supplier"));
+    QCOMPARE(found->phone, QStringLiteral("0123"));
+    QCOMPARE(found->address, QStringLiteral("Rue X"));
+    QCOMPARE(found->notes, QStringLiteral("test"));
+    QCOMPARE(found->openingBalanceCents, 50000LL);
+    QVERIFY(found->active);
+}
+
+void DataLayerTest::supplier_list_active_excludes_inactive()
+{
+    // Dedicated DB: the suite-wide m_db already has active suppliers from
+    // other tests, so listActive() would return more than just our two.
+    data::Database db(m_dir.filePath(QStringLiteral("supplier_active.sqlite")));
+    data::SupplierRepository suppliers(db);
+
+    core::Supplier activeSupplier;
+    activeSupplier.name = QStringLiteral("Active One");
+    activeSupplier.active = true;
+    QVERIFY(suppliers.save(activeSupplier) > 0);
+
+    core::Supplier inactiveSupplier;
+    inactiveSupplier.name = QStringLiteral("Inactive One");
+    inactiveSupplier.active = false;
+    QVERIFY(suppliers.save(inactiveSupplier) > 0);
+
+    const QVector<core::Supplier> active = suppliers.listActive();
+    QCOMPARE(active.size(), 1);
+    QCOMPARE(active[0].name, QStringLiteral("Active One"));
+}
+
+void DataLayerTest::supplier_balance_uses_opening_and_transactions()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::SupplierTransactionRepository txRepo(*m_db);
+
+    core::Supplier s;
+    s.name = QStringLiteral("Balance Test");
+    s.openingBalanceCents = 10000;
+    s.active = true;
+    const int id = suppliers.save(s);
+    QVERIFY(id > 0);
+
+    core::SupplierTransaction tx;
+    tx.supplierId = id;
+    tx.amountCents = 5000;
+    tx.createdAt = QDateTime::currentDateTime();
+    tx.note = QStringLiteral("test tx");
+    QVERIFY(txRepo.insert(tx) > 0);
+
+    const long long balance = suppliers.balanceCentsFor(id);
+    QCOMPARE(balance, 15000LL);
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

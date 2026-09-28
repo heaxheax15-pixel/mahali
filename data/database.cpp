@@ -61,6 +61,38 @@ void migrateUsersTable(const QSqlDatabase& db)
     }
 }
 
+// Idempotent, runs on every open. Adds missing columns to suppliers:
+// phone, address, notes, opening_balance_cents, active.
+// SQLite does not enforce NOT NULL on columns added via ALTER TABLE with a
+// DEFAULT, but the defaults ensure new rows get sensible values.
+void migrateSuppliersTable(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("suppliers"));
+    if (columns.isEmpty()) {
+        return;
+    }
+    QStringList statements;
+    if (!columns.contains(QStringLiteral("phone"))) {
+        statements << QStringLiteral("ALTER TABLE suppliers ADD COLUMN phone TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.contains(QStringLiteral("address"))) {
+        statements << QStringLiteral("ALTER TABLE suppliers ADD COLUMN address TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.contains(QStringLiteral("notes"))) {
+        statements << QStringLiteral("ALTER TABLE suppliers ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.contains(QStringLiteral("opening_balance_cents"))) {
+        statements << QStringLiteral("ALTER TABLE suppliers ADD COLUMN opening_balance_cents INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!columns.contains(QStringLiteral("active"))) {
+        statements << QStringLiteral("ALTER TABLE suppliers ADD COLUMN active INTEGER NOT NULL DEFAULT 1");
+    }
+    for (const QString& statement : statements) {
+        QSqlQuery alter(db);
+        alter.exec(statement);
+    }
+}
+
 // Reports whether `column` of `table` is declared NOT NULL. PRAGMA table_info
 // rows are (cid, name, type, notnull, dflt_value, pk).
 bool columnIsNotNull(const QSqlDatabase& db, const QString& table, const QString& column)
@@ -359,7 +391,12 @@ void Database::createSchema()
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS suppliers ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "name TEXT NOT NULL);"),
+            "name TEXT NOT NULL,"
+            "phone TEXT NOT NULL DEFAULT '',"
+            "address TEXT NOT NULL DEFAULT '',"
+            "notes TEXT NOT NULL DEFAULT '',"
+            "opening_balance_cents INTEGER NOT NULL DEFAULT 0,"
+            "active INTEGER NOT NULL DEFAULT 1);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS supplier_transactions ("
@@ -524,6 +561,7 @@ void Database::createSchema()
     createSingleOpenSessionIndex();
 
     migrateUsersTable(m_db);
+    migrateSuppliersTable(m_db);
     const QString productsError = migrateProductsTable(m_db);
     if (!productsError.isEmpty()) {
         m_lastError = QStringLiteral("products migration failed: %1").arg(productsError);

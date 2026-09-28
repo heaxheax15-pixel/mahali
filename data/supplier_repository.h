@@ -16,8 +16,12 @@ public:
     std::optional<core::Supplier> findById(int id) const;
     std::optional<core::Supplier> findByName(const QString& name) const;
     std::vector<core::Supplier> findAll() const;
+    QVector<core::Supplier> listActive() const;
 
     int save(const core::Supplier& supplier);
+    bool setActive(int id, bool active);
+
+    long long balanceCentsFor(int supplierId) const;
 
 private:
     Database& m_db;
