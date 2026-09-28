@@ -115,8 +115,22 @@ QString resolveError;
         return result;
     }
 
-    const long long total = totalCentsFor(resolved);
-    const long long cogs = cogsCentsFor(resolved);
+    const std::optional<long long> totalOpt = totalCentsFor(resolved);
+    if (!totalOpt.has_value()) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
+    const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
+    if (!cogsOpt.has_value()) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale cost is too large to record");
+        return result;
+    }
+
+    const long long total = *totalOpt;
+    const long long cogs = *cogsOpt;
 
     core::Sale sale;
     sale.createdAt = QDateTime::currentDateTime();
@@ -208,8 +222,22 @@ DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVe
         return result;
     }
 
-    const long long total = totalCentsFor(resolved);
-    const long long cogs = cogsCentsFor(resolved);
+    const std::optional<long long> totalOpt = totalCentsFor(resolved);
+    if (!totalOpt.has_value()) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
+    const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
+    if (!cogsOpt.has_value()) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale cost is too large to record");
+        return result;
+    }
+
+    const long long total = *totalOpt;
+    const long long cogs = *cogsOpt;
 
     core::CustomerTransaction transaction;
     transaction.customerId = customerId;

@@ -42,6 +42,15 @@ public:
     // came from Database itself rather than from a repository.
     QString lastErrorContext() const;
 
+    // Drops the recorded reason. Called at the start of every operation in this
+    // layer, so lastError() always describes the most recent outcome instead of
+    // the last failure that happened to still be sitting in the slot: a caller
+    // that reads it after a successful write should not be handed a stale
+    // reason and conclude the write it just watched succeed had failed.
+    // const for the same reason lastError() is: the state is mutable so that
+    // const observers (handle()) can reset it without giving up constness.
+    void clearError() const;
+
     bool verifyStockConsistency() const;
     void recomputeStockQuantities();
 

@@ -96,11 +96,11 @@ int PaymentRepository::insert(const core::Payment& payment)
     return query.lastInsertId().toInt();
 }
 
-void PaymentRepository::reverse(int originalPaymentId, long long amountCents, const QString& note)
+bool PaymentRepository::reverse(int originalPaymentId, long long amountCents, const QString& note)
 {
     const std::optional<core::Payment> original = findById(originalPaymentId);
     if (!original.has_value()) {
-        return;
+        return false;
     }
     core::Payment reversal;
     reversal.customerId = original->customerId;
@@ -108,7 +108,11 @@ void PaymentRepository::reverse(int originalPaymentId, long long amountCents, co
     reversal.createdAt = QDateTime::currentDateTime();
     reversal.note = note;
     reversal.reversedId = originalPaymentId;
-    insert(reversal);
+    // The insert reports its own reason through Database, so the caller that
+    // rolls the transaction back has something to show. No transaction is
+    // opened or closed here: this runs inside the caller's, the same way
+    // ExpenseRepository::reverse runs inside CashEntryService's.
+    return insert(reversal) > 0;
 }
 
 } // namespace app::data

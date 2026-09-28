@@ -18,7 +18,7 @@ public:
     std::vector<core::Payment> findBetween(const QDateTime& from, const QDateTime& to) const;
 
     int insert(const core::Payment& payment);
-    void reverse(int originalPaymentId, long long amountCents, const QString& note);
+    bool reverse(int originalPaymentId, long long amountCents, const QString& note);
 
 private:
     Database& m_db;

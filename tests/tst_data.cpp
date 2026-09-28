@@ -1,5 +1,7 @@
 #include <QtTest/QtTest>
 
+#include <limits>
+#include <optional>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QSqlQuery>
@@ -9,6 +11,7 @@
 #include "product_repository.h"
 #include "sale_repository.h"
 #include "sale_item_repository.h"
+#include "sale_service.h"
 #include "customer_repository.h"
 #include "customer_transaction_repository.h"
 #include "customer_transaction_item_repository.h"
@@ -31,6 +34,7 @@
 #include "device_ledger_service.h"
 #include "device_identity.h"
 #include "date_utils.h"
+#include "sale_rules.h"
 
 using namespace app;
 
@@ -82,6 +86,12 @@ private slots:
     void admin_master_roundtrip();
     void language_setting_persists();
     void repository_error_is_recorded();
+    void last_error_clears_on_success();
+    void reverseSale_returns_error_on_missing_sale();
+    void payment_reverse_returns_false_on_missing();
+    void reverseSale_refuses_double_reversal();
+    void overflow_guard();
+    void overflow_guard_cogs();
 
 private:
     QTemporaryDir m_dir;
@@ -1429,6 +1439,213 @@ void DataLayerTest::repository_error_is_recorded()
     // Leave the shared suite database as we found it.
     QSqlQuery cleanup(m_db->handle());
     QVERIFY(cleanup.exec(QStringLiteral("DELETE FROM products WHERE barcode = 'REC-0001'")));
+}
+
+void DataLayerTest::last_error_clears_on_success()
+{
+    // A database of its own: the point is to observe one failure followed by one
+    // success, and the suite-wide m_db carries state from every other test.
+    const QString path = m_dir.filePath(QStringLiteral("clear_error.sqlite"));
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    // Seed one row so the failing write has something to collide with.
+    core::Product seed;
+    seed.barcode = QStringLiteral("CLR-0001");
+    seed.name = QStringLiteral("Clear Seed");
+    QVERIFY(products.save(seed) > 0);
+
+    // Refused write: the reason has to be there, otherwise the test proves
+    // nothing about clearing it.
+    core::Product duplicate;
+    duplicate.barcode = seed.barcode;
+    duplicate.name = QStringLiteral("Clear Duplicate");
+    QCOMPARE(products.save(duplicate), 0);
+    QVERIFY2(!db.lastError().isEmpty(), "the refused write must leave a reason behind");
+    QCOMPARE(db.lastErrorContext(), QStringLiteral("ProductRepository::save"));
+
+    // Accepted write. Nothing failed this time, so a leftover reason would be a
+    // lie: a caller that reads lastError() after this point would report the
+    // earlier rejection against a row that is now in the table.
+    core::Product fresh;
+    fresh.barcode = QStringLiteral("CLR-0002");
+    fresh.name = QStringLiteral("Clear Fresh");
+    const int freshId = products.save(fresh);
+    QVERIFY2(freshId > 0, qPrintable(QStringLiteral("fresh insert failed: %1").arg(db.lastError())));
+    QVERIFY2(db.lastError().isEmpty(),
+             qPrintable(QStringLiteral("stale reason survived a good write: %1").arg(db.lastError())));
+    QVERIFY(db.lastErrorContext().isEmpty());
+
+    // The claim is that the row really is there, not merely that the error slot
+    // was emptied to hide a failure.
+    const auto found = products.findByBarcode(fresh.barcode);
+    QVERIFY(found.has_value());
+    QCOMPARE(found->id, freshId);
+    QCOMPARE(found->name, QStringLiteral("Clear Fresh"));
+    QVERIFY2(db.lastError().isEmpty(), "reading it back must not resurrect a reason");
+}
+
+void DataLayerTest::reverseSale_returns_error_on_missing_sale()
+{
+    // A sale id that cannot exist. The old signature could only answer 0 here,
+    // so the caller had nothing but a canned "تعذر استرداد المبيع" to show; the
+    // point of the struct is that the refusal now carries a reason.
+    data::SaleService service(*m_db);
+    const data::SaleReverseResult result = service.reverseSale(99999, 0);
+    QVERIFY(!result.ok);
+    QVERIFY2(!result.error.isEmpty(), "a refused reversal must say why");
+
+    // Nothing may be written on the way out, and the shared database must not
+    // have been left holding a transaction open by the early return.
+    QSqlQuery check(m_db->handle());
+    QVERIFY(check.exec(QStringLiteral("SELECT COUNT(*) FROM sales WHERE reversed_sale_id = 99999")));
+    QVERIFY(check.next());
+    QCOMPARE(check.value(0).toInt(), 0);
+}
+
+void DataLayerTest::payment_reverse_returns_false_on_missing()
+{
+    // reverse() was void, so this refusal was invisible: the service went on to
+    // write the refund cash movement and commit, leaving money in the till for a
+    // reversal that never happened.
+    data::PaymentRepository payments(*m_db);
+    QVERIFY(!payments.reverse(99999, 5000, QStringLiteral("refund of a sale that never was")));
+
+    QSqlQuery check(m_db->handle());
+    QVERIFY(check.exec(QStringLiteral("SELECT COUNT(*) FROM payments WHERE reversed_id = 99999")));
+    QVERIFY(check.next());
+    QCOMPARE(check.value(0).toInt(), 0);
+}
+
+void DataLayerTest::reverseSale_refuses_double_reversal()
+{
+    // Its own database: this writes a sale, a session and cash movements, and
+    // the suite-wide m_db is shared with tests that count rows in a window.
+    data::Database db(m_dir.filePath(QStringLiteral("double_reversal.sqlite")));
+    data::SaleRepository sales(db);
+    data::CashSessionRepository sessions(db);
+    data::SaleService service(db);
+
+    const int sessionId = sessions.open(100000);
+    QVERIFY(sessionId > 0);
+
+    core::Sale sale;
+    sale.createdAt = QDateTime::currentDateTime();
+    sale.totalCents = 5000;
+    sale.deviceId = QStringLiteral("dev-double-reversal");
+    const int saleId = sales.insert(sale);
+    QVERIFY(saleId > 0);
+
+    const data::SaleReverseResult first = service.reverseSale(saleId, sessionId);
+    QVERIFY2(first.ok, qPrintable(QStringLiteral("first reversal failed: %1").arg(first.error)));
+
+    // The second click. reversed_sale_id carries no unique index, so without the
+    // lookup the till gets the money back twice and two mirrored sales sit on
+    // the ledger.
+    const data::SaleReverseResult second = service.reverseSale(saleId, sessionId);
+    QVERIFY(!second.ok);
+    QCOMPARE(second.error, QStringLiteral("reverseSale: already reversed"));
+
+    QSqlQuery check(db.handle());
+    QVERIFY(check.exec(QStringLiteral("SELECT COUNT(*) FROM sales WHERE reversed_sale_id = %1").arg(saleId)));
+    QVERIFY(check.next());
+    QCOMPARE(check.value(0).toInt(), 1);
+
+    // The refusal has to hand the connection back with no transaction still
+    // open. A read would not notice, because a leftover transaction still
+    // answers queries; the next reversal is what breaks, since it cannot begin
+    // a second one and would report "could not start the transaction" for the
+    // rest of the session. Reversing a different sale is what pins it.
+    core::Sale other;
+    other.createdAt = QDateTime::currentDateTime();
+    other.totalCents = 2500;
+    other.deviceId = QStringLiteral("dev-double-reversal");
+    const int otherId = sales.insert(other);
+    QVERIFY(otherId > 0);
+
+    const data::SaleReverseResult third = service.reverseSale(otherId, sessionId);
+    QVERIFY2(third.ok,
+             qPrintable(QStringLiteral("a refused reversal left a transaction open: %1")
+                            .arg(third.error)));
+}
+
+void DataLayerTest::overflow_guard()
+{
+    QVector<core::SaleItem> ordinary;
+    core::SaleItem line;
+    line.productId = 1;
+    line.unitPriceCents = 100;
+    line.quantity = 5;
+    ordinary.append(line);
+    QCOMPARE(data::totalCentsFor(ordinary), std::optional<long long>(500));
+
+    // A sold-by-weight line is entered in kilograms, so the operator can type a
+    // quantity large enough to run the multiplication off the end of the range.
+    // Signed overflow is undefined behaviour, so the multiplication below is the
+    // thing being tested: it must refuse rather than wrap into a total that
+    // looks like money.
+    QVector<core::SaleItem> overflowing;
+    line.unitPriceCents = std::numeric_limits<long long>::max();
+    line.quantity = 2;
+    overflowing.append(line);
+    QVERIFY2(!data::totalCentsFor(overflowing).has_value(),
+             "a total past the range must be refused, not wrapped");
+
+    // Two lines that each fit but do not fit together: the running sum is a
+    // second way out, and guarding only the multiplication would miss it.
+    QVector<core::SaleItem> summing;
+    line.unitPriceCents = std::numeric_limits<long long>::max() / 2 + 1;
+    line.quantity = 1;
+    summing.append(line);
+    summing.append(line);
+    QVERIFY2(!data::totalCentsFor(summing).has_value(),
+             "lines that overflow only once added must be refused too");
+
+    // And the guard must not fire on ordinary arithmetic, including the largest
+    // total that is genuinely representable.
+    QVector<core::SaleItem> boundary;
+    line.unitPriceCents = std::numeric_limits<long long>::max();
+    line.quantity = 1;
+    boundary.append(line);
+    QCOMPARE(data::totalCentsFor(boundary), std::optional<long long>(std::numeric_limits<long long>::max()));
+    QVERIFY(data::totalCentsFor({}).has_value());
+    QCOMPARE(data::totalCentsFor({}), std::optional<long long>(0));
+}
+
+void DataLayerTest::overflow_guard_cogs()
+{
+    QVector<core::SaleItem> ordinary;
+    core::SaleItem line;
+    line.productId = 1;
+    line.unitCostCents = 100;
+    line.quantity = 5;
+    ordinary.append(line);
+    QCOMPARE(data::cogsCentsFor(ordinary), std::optional<long long>(500));
+
+    // Cost is multiplied by quantity the same way price is, and it reaches the
+    // profit and loss statement, so it gets the same guard.
+    QVector<core::SaleItem> overflowing;
+    line.unitCostCents = std::numeric_limits<long long>::max();
+    line.quantity = 2;
+    overflowing.append(line);
+    QVERIFY2(!data::cogsCentsFor(overflowing).has_value(),
+             "a cost past the range must be refused, not wrapped");
+
+    QVector<core::SaleItem> summing;
+    line.unitCostCents = std::numeric_limits<long long>::max() / 2 + 1;
+    line.quantity = 1;
+    summing.append(line);
+    summing.append(line);
+    QVERIFY2(!data::cogsCentsFor(summing).has_value(),
+             "lines that overflow only once added must be refused too");
+
+    QVector<core::SaleItem> boundary;
+    line.unitCostCents = std::numeric_limits<long long>::max();
+    line.quantity = 1;
+    boundary.append(line);
+    QCOMPARE(data::cogsCentsFor(boundary),
+             std::optional<long long>(std::numeric_limits<long long>::max()));
+    QCOMPARE(data::cogsCentsFor({}), std::optional<long long>(0));
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

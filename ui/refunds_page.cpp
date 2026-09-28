@@ -253,9 +253,9 @@ void RefundsPage::refundSale(int saleId)
         return;
     }
     data::SaleService service(m_db);
-    const int reversalId = service.reverseSale(saleId, session->id);
-    if (reversalId == 0) {
-        m_notice->setText(tr("تعذر استرداد المبيع"));
+    const data::SaleReverseResult result = service.reverseSale(saleId, session->id);
+    if (!result.ok) {
+        m_notice->setText(tr("تعذر استرداد المبيع: %1").arg(result.error));
         return;
     }
     data::SaleRepository sales(m_db);

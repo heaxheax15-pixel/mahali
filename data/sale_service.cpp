@@ -1,6 +1,7 @@
 #include "sale_service.h"
 
 #include <QDateTime>
+#include <QSqlQuery>
 
 #include "date_utils.h"
 #include "sale_rules.h"
@@ -75,12 +76,25 @@ QString error;
         return result;
     }
 
+    const std::optional<long long> totalOpt = totalCentsFor(resolved);
+    if (!totalOpt.has_value()) {
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
+    const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
+    if (!cogsOpt.has_value()) {
+        result.error = QStringLiteral("the sale cost is too large to record");
+        return result;
+    }
+
     if (!m_db.beginTransaction()) {
         result.error = m_db.lastError();
         return result;
     }
 
-    long long total = totalCentsFor(resolved);
+    const long long total = *totalOpt;
+    const long long cogs = *cogsOpt;
 
     core::CustomerTransaction transaction;
     transaction.customerId = customerId;
@@ -114,8 +128,8 @@ QString error;
     }
 
     if (applyToken) {
-        if (!insertAppliedOp(*applyToken, core::SyncOpType::CustomerDebt, transactionId, total,
-                             cogsCentsFor(resolved), &result.error)) {
+        if (!insertAppliedOp(*applyToken, core::SyncOpType::CustomerDebt, transactionId, total, cogs,
+                             &result.error)) {
             m_db.rollback();
             const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId);
             if (existing.has_value()) {
@@ -133,7 +147,7 @@ QString error;
     result.ok = true;
     result.saleId = transactionId;
     result.totalCents = total;
-    result.cogsCents = cogsCentsFor(resolved);
+    result.cogsCents = cogs;
     return result;
 }
 
@@ -173,7 +187,22 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
         return result;
     }
 
-    long long total = totalCentsFor(resolved);
+    const std::optional<long long> totalOpt = totalCentsFor(resolved);
+    if (!totalOpt.has_value()) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
+    const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
+    if (!cogsOpt.has_value()) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale cost is too large to record");
+        return result;
+    }
+
+    const long long total = *totalOpt;
+    const long long cogs = *cogsOpt;
 
     core::Sale sale;
     sale.createdAt = QDateTime::currentDateTime();
@@ -215,8 +244,7 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
     }
 
     if (applyToken) {
-        if (!insertAppliedOp(*applyToken, core::SyncOpType::Sale, saleId, total, cogsCentsFor(resolved),
-                             &result.error)) {
+        if (!insertAppliedOp(*applyToken, core::SyncOpType::Sale, saleId, total, cogs, &result.error)) {
             m_db.rollback();
             const auto existing = m_appliedOps.findByDeviceOp(applyToken->deviceId, applyToken->opId);
             if (existing.has_value()) {
@@ -234,25 +262,55 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
     result.ok = true;
     result.saleId = saleId;
     result.totalCents = total;
-    result.cogsCents = cogsCentsFor(resolved);
+    result.cogsCents = cogs;
     return result;
 }
 
-int SaleService::reverseSale(int saleId, int cashSessionId)
+SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
 {
+    SaleReverseResult r;
+
     const auto original = m_sales.findById(saleId);
     if (!original.has_value()) {
-        return 0;
+        r.error = m_db.lastError().isEmpty() ? QStringLiteral("reverseSale: the sale does not exist")
+                                             : m_db.lastError();
+        return r;
     }
 
     if (!m_db.beginTransaction()) {
-        return 0;
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("reverseSale: could not start the transaction")
+            : m_db.lastError();
+        return r;
+    }
+
+    // Nothing stops the same sale being reversed twice, and reversed_sale_id
+    // has no unique index, so the guard has to be a lookup. Inside the
+    // transaction on purpose: the lookup and the inserts it protects commit or
+    // roll back as one, so a second click that arrives while the first is still
+    // running cannot pass the check against a snapshot that is about to change.
+    QSqlQuery existing(m_db.handle());
+    existing.prepare(QStringLiteral("SELECT 1 FROM sales WHERE reversed_sale_id = ? LIMIT 1"));
+    existing.addBindValue(saleId);
+    if (!existing.exec()) {
+        m_db.rollback();
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("reverseSale: could not check for an earlier reversal")
+            : m_db.lastError();
+        return r;
+    }
+    if (existing.next()) {
+        m_db.rollback();
+        r.error = QStringLiteral("reverseSale: already reversed");
+        return r;
     }
 
     const auto session = m_cashSessions.findById(cashSessionId);
     if (!session.has_value() || session->status != QStringLiteral("open")) {
         m_db.rollback();
-        return 0;
+        r.error = m_db.lastError().isEmpty() ? QStringLiteral("reverseSale: the cash session is not open")
+                                             : m_db.lastError();
+        return r;
     }
 
     core::Sale reversal;
@@ -263,7 +321,10 @@ int SaleService::reverseSale(int saleId, int cashSessionId)
     const int reversalId = m_sales.insert(reversal);
     if (reversalId == 0) {
         m_db.rollback();
-        return 0;
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("reverseSale: could not write the reversed sale")
+            : m_db.lastError();
+        return r;
     }
 
     const auto originalItems = m_saleItems.findBySaleId(saleId);
@@ -273,14 +334,26 @@ int SaleService::reverseSale(int saleId, int cashSessionId)
         reversalItem.saleId = reversalId;
         reversalItem.quantity = -originalItem.quantity;
         reversalItem.reversedId = originalItem.id;
-        m_saleItems.insert(reversalItem);
+        if (m_saleItems.insert(reversalItem) == 0) {
+            m_db.rollback();
+            r.error = m_db.lastError().isEmpty()
+                ? QStringLiteral("reverseSale: could not write the reversed sale item")
+                : m_db.lastError();
+            return r;
+        }
 
         core::StockMovement movement;
         movement.productId = originalItem.productId;
         movement.delta = originalItem.quantity;
         movement.reason = QStringLiteral("sale_reversal");
         movement.createdAt = QDateTime::currentDateTime();
-        m_stockMovements.insert(movement);
+        if (m_stockMovements.insert(movement) == 0) {
+            m_db.rollback();
+            r.error = m_db.lastError().isEmpty()
+                ? QStringLiteral("reverseSale: could not write the stock movement")
+                : m_db.lastError();
+            return r;
+        }
     }
 
     core::CashMovement cashReversal;
@@ -288,12 +361,22 @@ int SaleService::reverseSale(int saleId, int cashSessionId)
     cashReversal.type = QStringLiteral("refund");
     cashReversal.amountCents = -original->totalCents;
     cashReversal.createdAt = QDateTime::currentDateTime();
-    m_cashMovements.insert(cashReversal);
+    if (m_cashMovements.insert(cashReversal) == 0) {
+        m_db.rollback();
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("reverseSale: could not write the refund cash movement")
+            : m_db.lastError();
+        return r;
+    }
 
     if (!m_db.commit()) {
-        return 0;
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("reverseSale: could not commit the transaction")
+            : m_db.lastError();
+        return r;
     }
-    return reversalId;
+    r.ok = true;
+    return r;
 }
 
 } // namespace app::data

@@ -25,6 +25,14 @@ struct SaleRecordResult {
     QString error;
 };
 
+// Sale reversal carries no totals of its own to hand back, so this is just the
+// outcome plus the reason. It exists because a plain int could only say "no",
+// leaving refunds_page with nothing to tell the operator but a guess.
+struct SaleReverseResult {
+    bool ok = false;
+    QString error;
+};
+
 class SaleService {
 public:
     explicit SaleService(Database& db);
@@ -36,7 +44,7 @@ public:
                                         const QString& deviceId, bool allowOversold,
                                         const core::SyncApplyToken* applyToken = nullptr);
 
-    int reverseSale(int saleId, int cashSessionId);
+    SaleReverseResult reverseSale(int saleId, int cashSessionId);
 
 private:
     bool insertAppliedOp(const core::SyncApplyToken& token, core::SyncOpType opType, int entityId,

@@ -132,7 +132,16 @@ PaymentResult PaymentService::refundCustomerPayment(int paymentId, int cashSessi
         return result;
     }
 
-    m_payments.reverse(paymentId, original->amountCents, note);
+    // The mirrored row is written inside this transaction, not one of its own:
+    // if it fails, the till must not gain the money, so the whole refund goes
+    // and the caller is told why.
+    if (!m_payments.reverse(paymentId, original->amountCents, note)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the payment could not be reversed")
+            : m_db.lastError();
+        return result;
+    }
 
     core::CashMovement movement;
     movement.sessionId = session->id;

@@ -220,6 +220,9 @@ Database::~Database()
 
 QSqlDatabase Database::handle() const
 {
+    // Handing out the handle is the start of an operation, so the reason from
+    // whatever ran before it is no longer about to be read.
+    clearError();
     return m_db;
 }
 
@@ -268,6 +271,13 @@ void Database::recordError(const QSqlError& err, const QString& context)
 QString Database::lastErrorContext() const
 {
     return m_lastErrorContext;
+}
+
+void Database::clearError() const
+{
+    m_lastError.clear();
+    m_lastErrorContext.clear();
+    m_lastSqlError = QSqlError();
 }
 
 void Database::applyPragmas()
@@ -564,6 +574,11 @@ void Database::createSingleOpenSessionIndex()
 
 bool Database::execStatements(const QStringList& statements, const QString& source)
 {
+    // Runs from applyPragmas(), createSchema() and the index creation, all of
+    // which are starts of operations rather than continuations, so the reason
+    // from before them is dropped first. A schema step that fails sets its own
+    // message below, which is what the caller is meant to read.
+    clearError();
     for (const QString& statement : statements) {
         QSqlQuery query(m_db);
         if (!query.exec(statement)) {
