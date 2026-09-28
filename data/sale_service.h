@@ -7,11 +7,14 @@
 #include "database.h"
 #include "customer_transaction_item_repository.h"
 #include "customer_transaction_repository.h"
+#include "occasion_repository.h"
+#include "occasion_service.h"
 #include "sale_item_repository.h"
 #include "cash_movement_repository.h"
 #include "cash_session_repository.h"
 #include "product_repository.h"
 #include "sale_repository.h"
+#include "setting_repository.h"
 #include "stock_movement_repository.h"
 
 namespace app::data {
@@ -61,6 +64,12 @@ private:
     CashSessionRepository m_cashSessions;
     CashMovementRepository m_cashMovements;
     AppliedOpRepository m_appliedOps;
+    // Built here off the same database rather than injected. Occasions are
+    // read-only context for a sale, so there is nothing to configure and no
+    // call site to update, and SaleService already owns its other repositories.
+    OccasionRepository m_occasions;
+    SettingRepository m_settings;
+    OccasionService m_occasionService;
 };
 
 } // namespace app::data

@@ -23,10 +23,15 @@ core::Sale saleFromQuery(const QSqlQuery& query)
     sale.deviceId = query.value(3).toString();
     sale.oversold = query.value(4).toInt() != 0;
     sale.reversedSaleId = query.value(5).toInt();
+    // occasion_id is nullable and read as a QVariant, so the null has to stay
+    // distinct from an occasion numbered zero.
+    if (const std::optional<long long> occasionId = toLongLong(query.value(6))) {
+        sale.occasionId = static_cast<int>(*occasionId);
+    }
     return sale;
 }
 
-const char* kSaleColumns = "id, created_at, total_cents, device_id, oversold, reversed_sale_id";
+const char* kSaleColumns = "id, created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id";
 
 } // namespace
 
@@ -89,13 +94,20 @@ int SaleRepository::insert(const core::Sale& sale)
 {
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("INSERT INTO sales (created_at, total_cents, device_id, oversold, reversed_sale_id) "
-                       "VALUES (?, ?, ?, ?, ?)"));
+        QStringLiteral("INSERT INTO sales (created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id) "
+                       "VALUES (?, ?, ?, ?, ?, ?)"));
     query.addBindValue(toIso(sale.createdAt.isValid() ? sale.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(sale.totalCents);
     query.addBindValue(sale.deviceId);
     query.addBindValue(sale.oversold ? 1 : 0);
     query.addBindValue(sale.reversedSaleId);
+    // QVariant() binds a real NULL, which is what an unstamped sale needs: the
+    // column is nullable, unlike the neighbours that carry a 0 sentinel.
+    if (sale.occasionId.has_value()) {
+        query.addBindValue(*sale.occasionId);
+    } else {
+        query.addBindValue(QVariant());
+    }
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("SaleRepository::insert"));
         return 0;

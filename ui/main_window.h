@@ -51,6 +51,12 @@ public:
     AuditLogPage* auditLogPage() const { return m_auditLog; }
     UsersPage* usersPage() const { return m_usersPage; }
 
+    // Switching the running occasion, for the page that will own the control.
+    // Each call re-reads the bar, so the label cannot drift from the setting.
+    bool activateOccasion(int occasionId);
+    void deactivateOccasion();
+    QString occasionLabelText() const;
+
 private slots:
     void onSyncStatusChanged();
     void onPageChanged(int row);
@@ -73,6 +79,7 @@ private slots:
     void onRestartToInstall();
 
 private:
+    void refreshOccasionLabel();
     void buildNavForRole(const QString& role);
     void showUpdateBar(const QString& tag);
 
@@ -91,6 +98,10 @@ private:
     QPushButton* m_updateRestartBtn = nullptr;
     QLabel* m_statusLabel;
     QLabel* m_userLabel = nullptr;
+    // Shows the occasion running right now, and stays empty when there is none.
+    // Always present rather than created on demand, so activation and
+    // deactivation only have to change its text.
+    QLabel* m_occasionLabel = nullptr;
     QPropertyAnimation* m_fade = nullptr;
     PosPage* m_pos = nullptr;
     CashSessionPage* m_cashSession = nullptr;

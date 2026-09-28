@@ -19,6 +19,9 @@ SaleService::SaleService(Database& db)
     , m_cashSessions(db)
     , m_cashMovements(db)
     , m_appliedOps(db)
+    , m_occasions(db)
+    , m_settings(db)
+    , m_occasionService(db, m_occasions, m_settings)
 {
 }
 
@@ -209,6 +212,13 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
     sale.totalCents = total;
     sale.deviceId = deviceId;
     sale.oversold = allowOversold;
+    // Stamped with whatever occasion is running at the moment of the sale, so the
+    // reports can split a day's takings by event. Read after the transaction
+    // opens: the setting is a single row, and reading it here keeps the sale and
+    // the occasion it was attributed to inside one snapshot.
+    if (const std::optional<core::Occasion> occasion = m_occasionService.current()) {
+        sale.occasionId = occasion->id;
+    }
     const int saleId = m_sales.insert(sale);
     if (saleId == 0) {
         m_db.rollback();

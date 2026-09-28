@@ -32,8 +32,11 @@
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/customer_transaction_repository.h"
+#include "data/date_utils.h"
 #include "data/expense_repository.h"
 #include "data/owner_drawing_repository.h"
+#include "data/occasion_repository.h"
+#include "data/occasion_service.h"
 #include "data/payment_repository.h"
 #include "data/payment_service.h"
 #include "data/product_repository.h"
@@ -106,6 +109,7 @@ private slots:
     void users_page_shows_all_pins();
     void user_edit_pin_persists();
     void master_recovery_grants_access();
+    void status_bar_shows_occasion_when_active();
 
 private:
     void seedSyncDatabase(const QString& path, int* productId, int* sessionId);
@@ -1562,6 +1566,71 @@ void UiTest::master_recovery_grants_access()
 
     app::core::Session::instance().clear();
     QVERIFY(!app::core::Session::instance().hasUser());
+}
+
+void UiTest::status_bar_shows_occasion_when_active()
+{
+    const QString path = m_dir.filePath(QStringLiteral("occasion_statusbar.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    ui::ServerController controller(db, m_key);
+
+    data::OccasionRepository occasions(db);
+    data::SettingRepository settings(db);
+    data::OccasionService service(db, occasions, settings);
+
+    core::Occasion occasion;
+    occasion.name = QStringLiteral("أسبوع التخفيضات");
+    occasion.icon = QStringLiteral("🎉");
+    occasion.startsAt = data::nowIso();
+    occasion.endsAt = data::nowIso();
+    occasion.createdAt = data::nowIso();
+    const int occasionId = occasions.insert(occasion);
+    QVERIFY2(occasionId > 0, qPrintable(db.lastError()));
+    QVERIFY(service.activate(occasionId));
+
+    // The occasion was already running when the window opened, so the bar has to
+    // say so without the operator touching anything.
+    {
+        ui::MainWindow window(db, controller);
+        window.show();
+        QCoreApplication::processEvents();
+
+        QLabel* label = window.findChild<QLabel*>(QStringLiteral("occasionLabel"));
+        QVERIFY2(label != nullptr, "occasion label must exist in the status bar");
+        QVERIFY(label->text().contains(occasion.name));
+        QVERIFY2(window.occasionLabelText().contains(occasion.icon), "the icon leads the name");
+
+        // The label is permanent rather than rebuilt, so switching off has to
+        // clear it in place.
+        window.deactivateOccasion();
+        QCoreApplication::processEvents();
+        QVERIFY2(window.occasionLabelText().isEmpty(), "the label must be empty once the occasion is off");
+    }
+
+    // A window opened with nothing running must not inherit a stale label, which
+    // is why the label is read from the setting at construction instead of being
+    // left over from an earlier one.
+    {
+        ui::MainWindow window(db, controller);
+        window.show();
+        QCoreApplication::processEvents();
+        QVERIFY(window.occasionLabelText().isEmpty());
+    }
+
+    // And a later activation is picked up by the window already on screen.
+    {
+        ui::MainWindow window(db, controller);
+        window.show();
+        QVERIFY(window.activateOccasion(occasionId));
+        QCoreApplication::processEvents();
+        QVERIFY(window.occasionLabelText().contains(occasion.name));
+
+        // A refused activation, an occasion that does not exist, leaves the bar
+        // showing what was already running rather than blanking it.
+        QVERIFY(!window.activateOccasion(occasionId + 999));
+        QVERIFY(window.occasionLabelText().contains(occasion.name));
+    }
 }
 
 QTEST_MAIN(UiTest)

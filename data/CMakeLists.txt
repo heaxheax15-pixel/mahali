@@ -57,6 +57,8 @@ target_sources(mahali-data PRIVATE
     supplier_return_item_repository.cpp
     supplier_return_service.cpp
     supplier_payment_service.cpp
+    occasion_repository.cpp
+    occasion_service.cpp
     sync_outbox_repository.cpp
     sync_sequence_repository.cpp
     user_repository.cpp

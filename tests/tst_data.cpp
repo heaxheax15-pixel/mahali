@@ -32,6 +32,8 @@
 #include "audit_log_repository.h"
 #include "zakat_setting_repository.h"
 #include "setting_repository.h"
+#include "occasion_repository.h"
+#include "occasion_service.h"
 #include "core/i18n.h"
 #include "sync_outbox_repository.h"
 #include "device_ledger_service.h"
@@ -107,6 +109,8 @@ private slots:
     void supplier_return_item_roundtrip();
     void supplier_return_find_by_supplier();
     void supplier_returns_schema_exists();
+    void occasion_roundtrip();
+    void occasion_service_activate_deactivate();
 
 private:
     QTemporaryDir m_dir;
@@ -1818,6 +1822,31 @@ int addSupplierForPayments(data::SupplierRepository& suppliers, const QString& n
     return suppliers.save(supplier);
 }
 
+// Membership by id, for the lists that may already hold rows from another test.
+bool containsOccasion(const QVector<core::Occasion>& occasions, int id)
+{
+    for (const core::Occasion& occasion : occasions) {
+        if (occasion.id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// An occasion with a window around today, so a service test can ask whether now
+// falls inside it without the answer depending on the day the suite is run.
+core::Occasion occasionFixture(const QString& name)
+{
+    const QDateTime start = QDateTime::currentDateTime().addDays(-1);
+    const QDateTime end = QDateTime::currentDateTime().addDays(1);
+    core::Occasion o;
+    o.name = name;
+    o.startsAt = data::toIso(start);
+    o.endsAt = data::toIso(end);
+    o.createdAt = data::nowIso();
+    return o;
+}
+
 } // namespace
 
 void DataLayerTest::supplier_balance_from_purchases_and_payments()
@@ -2212,6 +2241,83 @@ void DataLayerTest::supplier_returns_schema_exists()
         itemIndexes << query.value(1).toString();
     }
     QVERIFY(itemIndexes.contains(QStringLiteral("idx_supplier_return_items_return")));
+}
+
+void DataLayerTest::occasion_roundtrip()
+{
+    data::OccasionRepository occasions(*m_db);
+
+    core::Occasion o;
+    o.name = QStringLiteral("تخفيضات الصيف");
+    o.startsAt = QStringLiteral("2026-06-01T00:00:00.000");
+    o.endsAt = QStringLiteral("2026-08-31T23:59:59.999");
+    o.icon = QStringLiteral("☀️");
+    o.active = true;
+    o.createdAt = data::nowIso();
+    const int id = occasions.insert(o);
+    QVERIFY2(id > 0, qPrintable(m_db->lastError()));
+
+    const auto stored = occasions.findById(id);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->id, id);
+    QCOMPARE(stored->name, o.name);
+    QCOMPARE(stored->startsAt, o.startsAt);
+    QCOMPARE(stored->endsAt, o.endsAt);
+    QCOMPARE(stored->icon, o.icon);
+    QCOMPARE(stored->active, true);
+    QCOMPARE(stored->createdAt, o.createdAt);
+
+    core::Occasion edited = *stored;
+    edited.name = QStringLiteral("تخفيضات الخريف");
+    edited.icon = QStringLiteral("🍂");
+    QVERIFY(occasions.update(edited));
+    const auto afterUpdate = occasions.findById(id);
+    QVERIFY(afterUpdate.has_value());
+    QCOMPARE(afterUpdate->name, QStringLiteral("تخفيضات الخريف"));
+    QCOMPARE(afterUpdate->icon, QStringLiteral("🍂"));
+
+    // setActive is how an occasion is retired without losing its history, so the
+    // two lists have to agree with each other about the row that was switched
+    // off. Membership is checked rather than a list size, because this test file
+    // shares one database and another test's occasion may already be in it.
+    QVERIFY(occasions.setActive(id, false));
+    QCOMPARE(occasions.findById(id)->active, false);
+    QVERIFY(!containsOccasion(occasions.findActive(), id));
+
+    QVERIFY(occasions.setActive(id, true));
+    QVERIFY(containsOccasion(occasions.findActive(), id));
+    QVERIFY(containsOccasion(occasions.findAll(), id));
+
+    QVERIFY(occasions.remove(id));
+    QVERIFY(!occasions.findById(id).has_value());
+
+    // Removing a row that is already gone is not an error the caller can do
+    // anything about, so the boolean reports that nothing was affected.
+    QVERIFY(!occasions.remove(id));
+}
+
+void DataLayerTest::occasion_service_activate_deactivate()
+{
+    data::OccasionRepository occasions(*m_db);
+    data::SettingRepository settings(*m_db);
+    data::OccasionService service(*m_db, occasions, settings);
+
+    const int id = occasions.insert(occasionFixture(QStringLiteral("رمضان")));
+    QVERIFY(id > 0);
+
+    QVERIFY(!service.current().has_value());
+
+    QVERIFY(service.activate(id));
+    const std::optional<core::Occasion> current = service.current();
+    QVERIFY(current.has_value());
+    QCOMPARE(current->id, id);
+
+    service.deactivate();
+    QVERIFY(!service.current().has_value());
+
+    // The setting is dropped, not emptied, so an absent occasion is told from
+    // one stored as an empty value.
+    QVERIFY(!settings.value(QStringLiteral("active_occasion_id")).has_value());
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

@@ -19,6 +19,10 @@ public:
 
     void set(const QString& key, const QString& value);
 
+    // Drops the key entirely, so value() reads back as absent rather than as an
+    // empty string. An empty string is a real value a caller may have stored.
+    bool remove(const QString& key);
+
 private:
     Database& m_db;
 };

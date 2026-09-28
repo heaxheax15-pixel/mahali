@@ -50,6 +50,7 @@ target_sources(mahali-core PRIVATE
     supplier_payment.h
     supplier_return.h
     supplier_return_item.h
+    occasion.h
     sync_operation.h
     sync_operation_codec.cpp
     sync_operation_codec.h

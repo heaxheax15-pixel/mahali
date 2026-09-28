@@ -110,6 +110,22 @@ void migrateStockMovementsTable(const QSqlDatabase& db)
     alter.exec(QStringLiteral("ALTER TABLE stock_movements ADD COLUMN reference TEXT NOT NULL DEFAULT ''"));
 }
 
+// A sale is stamped with the occasion running when it happened, so the reports
+// can split a day's takings by event. sales predates occasions, so existing
+// databases are given the column here; a fresh one already has it.
+void migrateSalesTable(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("sales"));
+    if (columns.isEmpty()) {
+        return;
+    }
+    if (columns.contains(QStringLiteral("occasion_id"))) {
+        return;
+    }
+    QSqlQuery alter(db);
+    alter.exec(QStringLiteral("ALTER TABLE sales ADD COLUMN occasion_id INTEGER"));
+}
+
 // Reports whether `column` of `table` is declared NOT NULL. PRAGMA table_info
 // rows are (cid, name, type, notnull, dflt_value, pk).
 bool columnIsNotNull(const QSqlDatabase& db, const QString& table, const QString& column)
@@ -378,7 +394,20 @@ void Database::createSchema()
             "total_cents INTEGER NOT NULL,"
             "device_id TEXT NOT NULL,"
             "oversold INTEGER NOT NULL DEFAULT 0,"
-            "reversed_sale_id INTEGER NOT NULL DEFAULT 0);"),
+            "reversed_sale_id INTEGER NOT NULL DEFAULT 0,"
+            // Nullable on purpose, unlike the 0 sentinels above: no occasion
+            // running is a real state, and occasion_id is never 0.
+            "occasion_id INTEGER);"),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS occasions ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "name TEXT NOT NULL,"
+            "starts_at TEXT NOT NULL,"
+            "ends_at TEXT NOT NULL,"
+            "icon TEXT NOT NULL DEFAULT '',"
+            "active INTEGER NOT NULL DEFAULT 1,"
+            "created_at TEXT NOT NULL);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS sale_items ("
@@ -653,6 +682,9 @@ void Database::createSchema()
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_supplier_return_items_return "
             "ON supplier_return_items(return_id);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_occasions_active "
+            "ON occasions(active, starts_at);"),
     };
 
     if (!execStatements(schema, QStringLiteral("schema"))) {
@@ -667,6 +699,7 @@ void Database::createSchema()
     migrateUsersTable(m_db);
     migrateSuppliersTable(m_db);
     migrateStockMovementsTable(m_db);
+    migrateSalesTable(m_db);
     const QString productsError = migrateProductsTable(m_db);
     if (!productsError.isEmpty()) {
         m_lastError = QStringLiteral("products migration failed: %1").arg(productsError);

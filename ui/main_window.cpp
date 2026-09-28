@@ -33,6 +33,9 @@
 #include "audit_log_page.h"
 #include "cash_session_page.h"
 #include "customers_page.h"
+#include "data/occasion_repository.h"
+#include "data/occasion_service.h"
+#include "data/setting_repository.h"
 #include "expenses_page.h"
 #include "format_utils.h"
 #include "login_dialog.h"
@@ -178,6 +181,13 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     statusBar()->setContentsMargins(0, 0, 0, 0);
     statusBar()->setFixedHeight(36);
     statusBar()->addWidget(m_statusLabel);
+
+    m_occasionLabel = new QLabel;
+    m_occasionLabel->setObjectName(QStringLiteral("occasionLabel"));
+    statusBar()->addWidget(m_occasionLabel);
+    // Filled now so a shop that opens mid-occasion says so before the operator
+    // has done anything. Refreshed again on activate/deactivate.
+    refreshOccasionLabel();
 
     m_userLabel = new QLabel;
     m_userLabel->setObjectName(QStringLiteral("userLabel"));
@@ -333,6 +343,58 @@ void MainWindow::onSyncStatusChanged()
                 .arg(stats.salesToday)
                 .arg(formatMoney(stats.revenueTodayCents));
     m_statusLabel->setText(text);
+}
+
+// Reads the running occasion and shows its name, or clears the label when there
+// is none. Built on every change rather than tracked by hand, so the bar cannot
+// disagree with the setting.
+void MainWindow::refreshOccasionLabel()
+{
+    if (!m_occasionLabel) {
+        return;
+    }
+
+    data::OccasionRepository occasions(m_db);
+    data::SettingRepository settings(m_db);
+    data::OccasionService service(m_db, occasions, settings);
+
+    if (const std::optional<core::Occasion> occasion = service.current()) {
+        // The icon is optional, so the label is built either way and the name is
+        // appended only when there is an icon to show.
+        QString text = occasion->icon.isEmpty() ? QString() : occasion->icon + QStringLiteral(" ");
+        text += occasion->name;
+        m_occasionLabel->setText(text);
+    } else {
+        m_occasionLabel->clear();
+    }
+}
+
+QString MainWindow::occasionLabelText() const
+{
+    return m_occasionLabel ? m_occasionLabel->text() : QString();
+}
+
+bool MainWindow::activateOccasion(int occasionId)
+{
+    data::OccasionRepository occasions(m_db);
+    data::SettingRepository settings(m_db);
+    data::OccasionService service(m_db, occasions, settings);
+
+    const bool ok = service.activate(occasionId);
+    // Refreshed either way: a refused activation leaves the bar showing what was
+    // already running, which is worth confirming rather than assuming.
+    refreshOccasionLabel();
+    return ok;
+}
+
+void MainWindow::deactivateOccasion()
+{
+    data::OccasionRepository occasions(m_db);
+    data::SettingRepository settings(m_db);
+    data::OccasionService service(m_db, occasions, settings);
+
+    service.deactivate();
+    refreshOccasionLabel();
 }
 
 void MainWindow::onSwitchUserClicked()

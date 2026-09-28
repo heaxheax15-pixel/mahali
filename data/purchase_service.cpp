@@ -16,6 +16,9 @@ PurchaseService::PurchaseService(Database& db, PurchaseRepository& purchases, Pu
     , m_stockMovements(stockMovements)
     , m_suppliers(suppliers)
     , m_supplierPayments(supplierPayments)
+    , m_occasions(db)
+    , m_settings(db)
+    , m_occasionService(db, m_occasions, m_settings)
 {
 }
 
@@ -94,6 +97,15 @@ PurchaseResult PurchaseService::recordPurchase(const core::Purchase& purchase,
     }
 
     // C.
+    // Stamped with whatever occasion is running now, so stock bought for an
+    // event can be told apart from stock bought the rest of the time. The
+    // column has been on purchases since 2a and was left unwritten until now; a
+    // purchase with no occasion running keeps the NULL it already had. Read
+    // after the transaction opens, so the purchase and the occasion it was
+    // attributed to come from one snapshot.
+    if (const std::optional<core::Occasion> occasion = m_occasionService.current()) {
+        header.occasionId = occasion->id;
+    }
     const int purchaseId = m_purchases.insert(header);
     if (purchaseId == 0) {
         m_db.rollback();

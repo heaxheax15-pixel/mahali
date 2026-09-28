@@ -72,4 +72,16 @@ void SettingRepository::set(const QString& key, const QString& value)
     }
 }
 
+bool SettingRepository::remove(const QString& key)
+{
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral("DELETE FROM settings WHERE key = ?"));
+    query.addBindValue(key);
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SettingRepository::remove"));
+        return false;
+    }
+    return query.numRowsAffected() > 0;
+}
+
 } // namespace app::data

@@ -6,9 +6,12 @@
 #include "core/purchase.h"
 #include "core/purchase_item.h"
 #include "database.h"
+#include "occasion_repository.h"
+#include "occasion_service.h"
 #include "product_repository.h"
 #include "purchase_item_repository.h"
 #include "purchase_repository.h"
+#include "setting_repository.h"
 #include "stock_movement_repository.h"
 #include "supplier_repository.h"
 #include "supplier_payment_repository.h"
@@ -41,6 +44,12 @@ private:
     StockMovementRepository& m_stockMovements;
     SupplierRepository& m_suppliers;
     SupplierPaymentRepository& m_supplierPayments;
+    // Built here off the same database rather than injected, for the same reason
+    // as in SaleService: occasions are read-only context for a purchase, and
+    // every call site of this constructor would otherwise have to supply them.
+    OccasionRepository m_occasions;
+    SettingRepository m_settings;
+    OccasionService m_occasionService;
 };
 
 } // namespace app::data

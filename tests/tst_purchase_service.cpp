@@ -3,11 +3,15 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 
+#include "data/date_utils.h"
 #include "data/database.h"
+#include "data/occasion_repository.h"
+#include "data/occasion_service.h"
 #include "data/product_repository.h"
 #include "data/purchase_item_repository.h"
 #include "data/purchase_repository.h"
 #include "data/purchase_service.h"
+#include "data/setting_repository.h"
 #include "data/stock_movement_repository.h"
 #include "data/supplier_repository.h"
 #include "data/supplier_payment_repository.h"
@@ -106,6 +110,8 @@ private slots:
     void empty_items_fails();
     void rollback_on_bad_product();
     void purchase_with_null_strings();
+    void purchase_carries_active_occasion();
+    void purchase_no_occasion_when_inactive();
 
 private:
     QTemporaryDir m_dir;
@@ -346,6 +352,87 @@ void PurchaseServiceTest::purchase_with_null_strings()
     QVERIFY(directStored->note.isEmpty());
     QVERIFY(directStored->purchasedAt.isEmpty());
     QVERIFY(directStored->createdAt.isEmpty());
+}
+
+void PurchaseServiceTest::purchase_carries_active_occasion()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("purchase_carries_active_occasion.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد موسم"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("تمر"), 0);
+    QVERIFY(productId > 0);
+
+    data::OccasionRepository occasions(f.db);
+    data::SettingRepository settings(f.db);
+    data::OccasionService occasionService(f.db, occasions, settings);
+
+    core::Occasion occasion;
+    occasion.name = QStringLiteral("موسم التمور");
+    occasion.startsAt = data::nowIso();
+    occasion.endsAt = data::nowIso();
+    occasion.createdAt = data::nowIso();
+    const int occasionId = occasions.insert(occasion);
+    QVERIFY2(occasionId > 0, qPrintable(f.db.lastError()));
+    QVERIFY(occasionService.activate(occasionId));
+
+    const data::PurchaseResult result = f.service.recordPurchase(makePurchase(supplierId, 500000, 0, true),
+                                                                  {makeLine(productId, 100, 5000)});
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    const auto stored = f.purchases.findById(result.purchaseId);
+    QVERIFY(stored.has_value());
+    QVERIFY(stored->occasionId.has_value());
+    QCOMPARE(*stored->occasionId, occasionId);
+
+    // Read back as a number, not the text of one, so a report grouping by
+    // occasion joins on an integer rather than on a string.
+    QSqlQuery query(f.db.handle());
+    QVERIFY(query.exec(QStringLiteral("SELECT occasion_id FROM purchases WHERE id = %1").arg(result.purchaseId)));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), occasionId);
+}
+
+void PurchaseServiceTest::purchase_no_occasion_when_inactive()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("purchase_no_occasion_when_inactive.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد عادي"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("سكر"), 0);
+    QVERIFY(productId > 0);
+
+    // An occasion exists but is switched off. current() reads through the active
+    // flag, so a purchase must not be stamped with it.
+    data::OccasionRepository occasions(f.db);
+    data::SettingRepository settings(f.db);
+    data::OccasionService occasionService(f.db, occasions, settings);
+
+    core::Occasion occasion;
+    occasion.name = QStringLiteral("تخفيضات متوقفة");
+    occasion.startsAt = data::nowIso();
+    occasion.endsAt = data::nowIso();
+    occasion.createdAt = data::nowIso();
+    const int occasionId = occasions.insert(occasion);
+    QVERIFY(occasionId > 0);
+    QVERIFY(occasions.setActive(occasionId, false));
+    // The setting still points at it, which is exactly the case current() has to
+    // refuse rather than pass on.
+    settings.set(QStringLiteral("active_occasion_id"), QString::number(occasionId));
+    QVERIFY(!occasionService.current().has_value());
+
+    const data::PurchaseResult result = f.service.recordPurchase(makePurchase(supplierId, 500000, 0, true),
+                                                                  {makeLine(productId, 100, 5000)});
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    const auto stored = f.purchases.findById(result.purchaseId);
+    QVERIFY(stored.has_value());
+    QVERIFY(!stored->occasionId.has_value());
+
+    // The column holds a real SQL NULL rather than 0, so a report can tell a
+    // purchase made outside any occasion from one made during occasion zero.
+    QSqlQuery query(f.db.handle());
+    QVERIFY(query.exec(QStringLiteral("SELECT occasion_id FROM purchases WHERE id = %1").arg(result.purchaseId)));
+    QVERIFY(query.next());
+    QVERIFY2(query.value(0).isNull(), "occasion_id must be NULL, not 0");
 }
 
 QTEST_GUILESS_MAIN(PurchaseServiceTest)
