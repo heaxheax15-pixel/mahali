@@ -60,6 +60,7 @@ target_sources(mahali-data PRIVATE
     occasion_repository.cpp
     occasion_service.cpp
     supplier_report_service.cpp
+    daily_report_service.cpp
     sync_outbox_repository.cpp
     sync_sequence_repository.cpp
     user_repository.cpp

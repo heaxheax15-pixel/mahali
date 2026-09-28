@@ -55,6 +55,15 @@ target_link_libraries(tst_supplier_report
 
 add_test(NAME supplier_report COMMAND tst_supplier_report)
 
+add_executable(tst_daily_report tst_daily_report.cpp)
+target_link_libraries(tst_daily_report
+    PRIVATE
+        mahali-core
+        mahali-data
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME daily_report COMMAND tst_daily_report)
+
 
 add_executable(tst_device tst_device.cpp)
 target_link_libraries(tst_device

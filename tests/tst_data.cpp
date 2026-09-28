@@ -59,6 +59,9 @@ private slots:
     void schemaContainsAllTables();
     void productSaveAndFind();
     void quick_items_roundtrip();
+    void two_products_without_barcode();
+    void barcode_with_value_still_unique();
+    void read_null_barcode_returns_empty();
     void sold_by_weight_persists();
     void legacy_products_migration();
     void update_average_cost_from_zero();
@@ -233,6 +236,70 @@ void DataLayerTest::quick_items_roundtrip()
     repo.setActive(waterId, false);
     QCOMPARE(repo.findQuickItems().size(), std::size_t(1));
     QCOMPARE(repo.findQuickItems().front().id, breadId);
+}
+
+void DataLayerTest::two_products_without_barcode()
+{
+    data::ProductRepository repo(*m_db);
+
+    core::Product first;
+    first.barcode = QString();
+    first.name = QStringLiteral("منتج بلا باركود أول");
+    const int firstId = repo.save(first);
+    QVERIFY2(firstId > 0, qPrintable(m_db->lastError()));
+
+    core::Product second;
+    second.barcode = QString();
+    second.name = QStringLiteral("منتج بلا باركود ثانٍ");
+    const int secondId = repo.save(second);
+    QVERIFY2(secondId > 0, qPrintable(m_db->lastError()));
+
+    QVERIFY(secondId != firstId);
+
+    // The blank-but-not-null default is treated the same way, which is the case
+    // the products page actually sends when its field is left empty.
+    core::Product third;
+    QVERIFY(third.barcode.isEmpty());
+    third.name = QStringLiteral("منتج بحقل باركود فارغ");
+    QVERIFY2(repo.save(third) > 0, qPrintable(m_db->lastError()));
+}
+
+void DataLayerTest::barcode_with_value_still_unique()
+{
+    data::ProductRepository repo(*m_db);
+
+    core::Product first;
+    first.barcode = QStringLiteral("BC-UNIQUE-1");
+    first.name = QStringLiteral("المنتج الأول");
+    QVERIFY(repo.save(first) > 0);
+
+    core::Product duplicate;
+    duplicate.barcode = QStringLiteral("BC-UNIQUE-1");
+    duplicate.name = QStringLiteral("المنتج المكرر");
+    QCOMPARE(repo.save(duplicate), 0);
+    QVERIFY(m_db->lastError().contains(QStringLiteral("UNIQUE"), Qt::CaseInsensitive));
+
+    // A real barcode does not collide with the products that have none.
+    core::Product other;
+    other.barcode = QStringLiteral("BC-UNIQUE-2");
+    other.name = QStringLiteral("منتج بباركود آخر");
+    QVERIFY(repo.save(other) > 0);
+}
+
+void DataLayerTest::read_null_barcode_returns_empty()
+{
+    data::ProductRepository repo(*m_db);
+
+    core::Product product;
+    product.barcode = QString();
+    product.name = QStringLiteral("منتج بلا باركود");
+    const int id = repo.save(product);
+    QVERIFY(id > 0);
+
+    const auto found = repo.findById(id);
+    QVERIFY(found.has_value());
+    QVERIFY(found->barcode.isEmpty());
+    QVERIFY(found->barcode.isNull());
 }
 
 void DataLayerTest::sold_by_weight_persists()

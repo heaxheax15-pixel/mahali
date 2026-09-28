@@ -45,6 +45,24 @@ std::optional<core::CashSession> CashSessionRepository::findById(int id) const
     return sessionFromQuery(query);
 }
 
+std::optional<core::CashSession> CashSessionRepository::findForDay(const QString& dayIso) const
+{
+    QSqlQuery query(m_db.handle());
+    // A prefix match on the stored ISO text, so the day is read off the date part
+    // without the caller having to say when the day starts and ends.
+    query.prepare(QStringLiteral("SELECT %1 FROM cash_sessions WHERE opened_at LIKE ? ORDER BY opened_at DESC LIMIT 1")
+                      .arg(QLatin1StringView(kSessionColumns)));
+    query.addBindValue(dayIso + QStringLiteral("T%"));
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CashSessionRepository::findForDay"));
+        return std::nullopt;
+    }
+    if (!query.next()) {
+        return std::nullopt;
+    }
+    return sessionFromQuery(query);
+}
+
 std::optional<core::CashSession> CashSessionRepository::findOpen() const
 {
     QSqlQuery query(m_db.handle());
