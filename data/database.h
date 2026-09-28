@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QString>
 
 namespace app::data {
@@ -30,6 +31,17 @@ public:
 
     QString lastError() const;
 
+    // Records a failed statement. Repositories call this on every exec() that
+    // comes back false: without it the driver error is dropped on the floor and
+    // the service that asked for the write reports a blank reason, which reads
+    // to the operator as "nothing happened" rather than "the database refused".
+    // context names the call site, e.g. "ProductRepository::save".
+    void recordError(const QSqlError& err, const QString& context);
+
+    // The call site recorded by the last recordError(), empty if the last error
+    // came from Database itself rather than from a repository.
+    QString lastErrorContext() const;
+
     bool verifyStockConsistency() const;
     void recomputeStockQuantities();
 
@@ -37,10 +49,13 @@ private:
     void applyPragmas();
     void createSchema();
     bool execStatements(const QStringList& statements, const QString& source);
+    void createSingleOpenSessionIndex();
 
     QSqlDatabase m_db;
     DatabaseMode m_mode = DatabaseMode::Device;
     mutable QString m_lastError;
+    mutable QString m_lastErrorContext;
+    mutable QSqlError m_lastSqlError;
 };
 
 } // namespace app::data

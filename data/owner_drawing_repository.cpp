@@ -51,6 +51,7 @@ std::vector<core::OwnerDrawing> OwnerDrawingRepository::findBetween(const QDateT
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("OwnerDrawingRepository::findBetween"));
         return drawings;
     }
     while (query.next()) {
@@ -69,6 +70,7 @@ int OwnerDrawingRepository::insert(const core::OwnerDrawing& drawing)
     query.addBindValue(drawing.note.isNull() ? QStringLiteral("") : drawing.note);
     query.addBindValue(drawing.reversedId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("OwnerDrawingRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();
@@ -95,6 +97,7 @@ bool OwnerDrawingRepository::reverse(int originalDrawingId)
     existing.prepare(QStringLiteral("SELECT 1 FROM owner_drawings WHERE reversed_id = ? LIMIT 1"));
     existing.addBindValue(originalDrawingId);
     if (!existing.exec()) {
+        m_db.recordError(existing.lastError(), QStringLiteral("OwnerDrawingRepository::reverse"));
         return false;
     }
     if (existing.next()) {

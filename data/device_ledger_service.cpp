@@ -29,6 +29,18 @@ DeviceLedgerService::DeviceLedgerService(Database& db)
 {
 }
 
+bool DeviceLedgerService::rejectWithoutIdentity(DeviceOpResult* result) const
+{
+    if (isValid()) {
+        return false;
+    }
+    if (result) {
+        *result = DeviceOpResult();
+        result->error = QStringLiteral("device id is empty: the device identity could not be minted");
+    }
+    return true;
+}
+
 int DeviceLedgerService::mintAndEnqueue(core::SyncOpType type, int entityId, long long totalCents,
                                         const QVector<core::SaleItem>& resolved, const QString& note,
                                         QString* error)
@@ -73,6 +85,9 @@ int DeviceLedgerService::mintAndEnqueue(core::SyncOpType type, int entityId, lon
 DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& items, int cashSessionId)
 {
     DeviceOpResult result;
+    if (rejectWithoutIdentity(&result)) {
+        return result;
+    }
     if (items.isEmpty()) {
         result.error = QStringLiteral("sale items are empty");
         return result;
@@ -167,6 +182,9 @@ QString resolveError;
 DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items)
 {
     DeviceOpResult result;
+    if (rejectWithoutIdentity(&result)) {
+        return result;
+    }
     if (items.isEmpty()) {
         result.error = QStringLiteral("sale items are empty");
         return result;
@@ -250,6 +268,9 @@ DeviceOpResult DeviceLedgerService::recordCustomerPayment(int customerId, long l
                                                           int cashSessionId, const QString& note)
 {
     DeviceOpResult result;
+    if (rejectWithoutIdentity(&result)) {
+        return result;
+    }
     if (amountCents <= 0) {
         result.error = QStringLiteral("payment amount must be positive");
         return result;

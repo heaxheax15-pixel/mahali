@@ -49,6 +49,7 @@ std::vector<core::Setting> SettingRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT id, key, value FROM settings ORDER BY key"));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SettingRepository::findAll"));
         return settings;
     }
     while (query.next()) {
@@ -65,7 +66,10 @@ void SettingRepository::set(const QString& key, const QString& value)
                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
     query.addBindValue(key);
     query.addBindValue(value);
-    query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SettingRepository::set"));
+        return;
+    }
 }
 
 } // namespace app::data

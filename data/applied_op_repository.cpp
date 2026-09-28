@@ -61,6 +61,7 @@ int AppliedOpRepository::insert(const core::AppliedOpRecord& record)
     query.addBindValue(record.cogsCents);
     query.addBindValue(toIso(record.appliedAt));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("AppliedOpRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();
@@ -85,6 +86,7 @@ int AppliedOpRepository::pruneOlderThan(const QDateTime& cutoff, int maxRows)
     query.addBindValue(toIso(cutoff));
     query.addBindValue(maxRows);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("AppliedOpRepository::pruneOlderThan"));
         return 0;
     }
     return query.numRowsAffected();

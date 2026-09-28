@@ -85,6 +85,7 @@ std::vector<core::Product> ProductRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT %1 FROM products ORDER BY name").arg(QLatin1StringView(kProductColumns)));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::findAll"));
         return products;
     }
     while (query.next()) {
@@ -110,6 +111,7 @@ int ProductRepository::save(const core::Product& product)
         query.addBindValue(product.active ? 1 : 0);
         query.addBindValue(product.soldByWeight ? 1 : 0);
         if (!query.exec()) {
+            m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::save"));
             return 0;
         }
         return query.lastInsertId().toInt();
@@ -130,6 +132,7 @@ int ProductRepository::save(const core::Product& product)
     query.addBindValue(product.soldByWeight ? 1 : 0);
     query.addBindValue(product.id);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::save"));
         return 0;
     }
     return product.id;
@@ -142,6 +145,7 @@ std::vector<core::Product> ProductRepository::findQuickItems() const
     query.prepare(QStringLiteral("SELECT %1 FROM products WHERE %2 ORDER BY name")
                       .arg(QLatin1StringView(kProductColumns), QLatin1StringView(kQuickItemsFilter)));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::findQuickItems"));
         return products;
     }
     while (query.next()) {
@@ -158,6 +162,7 @@ std::vector<core::Product> ProductRepository::findQuickItemsByName(const QString
                       .arg(QLatin1StringView(kProductColumns), QLatin1StringView(kQuickItemsFilter)));
     query.addBindValue(likePattern(nameQuery));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::findQuickItemsByName"));
         return products;
     }
     while (query.next()) {
@@ -175,7 +180,10 @@ void ProductRepository::adjustStock(int productId, long long delta, const QStrin
     query.addBindValue(delta);
     query.addBindValue(reason);
     query.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
-    query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::adjustStock"));
+        return;
+    }
 }
 
 void ProductRepository::setActive(int productId, bool active)
@@ -184,7 +192,10 @@ void ProductRepository::setActive(int productId, bool active)
     query.prepare(QStringLiteral("UPDATE products SET active = ? WHERE id = ?"));
     query.addBindValue(active ? 1 : 0);
     query.addBindValue(productId);
-    query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::setActive"));
+        return;
+    }
 }
 
 void ProductRepository::setSoldByWeight(int productId, bool value)
@@ -193,7 +204,10 @@ void ProductRepository::setSoldByWeight(int productId, bool value)
     query.prepare(QStringLiteral("UPDATE products SET sold_by_weight = ? WHERE id = ?"));
     query.addBindValue(value ? 1 : 0);
     query.addBindValue(productId);
-    query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::setSoldByWeight"));
+        return;
+    }
 }
 
 } // namespace app::data

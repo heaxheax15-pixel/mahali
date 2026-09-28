@@ -51,6 +51,7 @@ std::vector<core::AuditLogEntry> AuditLogRepository::findBetween(const QDateTime
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("AuditLogRepository::findBetween"));
         return entries;
     }
     while (query.next()) {
@@ -65,6 +66,7 @@ std::vector<core::AuditLogEntry> AuditLogRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT %1 FROM audit_log ORDER BY created_at").arg(QLatin1StringView(kEntryColumns)));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("AuditLogRepository::findAll"));
         return entries;
     }
     while (query.next()) {
@@ -82,6 +84,7 @@ int AuditLogRepository::insert(const core::AuditLogEntry& entry)
     query.addBindValue(entry.target);
     query.addBindValue(toIso(entry.createdAt.isValid() ? entry.createdAt : QDateTime::currentDateTime()));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("AuditLogRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

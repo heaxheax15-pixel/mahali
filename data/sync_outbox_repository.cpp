@@ -68,6 +68,7 @@ int SyncOutboxRepository::enqueue(const core::SyncOperation& op)
     query.addBindValue(QString::fromUtf8(core::SyncOpCodec::serialize(op)));
     query.addBindValue(nowIso());
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SyncOutboxRepository::enqueue"));
         return 0;
     }
     return query.lastInsertId().toInt();
@@ -94,6 +95,7 @@ std::vector<core::SyncOutboxEntry> SyncOutboxRepository::findPending(int limit) 
                       .arg(QLatin1StringView(kOutboxColumns)));
     query.addBindValue(limit);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SyncOutboxRepository::findPending"));
         return entries;
     }
     while (query.next()) {
@@ -117,7 +119,11 @@ bool SyncOutboxRepository::markApplied(int id)
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("UPDATE sync_outbox SET status = 'applied' WHERE id = ?"));
     query.addBindValue(id);
-    return query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SyncOutboxRepository::markApplied"));
+        return false;
+    }
+    return true;
 }
 
 bool SyncOutboxRepository::markPermanentFailed(int id, const QString& error)
@@ -127,7 +133,12 @@ bool SyncOutboxRepository::markPermanentFailed(int id, const QString& error)
         "UPDATE sync_outbox SET status = 'permanent_failed', last_error = ? WHERE id = ?"));
     query.addBindValue(error);
     query.addBindValue(id);
-    return query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(),
+                         QStringLiteral("SyncOutboxRepository::markPermanentFailed"));
+        return false;
+    }
+    return true;
 }
 
 bool SyncOutboxRepository::recordAttempt(int id)
@@ -135,7 +146,11 @@ bool SyncOutboxRepository::recordAttempt(int id)
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("UPDATE sync_outbox SET attempts = attempts + 1 WHERE id = ?"));
     query.addBindValue(id);
-    return query.exec() && query.numRowsAffected() == 1;
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SyncOutboxRepository::recordAttempt"));
+        return false;
+    }
+    return query.numRowsAffected() == 1;
 }
 
 int SyncOutboxRepository::pruneAppliedOlderThan(const QDateTime& cutoff, int maxRows)
@@ -147,6 +162,7 @@ int SyncOutboxRepository::pruneAppliedOlderThan(const QDateTime& cutoff, int max
     query.addBindValue(toIso(cutoff));
     query.addBindValue(maxRows);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SyncOutboxRepository::pruneAppliedOlderThan"));
         return 0;
     }
     return query.numRowsAffected();

@@ -49,6 +49,7 @@ std::vector<core::CustomerTransaction> CustomerTransactionRepository::findByCust
             .arg(QLatin1StringView(kTxColumns)));
     query.addBindValue(customerId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerTransactionRepository::findByCustomerId"));
         return txs;
     }
     while (query.next()) {
@@ -68,6 +69,7 @@ std::vector<core::CustomerTransaction> CustomerTransactionRepository::findBetwee
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerTransactionRepository::findBetween"));
         return txs;
     }
     while (query.next()) {
@@ -87,6 +89,7 @@ int CustomerTransactionRepository::insert(const core::CustomerTransaction& trans
     query.addBindValue(toIso(transaction.createdAt.isValid() ? transaction.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(transaction.reversedTransactionId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerTransactionRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

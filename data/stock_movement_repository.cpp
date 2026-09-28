@@ -50,6 +50,7 @@ std::vector<core::StockMovement> StockMovementRepository::findByProductId(int pr
             .arg(QLatin1StringView(kMovementColumns)));
     query.addBindValue(productId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("StockMovementRepository::findByProductId"));
         return movements;
     }
     while (query.next()) {
@@ -69,6 +70,7 @@ std::vector<core::StockMovement> StockMovementRepository::findBetween(const QDat
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("StockMovementRepository::findBetween"));
         return movements;
     }
     while (query.next()) {
@@ -100,6 +102,7 @@ int StockMovementRepository::insert(const core::StockMovement& movement)
     query.addBindValue(toIso(movement.createdAt.isValid() ? movement.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(movement.reversedId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("StockMovementRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

@@ -50,6 +50,7 @@ std::vector<core::Supplier> SupplierRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT id, name FROM suppliers ORDER BY name"));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SupplierRepository::findAll"));
         return suppliers;
     }
     while (query.next()) {
@@ -65,6 +66,7 @@ int SupplierRepository::save(const core::Supplier& supplier)
         query.prepare(QStringLiteral("INSERT INTO suppliers (name) VALUES (?)"));
         query.addBindValue(supplier.name);
         if (!query.exec()) {
+            m_db.recordError(query.lastError(), QStringLiteral("SupplierRepository::save"));
             return 0;
         }
         return query.lastInsertId().toInt();
@@ -73,6 +75,7 @@ int SupplierRepository::save(const core::Supplier& supplier)
     query.addBindValue(supplier.name);
     query.addBindValue(supplier.id);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SupplierRepository::save"));
         return 0;
     }
     return supplier.id;

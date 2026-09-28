@@ -50,6 +50,7 @@ std::vector<core::Payment> PaymentRepository::findByCustomerId(int customerId) c
             .arg(QLatin1StringView(kPaymentColumns)));
     query.addBindValue(customerId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("PaymentRepository::findByCustomerId"));
         return payments;
     }
     while (query.next()) {
@@ -68,6 +69,7 @@ std::vector<core::Payment> PaymentRepository::findBetween(const QDateTime& from,
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("PaymentRepository::findBetween"));
         return payments;
     }
     while (query.next()) {
@@ -88,6 +90,7 @@ int PaymentRepository::insert(const core::Payment& payment)
     query.addBindValue(payment.note.isNull() ? QStringLiteral("") : payment.note);
     query.addBindValue(payment.reversedId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("PaymentRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

@@ -50,6 +50,7 @@ std::vector<core::Sale> SaleRepository::findBetween(const QDateTime& from, const
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SaleRepository::findBetween"));
         return sales;
     }
     while (query.next()) {
@@ -64,6 +65,7 @@ std::vector<core::Sale> SaleRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT %1 FROM sales ORDER BY created_at").arg(QLatin1StringView(kSaleColumns)));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SaleRepository::findAll"));
         return sales;
     }
     while (query.next()) {
@@ -95,6 +97,7 @@ int SaleRepository::insert(const core::Sale& sale)
     query.addBindValue(sale.oversold ? 1 : 0);
     query.addBindValue(sale.reversedSaleId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SaleRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

@@ -33,6 +33,11 @@ public:
     QTableWidget* table() const { return m_table; }
     QPushButton* openButton() const { return m_openButton; }
 
+    // Validation applied to whatever the amount dialog returns. Exposed because
+    // the dialog is modal and cannot be driven headlessly, so this is the only
+    // way to test the rejected inputs.
+    bool amountFromInput(const QString& text, long long* cents) const;
+
 public slots:
     void openSession(long long openingFloatCents);
     void closeSession(long long closingCountedCents);

@@ -3,6 +3,7 @@
 #include <QPair>
 
 #include <QCryptographicHash>
+#include <QDebug>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStringList>
@@ -11,6 +12,11 @@
 namespace app::data {
 
 namespace {
+
+// At most one cash session may be open at a time. Kept as a constant because the
+// same name is both created and then looked up, and a mismatch between the two
+// would silently disable the check.
+const char* kSingleOpenSessionIndex = "idx_cash_sessions_one_open";
 
 QString uniqueConnectionName()
 {
@@ -247,6 +253,21 @@ bool Database::rollback()
 QString Database::lastError() const
 {
     return m_lastError;
+}
+
+void Database::recordError(const QSqlError& err, const QString& context)
+{
+    m_lastSqlError = err;
+    m_lastErrorContext = context;
+    // The context is folded into the text the services already propagate, so the
+    // message an operator finally sees says which write failed, not just that
+    // SQLite said no.
+    m_lastError = context.isEmpty() ? err.text() : QStringLiteral("%1: %2").arg(context, err.text());
+}
+
+QString Database::lastErrorContext() const
+{
+    return m_lastErrorContext;
 }
 
 void Database::applyPragmas()
@@ -490,11 +511,55 @@ void Database::createSchema()
             QStringLiteral("Failed to create schema: %1").arg(m_lastError).toStdString());
     }
 
+    createSingleOpenSessionIndex();
+
     migrateUsersTable(m_db);
     const QString productsError = migrateProductsTable(m_db);
     if (!productsError.isEmpty()) {
         m_lastError = QStringLiteral("products migration failed: %1").arg(productsError);
     }
+}
+
+// A partial unique index, so the "one open session at a time" rule is enforced
+// by the database itself and not only by CashSessionRepository::open().
+//
+// This is deliberately kept out of the schema statement list above: that list
+// throws on the first failing statement, and a database copied from an older
+// build can already hold two open rows, in which case the index cannot be
+// created at all. Such a database has to keep working, so a failure here is
+// reported and the app runs on without the index.
+void Database::createSingleOpenSessionIndex()
+{
+    const QString createSql =
+        QStringLiteral("CREATE UNIQUE INDEX IF NOT EXISTS %1 ON cash_sessions(status) WHERE status = 'open'")
+            .arg(QLatin1StringView(kSingleOpenSessionIndex));
+
+    QSqlQuery create(m_db);
+    const bool created = create.exec(createSql);
+
+    // Read the index list back rather than trusting the statement: a failure
+    // above has to end up as a warning, not as a silently unprotected database.
+    QSqlQuery indexes(m_db);
+    if (!indexes.exec(QStringLiteral("PRAGMA index_list(cash_sessions)"))) {
+        qWarning() << "could not read the index list of cash_sessions:" << indexes.lastError().text();
+        return;
+    }
+    bool present = false;
+    while (indexes.next()) {
+        if (indexes.value(1).toString() == QLatin1StringView(kSingleOpenSessionIndex)) {
+            present = true;
+            break;
+        }
+    }
+    if (present) {
+        return;
+    }
+    qWarning() << "index" << kSingleOpenSessionIndex << "is missing"
+               << (created ? QStringLiteral("even though it was just created")
+                           : QStringLiteral("because it could not be created"))
+               << "-this database holds more than one open cash session, so opening"
+               << "a new session is only prevented by the repository, not by the database."
+               << "Close the extra open sessions to restore the index.";
 }
 
 bool Database::execStatements(const QStringList& statements, const QString& source)

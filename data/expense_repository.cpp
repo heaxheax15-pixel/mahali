@@ -50,6 +50,7 @@ std::vector<core::Expense> ExpenseRepository::findBetween(const QDateTime& from,
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ExpenseRepository::findBetween"));
         return expenses;
     }
     while (query.next()) {
@@ -68,6 +69,7 @@ int ExpenseRepository::insert(const core::Expense& expense)
     query.addBindValue(expense.amountCents);
     query.addBindValue(expense.reversedId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ExpenseRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();
@@ -95,6 +97,7 @@ bool ExpenseRepository::reverse(int originalExpenseId)
     existing.prepare(QStringLiteral("SELECT 1 FROM expenses WHERE reversed_id = ? LIMIT 1"));
     existing.addBindValue(originalExpenseId);
     if (!existing.exec()) {
+        m_db.recordError(existing.lastError(), QStringLiteral("ExpenseRepository::reverse"));
         return false;
     }
     if (existing.next()) {

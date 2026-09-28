@@ -49,7 +49,19 @@ public:
     DeviceOpResult recordCustomerPayment(int customerId, long long amountCents, int cashSessionId,
                                          const QString& note);
 
+    // False when the device id could not be minted or persisted. Every write is
+    // refused in that state: an operation queued under an empty device id can
+    // never be matched to a device on the server, and the queue would grow
+    // silently instead of failing loudly.
+    bool isValid() const { return !m_deviceId.isEmpty(); }
+
 private:
+    // Refuses the write when the device identity is missing. This sits at the
+    // entry points rather than only in mintAndEnqueue: Qt binds a null QString
+    // as SQL NULL, so a failed mint would otherwise blow up on the first
+    // NOT NULL constraint with an empty message instead of this one.
+    bool rejectWithoutIdentity(DeviceOpResult* result) const;
+
     int mintAndEnqueue(core::SyncOpType type, int entityId, long long totalCents,
                        const QVector<core::SaleItem>& resolved, const QString& note, QString* error);
 

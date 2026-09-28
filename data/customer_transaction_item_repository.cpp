@@ -37,6 +37,7 @@ std::vector<core::CustomerTransactionItem> CustomerTransactionItemRepository::fi
                        "reversed_id FROM customer_transaction_items WHERE customer_transaction_id = ?"));
     query.addBindValue(transactionId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerTransactionItemRepository::findByTransactionId"));
         return items;
     }
     while (query.next()) {
@@ -59,6 +60,7 @@ int CustomerTransactionItemRepository::insert(const core::CustomerTransactionIte
     query.addBindValue(item.unitCostCents);
     query.addBindValue(item.reversedId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerTransactionItemRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

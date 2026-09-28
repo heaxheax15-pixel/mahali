@@ -41,6 +41,7 @@ std::vector<core::Customer> CustomerRepository::findByName(const QString& name) 
     query.prepare(QStringLiteral("SELECT id, name, phone FROM customers WHERE name = ?"));
     query.addBindValue(name);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerRepository::findByName"));
         return customers;
     }
     while (query.next()) {
@@ -55,6 +56,7 @@ std::vector<core::Customer> CustomerRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT id, name, phone FROM customers ORDER BY name"));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerRepository::findAll"));
         return customers;
     }
     while (query.next()) {
@@ -71,6 +73,7 @@ int CustomerRepository::save(const core::Customer& customer)
         query.addBindValue(customer.name);
         query.addBindValue(customer.phone);
         if (!query.exec()) {
+            m_db.recordError(query.lastError(), QStringLiteral("CustomerRepository::save"));
             return 0;
         }
         return query.lastInsertId().toInt();
@@ -81,6 +84,7 @@ int CustomerRepository::save(const core::Customer& customer)
     query.addBindValue(customer.phone);
     query.addBindValue(customer.id);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CustomerRepository::save"));
         return 0;
     }
     return customer.id;

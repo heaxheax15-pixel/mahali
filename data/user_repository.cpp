@@ -44,6 +44,7 @@ std::vector<core::User> UserRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT %1 FROM users ORDER BY name").arg(QLatin1String(kUserColumns)));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("UserRepository::findAll"));
         return users;
     }
     while (query.next()) {
@@ -59,6 +60,7 @@ QVector<core::User> UserRepository::listActive() const
     query.prepare(QStringLiteral("SELECT %1 FROM users WHERE active = 1 ORDER BY name")
                       .arg(QLatin1String(kUserColumns)));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("UserRepository::listActive"));
         return users;
     }
     while (query.next()) {
@@ -99,7 +101,11 @@ bool UserRepository::savePin(int id, const QString& pin)
     query.prepare(QStringLiteral("UPDATE users SET pin = ? WHERE id = ?"));
     query.addBindValue(pin);
     query.addBindValue(id);
-    return query.exec() && query.numRowsAffected() > 0;
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("UserRepository::setPin"));
+        return false;
+    }
+    return query.numRowsAffected() > 0;
 }
 
 bool UserRepository::setActive(int id, bool active)
@@ -108,7 +114,11 @@ bool UserRepository::setActive(int id, bool active)
     query.prepare(QStringLiteral("UPDATE users SET active = ? WHERE id = ?"));
     query.addBindValue(active ? 1 : 0);
     query.addBindValue(id);
-    return query.exec() && query.numRowsAffected() > 0;
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("UserRepository::setActive"));
+        return false;
+    }
+    return query.numRowsAffected() > 0;
 }
 
 bool UserRepository::hasAny() const
@@ -124,6 +134,7 @@ QVector<core::User> UserRepository::listAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT %1 FROM users ORDER BY name").arg(QLatin1String(kUserColumns)));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("UserRepository::listAll"));
         return users;
     }
     while (query.next()) {
@@ -137,7 +148,11 @@ bool UserRepository::remove(int id)
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("DELETE FROM users WHERE id = ?"));
     query.addBindValue(id);
-    return query.exec() && query.numRowsAffected() > 0;
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("UserRepository::remove"));
+        return false;
+    }
+    return query.numRowsAffected() > 0;
 }
 
 int UserRepository::save(const core::User& user)
@@ -148,6 +163,7 @@ int UserRepository::save(const core::User& user)
         query.addBindValue(user.name);
         query.addBindValue(user.role);
         if (!query.exec()) {
+            m_db.recordError(query.lastError(), QStringLiteral("UserRepository::save"));
             return 0;
         }
         return query.lastInsertId().toInt();
@@ -157,6 +173,7 @@ int UserRepository::save(const core::User& user)
     query.addBindValue(user.role);
     query.addBindValue(user.id);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("UserRepository::save"));
         return 0;
     }
     return user.id;

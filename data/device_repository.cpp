@@ -56,6 +56,7 @@ std::vector<core::Device> DeviceRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT id, device_id, auth_token, paired_at, last_seen_at FROM devices ORDER BY paired_at"));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("DeviceRepository::findAll"));
         return devices;
     }
     while (query.next()) {
@@ -75,6 +76,7 @@ int DeviceRepository::save(const core::Device& device)
         query.addBindValue(toIso(device.pairedAt.isValid() ? device.pairedAt : QDateTime::currentDateTime()));
         query.addBindValue(device.lastSeenAt.isValid() ? toIso(device.lastSeenAt) : QVariant());
         if (!query.exec()) {
+            m_db.recordError(query.lastError(), QStringLiteral("DeviceRepository::save"));
             return 0;
         }
         return query.lastInsertId().toInt();
@@ -88,6 +90,7 @@ int DeviceRepository::save(const core::Device& device)
     query.addBindValue(device.lastSeenAt.isValid() ? toIso(device.lastSeenAt) : QVariant());
     query.addBindValue(device.id);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("DeviceRepository::save"));
         return 0;
     }
     return device.id;
@@ -99,7 +102,10 @@ void DeviceRepository::recordActivity(const core::Device& device)
     query.prepare(QStringLiteral("UPDATE devices SET last_seen_at = ? WHERE id = ?"));
     query.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODateWithMs));
     query.addBindValue(device.id);
-    query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("DeviceRepository::recordActivity"));
+        return;
+    }
 }
 
 } // namespace app::data

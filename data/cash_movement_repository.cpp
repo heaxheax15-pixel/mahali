@@ -37,6 +37,7 @@ std::vector<core::CashMovement> CashMovementRepository::findBySessionId(int sess
                        "FROM cash_movements WHERE session_id = ? ORDER BY created_at"));
     query.addBindValue(sessionId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CashMovementRepository::findBySessionId"));
         return movements;
     }
     while (query.next()) {
@@ -68,6 +69,7 @@ int CashMovementRepository::insert(const core::CashMovement& movement)
     query.addBindValue(toIso(movement.createdAt.isValid() ? movement.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(movement.note.isNull() ? QStringLiteral("") : movement.note);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("CashMovementRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

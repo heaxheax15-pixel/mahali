@@ -53,7 +53,11 @@ bool AdminSecretRepository::setMaster(int userId, const QString& password)
     query.addBindValue(userId);
     query.addBindValue(toHex(hash));
     query.addBindValue(toHex(salt));
-    return query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("AdminSecretRepository::setMaster"));
+        return false;
+    }
+    return true;
 }
 
 bool AdminSecretRepository::verifyMaster(int userId, const QString& password) const
@@ -77,6 +81,7 @@ std::optional<int> AdminSecretRepository::findAdminByMaster(const QString& passw
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT user_id, master_hash, master_salt FROM admin_secrets"));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("AdminSecretRepository::findAdminByMaster"));
         return std::nullopt;
     }
     while (query.next()) {

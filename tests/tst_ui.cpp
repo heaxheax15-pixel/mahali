@@ -87,6 +87,7 @@ private slots:
     void posSaleWithPriceOverride();
     void posSaleRequiresOpenSession();
     void cashSessionLifecycle();
+    void cash_session_rejects_invalid_amount();
     void salesPageShowsToday();
     void profit_cents_survives_translation();
     void barcode_dialog_does_not_close();
@@ -451,6 +452,49 @@ void UiTest::posSaleRequiresOpenSession()
 
     data::SaleRepository sales(db);
     QCOMPARE(static_cast<int>(sales.findAll().size()), 0);
+}
+
+void UiTest::cash_session_rejects_invalid_amount()
+{
+    const QString path = m_dir.filePath(QStringLiteral("cashamount.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    ui::CashSessionPage page(db);
+
+    long long cents = -1;
+
+    // Junk, and a negative: parseMoney turns both away.
+    QVERIFY(!page.amountFromInput(QStringLiteral("abc"), &cents));
+    QVERIFY(!page.amountFromInput(QStringLiteral("-100"), &cents));
+
+    // Zero is the one that used to get through. It is a valid parse, so the
+    // nullopt check alone let it close the session with nothing counted and
+    // book the whole till as a deficit.
+    QVERIFY(!page.amountFromInput(QStringLiteral("0"), &cents));
+    QVERIFY(!page.amountFromInput(QString(), &cents));
+    QVERIFY(!page.amountFromInput(QStringLiteral("  "), &cents));
+
+    // Rejected input must not have opened anything, and must not have written a
+    // value into the caller's variable.
+    QVERIFY(!page.hasOpenSession());
+    QCOMPARE(page.sessionId(), 0);
+    QCOMPARE(cents, -1LL);
+
+    // A real amount still works, and the session opens on it. parseMoney
+    // converts what the operator typed into cents, so "5000" is five thousand
+    // units, i.e. 500000 cents — not the 5000 the public slot takes directly.
+    QVERIFY(page.amountFromInput(QStringLiteral("5000"), &cents));
+    QCOMPARE(cents, 500000LL);
+    page.openSession(cents);
+    QVERIFY(page.hasOpenSession());
+    QCOMPARE(page.expectedCents(), 500000LL);
+
+    // And on the way out, a zero count is refused too: accepting it would have
+    // closed the session against a negative variance of the full float.
+    QVERIFY(!page.amountFromInput(QStringLiteral("0"), &cents));
+    QVERIFY(page.hasOpenSession());
+    QCOMPARE(page.expectedCents(), 500000LL);
 }
 
 void UiTest::cashSessionLifecycle()

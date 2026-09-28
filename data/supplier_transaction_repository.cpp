@@ -49,6 +49,7 @@ std::vector<core::SupplierTransaction> SupplierTransactionRepository::findBySupp
             .arg(QLatin1StringView(kTxColumns)));
     query.addBindValue(supplierId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SupplierTransactionRepository::findBySupplierId"));
         return txs;
     }
     while (query.next()) {
@@ -68,6 +69,7 @@ std::vector<core::SupplierTransaction> SupplierTransactionRepository::findBetwee
     query.addBindValue(toIso(from));
     query.addBindValue(toIso(to));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SupplierTransactionRepository::findBetween"));
         return txs;
     }
     while (query.next()) {
@@ -87,6 +89,7 @@ int SupplierTransactionRepository::insert(const core::SupplierTransaction& trans
     query.addBindValue(toIso(transaction.createdAt.isValid() ? transaction.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(transaction.note.isNull() ? QStringLiteral("") : transaction.note);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SupplierTransactionRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

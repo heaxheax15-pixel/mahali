@@ -36,6 +36,7 @@ std::vector<core::SaleItem> SaleItemRepository::findBySaleId(int saleId) const
                        "FROM sale_items WHERE sale_id = ?"));
     query.addBindValue(saleId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SaleItemRepository::findBySaleId"));
         return items;
     }
     while (query.next()) {
@@ -58,6 +59,7 @@ int SaleItemRepository::insert(const core::SaleItem& item)
     query.addBindValue(item.unitCostCents);
     query.addBindValue(item.reversedId);
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SaleItemRepository::insert"));
         return 0;
     }
     return query.lastInsertId().toInt();

@@ -1,5 +1,6 @@
 #include "device_identity.h"
 
+#include <QDebug>
 #include <QUuid>
 
 #include "setting_repository.h"
@@ -16,13 +17,20 @@ QString DeviceIdentity::ensure(Database& db)
     }
 
     const QString minted = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    db.beginTransaction();
+    // Checked like every other writer in this project. A BEGIN that fails means
+    // a transaction is already open on this connection, and the commit below
+    // would then close somebody else's transaction while this id was written
+    // outside it, so nothing is written at all. lastError() is already set.
+    if (!db.beginTransaction()) {
+        qWarning() << "device identity was not minted: cannot begin a transaction:" << db.lastError();
+        return QString();
+    }
     settings.set(kSettingKey, minted);
-    const bool committed = db.commit();
-    if (!committed) {
+    if (!db.commit()) {
         db.rollback();
         // Persistence failed (disk full, locked file, ...): refuse a silently
         // unstable identity rather than risk ops under a different id later.
+        qWarning() << "device identity was not persisted:" << db.lastError();
         return QString();
     }
     return minted;

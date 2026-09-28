@@ -28,6 +28,8 @@
 #include "setting_repository.h"
 #include "core/i18n.h"
 #include "sync_outbox_repository.h"
+#include "device_ledger_service.h"
+#include "device_identity.h"
 #include "date_utils.h"
 
 using namespace app;
@@ -61,6 +63,15 @@ private slots:
     void reverse_expense_refuses_a_second_reversal();
     void reverse_owner_drawing_returns_false_on_missing();
     void reverse_owner_drawing_returns_true_on_success();
+    void cash_session_repo_rejects_zero_open();
+    void cash_session_repo_rejects_negative_close();
+    void close_returns_false_for_missing_session();
+    void open_refuses_when_session_already_open();
+    void close_is_idempotent();
+    void schema_has_single_open_index();
+    void open_twice_via_repo_fails();
+    void legacy_db_with_two_open_sessions_still_opens();
+    void device_ledger_rejects_empty_device_id();
     void cashSessionLifecycle();
     void settingsRoundTrip();
     void appendOnlyGuard();
@@ -70,6 +81,7 @@ private slots:
     void user_pin_roundtrip();
     void admin_master_roundtrip();
     void language_setting_persists();
+    void repository_error_is_recorded();
 
 private:
     QTemporaryDir m_dir;
@@ -628,6 +640,473 @@ void DataLayerTest::reverse_owner_drawing_returns_false_on_missing()
     QCOMPARE(drawingRepo.findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), before);
 }
 
+// The repository exposes no row count, and the whole point of these tests is
+// that a refused call writes nothing, so the counts are read straight from the
+// table. countOpenCashSessions mirrors the status = 'open' condition that
+// findOpen() uses.
+int countCashSessions(const data::Database& db)
+{
+    QSqlQuery query(db.handle());
+    query.prepare(QStringLiteral("SELECT COUNT(*) FROM cash_sessions"));
+    if (!query.exec() || !query.next()) {
+        return -1;
+    }
+    return query.value(0).toInt();
+}
+
+int countOpenCashSessions(const data::Database& db)
+{
+    QSqlQuery query(db.handle());
+    query.prepare(QStringLiteral("SELECT COUNT(*) FROM cash_sessions WHERE status = 'open'"));
+    if (!query.exec() || !query.next()) {
+        return -1;
+    }
+    return query.value(0).toInt();
+}
+
+// PRAGMA index_list reports one row per index: seq, name, unique, origin, partial.
+bool cashSessionIndexExists(const data::Database& db, const QString& name, bool* isUnique = nullptr,
+                            bool* isPartial = nullptr)
+{
+    QSqlQuery query(db.handle());
+    if (!query.exec(QStringLiteral("PRAGMA index_list(cash_sessions)"))) {
+        return false;
+    }
+    while (query.next()) {
+        if (query.value(1).toString() != name) {
+            continue;
+        }
+        if (isUnique) {
+            *isUnique = query.value(2).toInt() == 1;
+        }
+        if (isPartial) {
+            *isPartial = query.value(4).toInt() == 1;
+        }
+        return true;
+    }
+    return false;
+}
+
+void DataLayerTest::cash_session_repo_rejects_zero_open()
+{
+    data::CashSessionRepository sessionRepo(*m_db);
+
+    const int before = countCashSessions(*m_db);
+    QVERIFY(before >= 0);
+
+    // Zero is a valid long long and a plausible typo at every call site, so the
+    // repository has to be the one that says no. It used to write the row.
+    QCOMPARE(sessionRepo.open(0), 0);
+    QCOMPARE(countCashSessions(*m_db), before);
+
+    // Negative, on the same reasoning.
+    QCOMPARE(sessionRepo.open(-5000), 0);
+    QCOMPARE(countCashSessions(*m_db), before);
+
+    // And a real float still opens, so the guard is not simply refusing
+    // everything.
+    const int sessionId = sessionRepo.open(5000);
+    QVERIFY(sessionId > 0);
+    QCOMPARE(countCashSessions(*m_db), before + 1);
+    const auto opened = sessionRepo.findById(sessionId);
+    QVERIFY(opened.has_value());
+    QCOMPARE(opened->id, sessionId);
+    QCOMPARE(opened->status, QStringLiteral("open"));
+    QCOMPARE(opened->openingFloatCents, 5000LL);
+    QVERIFY(sessionRepo.findOpen().has_value());
+
+    // The suite shares one database, so hand it back the way it was found:
+    // leaving a session open here would make every later findOpen() lie.
+    QVERIFY(sessionRepo.close(sessionId, 5000, 5000, 0));
+    QVERIFY(!sessionRepo.findOpen().has_value());
+}
+
+void DataLayerTest::cash_session_repo_rejects_negative_close()
+{
+    data::CashSessionRepository sessionRepo(*m_db);
+
+    const int sessionId = sessionRepo.open(5000);
+    QVERIFY(sessionId > 0);
+    QVERIFY(sessionRepo.findOpen().has_value());
+
+    // Nothing was counted, so the day must not end. This used to write the row
+    // and book a 5000 deficit against the till.
+    QVERIFY(!sessionRepo.close(sessionId, -100, 5000, -5100));
+    QVERIFY(sessionRepo.findOpen().has_value());
+    const auto stillOpen = sessionRepo.findById(sessionId);
+    QVERIFY(stillOpen.has_value());
+    QCOMPARE(stillOpen->status, QStringLiteral("open"));
+
+    // Zero is refused for the same reason.
+    QVERIFY(!sessionRepo.close(sessionId, 0, 5000, -5000));
+    QVERIFY(sessionRepo.findOpen().has_value());
+
+    // A genuine shortfall is still allowed through: a negative variance is a
+    // real result, not an invalid amount, and refusing it would make a short
+    // till impossible to close at all.
+    QVERIFY(sessionRepo.close(sessionId, 100, 5000, -4900));
+    QVERIFY(!sessionRepo.findOpen().has_value());
+    const auto closed = sessionRepo.findById(sessionId);
+    QVERIFY(closed.has_value());
+    QCOMPARE(closed->status, QStringLiteral("closed"));
+    QCOMPARE(closed->varianceCents, -4900LL);
+}
+
+void DataLayerTest::close_returns_false_for_missing_session()
+{
+    data::CashSessionRepository sessionRepo(*m_db);
+
+    const int sessionId = sessionRepo.open(5000);
+    QVERIFY(sessionId > 0);
+    const int before = countCashSessions(*m_db);
+
+    // An UPDATE matching nothing is still a successful statement, so this used to
+    // return true for an id that was never there.
+    QVERIFY(!sessionRepo.close(99999, 5000, 0, 0));
+
+    // A refused close must leave every other row exactly as it was.
+    QCOMPARE(countCashSessions(*m_db), before);
+    const auto untouched = sessionRepo.findById(sessionId);
+    QVERIFY(untouched.has_value());
+    QCOMPARE(untouched->status, QStringLiteral("open"));
+    QCOMPARE(untouched->closingCountedCents, 0LL);
+    QCOMPARE(untouched->varianceCents, 0LL);
+    QVERIFY(!untouched->closedAt.isValid());
+    QVERIFY(sessionRepo.findOpen().has_value());
+
+    // The real one still closes normally.
+    QVERIFY(sessionRepo.close(sessionId, 5000, 5000, 0));
+    QVERIFY(!sessionRepo.findOpen().has_value());
+}
+
+void DataLayerTest::open_refuses_when_session_already_open()
+{
+    data::CashSessionRepository sessionRepo(*m_db);
+
+    // Earlier tests in this suite each leave a closed row behind, so the total
+    // is only meaningful relative to where it started.
+    const int rowsBefore = countCashSessions(*m_db);
+    QCOMPARE(countOpenCashSessions(*m_db), 0);
+
+    const int sessionId = sessionRepo.open(5000);
+    QVERIFY(sessionId > 0);
+    QCOMPARE(countOpenCashSessions(*m_db), 1);
+    QCOMPARE(countCashSessions(*m_db), rowsBefore + 1);
+
+    // A second open row would be invisible: findOpen() has no ORDER BY, so the
+    // app would read one session at random and strand the other's movements.
+    QCOMPARE(sessionRepo.open(3000), 0);
+    QCOMPARE(countOpenCashSessions(*m_db), 1);
+    QCOMPARE(countCashSessions(*m_db), rowsBefore + 1);
+
+    // The survivor is the one that was opened first, untouched.
+    const auto open = sessionRepo.findOpen();
+    QVERIFY(open.has_value());
+    QCOMPARE(open->id, sessionId);
+    QCOMPARE(open->openingFloatCents, 5000LL);
+
+    // And the day can now be closed, which is what frees the till again.
+    QVERIFY(sessionRepo.close(sessionId, 5000, 5000, 0));
+    QCOMPARE(countOpenCashSessions(*m_db), 0);
+
+    // With no session open, opening is allowed again.
+    const int next = sessionRepo.open(3000);
+    QVERIFY(next > 0);
+    QVERIFY(sessionRepo.close(next, 3000, 3000, 0));
+}
+
+// Captures warnings while a database is opened, so the degraded path in
+// createSingleOpenSessionIndex() can be asserted rather than merely read.
+QStringList g_capturedWarnings;
+QtMessageHandler g_previousHandler = nullptr;
+
+void captureWarningHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
+{
+    if (type == QtWarningMsg) {
+        g_capturedWarnings << message;
+    }
+    if (g_previousHandler) {
+        g_previousHandler(type, context, message);
+    }
+}
+
+// Builds a database shaped like one written by an older build: the same table,
+// no single-open index, and two sessions still open — the state that makes the
+// index impossible to create.
+void createLegacyDbWithTwoOpenSessions(const QString& path)
+{
+    const QString connectionName = QStringLiteral("legacy_open_sessions");
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+    db.setDatabaseName(path);
+    QVERIFY(db.open());
+
+    QSqlQuery create(db);
+    QVERIFY(create.exec(QStringLiteral(
+        "CREATE TABLE cash_sessions ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "opened_at TEXT NOT NULL,"
+        "opening_float_cents INTEGER NOT NULL,"
+        "closed_at TEXT NULL,"
+        "closing_counted_cents INTEGER NULL,"
+        "expected_cents INTEGER NULL,"
+        "variance_cents INTEGER NULL,"
+        "status TEXT NOT NULL DEFAULT 'open')")));
+    QVERIFY(create.exec(QStringLiteral(
+        "INSERT INTO cash_sessions (opened_at, opening_float_cents, status) "
+        "VALUES ('2026-01-01T08:00:00.000', 5000, 'open'), ('2026-01-01T16:00:00.000', 3000, 'open')")));
+
+    db.close();
+    db = QSqlDatabase();
+    QSqlDatabase::removeDatabase(connectionName);
+}
+
+void DataLayerTest::legacy_db_with_two_open_sessions_still_opens()
+{
+    const QString path = m_dir.filePath(QStringLiteral("legacy_two_open.sqlite"));
+    QFile::remove(path);
+    createLegacyDbWithTwoOpenSessions(path);
+
+    g_capturedWarnings.clear();
+    g_previousHandler = qInstallMessageHandler(captureWarningHandler);
+
+    // The whole reason the index is not part of the schema statement list: this
+    // database cannot satisfy the index, and the app still has to start.
+    bool threw = false;
+    int openCount = -1;
+    try {
+        data::Database db(path);
+        data::CashSessionRepository sessionRepo(db);
+        openCount = countOpenCashSessions(db);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    qInstallMessageHandler(g_previousHandler);
+    g_previousHandler = nullptr;
+
+    QVERIFY(!threw);
+    QCOMPARE(openCount, 2);
+
+    // And the operator is told, rather than left with an unprotected database.
+    bool warned = false;
+    for (const QString& warning : g_capturedWarnings) {
+        if (warning.contains(QLatin1StringView("idx_cash_sessions_one_open"))) {
+            warned = true;
+        }
+    }
+    QVERIFY(warned);
+
+    // The index really is absent, which is the degraded state the warning names.
+    // Reopening the file applies the schema again, so with the duplicate still in
+    // place it must still fail, and must still not be fatal.
+    {
+        data::Database db(path);
+        QVERIFY(!cashSessionIndexExists(db, QStringLiteral("idx_cash_sessions_one_open")));
+    }
+
+    // Recovery: close the extra session, and the next start restores the index,
+    // which is what the warning tells the operator to do.
+    {
+        data::Database db(path);
+        data::CashSessionRepository sessionRepo(db);
+        QSqlQuery ids(db.handle());
+        QVERIFY(ids.exec(QStringLiteral("SELECT id FROM cash_sessions WHERE status = 'open'")));
+        QVERIFY(ids.next());
+        const int staleId = ids.value(0).toInt();
+        QVERIFY(sessionRepo.close(staleId, 3000, 3000, 0));
+        QCOMPARE(countOpenCashSessions(db), 1);
+    }
+    {
+        data::Database db(path);
+        QVERIFY(cashSessionIndexExists(db, QStringLiteral("idx_cash_sessions_one_open")));
+    }
+}
+
+void DataLayerTest::close_is_idempotent()
+{
+    data::CashSessionRepository sessionRepo(*m_db);
+
+    const int sessionId = sessionRepo.open(5000);
+    QVERIFY(sessionId > 0);
+
+    QVERIFY(sessionRepo.close(sessionId, 5000, 5000, 0));
+    const auto firstClose = sessionRepo.findById(sessionId);
+    QVERIFY(firstClose.has_value());
+    QCOMPARE(firstClose->status, QStringLiteral("closed"));
+    const QDateTime firstClosedAt = firstClose->closedAt;
+    QVERIFY(firstClosedAt.isValid());
+
+    // A day that is already settled must not be settled twice. SQLite counts a
+    // row as affected even when the new values equal the old ones, so this only
+    // reports failure because the UPDATE asks for status = 'open'.
+    QVERIFY(!sessionRepo.close(sessionId, 5000, 5000, 0));
+    QVERIFY(!sessionRepo.close(sessionId, 999, 5000, -499));
+
+    // And the rejected attempts changed nothing, including the timestamp.
+    const auto after = sessionRepo.findById(sessionId);
+    QVERIFY(after.has_value());
+    QCOMPARE(after->status, QStringLiteral("closed"));
+    QCOMPARE(after->closingCountedCents, firstClose->closingCountedCents);
+    QCOMPARE(after->varianceCents, firstClose->varianceCents);
+    QCOMPARE(after->closedAt, firstClosedAt);
+}
+
+void DataLayerTest::schema_has_single_open_index()
+{
+    bool isUnique = false;
+    bool isPartial = false;
+    QVERIFY(cashSessionIndexExists(*m_db, QStringLiteral("idx_cash_sessions_one_open"), &isUnique, &isPartial));
+
+    // Partial and unique, not a plain unique index: a plain unique index on
+    // status would cap the whole table at one row per status value, including
+    // every closed session ever recorded.
+    QVERIFY(isUnique);
+    QVERIFY(isPartial);
+
+    // Opening and closing repeatedly must keep working under the index, which
+    // they would not if the index were global rather than partial.
+    data::CashSessionRepository sessionRepo(*m_db);
+    for (int i = 0; i < 3; ++i) {
+        const int sessionId = sessionRepo.open(5000 + i);
+        QVERIFY(sessionId > 0);
+        QVERIFY(sessionRepo.close(sessionId, 5000, 5000, 0));
+    }
+    QCOMPARE(countOpenCashSessions(*m_db), 0);
+}
+
+void DataLayerTest::open_twice_via_repo_fails()
+{
+    data::CashSessionRepository sessionRepo(*m_db);
+    QCOMPARE(countOpenCashSessions(*m_db), 0);
+    const int rowsBefore = countCashSessions(*m_db);
+
+    QVERIFY(sessionRepo.open(5000) > 0);
+    QCOMPARE(sessionRepo.open(3000), 0);
+    QCOMPARE(countOpenCashSessions(*m_db), 1);
+    QCOMPARE(countCashSessions(*m_db), rowsBefore + 1);
+
+    // The repository check is not the only line of defence. Bypassing it with raw
+    // SQL has to fail too, otherwise any other code path that inserts a session
+    // would quietly reintroduce the ambiguity findOpen() cannot resolve.
+    QSqlQuery insert(m_db->handle());
+    insert.prepare(QStringLiteral(
+        "INSERT INTO cash_sessions (opened_at, opening_float_cents, status) VALUES (?, ?, 'open')"));
+    insert.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODateWithMs));
+    insert.addBindValue(3000);
+    QVERIFY(!insert.exec());
+    QCOMPARE(countOpenCashSessions(*m_db), 1);
+    QCOMPARE(countCashSessions(*m_db), rowsBefore + 1);
+
+    // Once the session is closed the slot is free again, for the repository and
+    // for raw SQL alike.
+    const auto open = sessionRepo.findOpen();
+    QVERIFY(open.has_value());
+    QVERIFY(sessionRepo.close(open->id, 5000, 5000, 0));
+    QCOMPARE(countOpenCashSessions(*m_db), 0);
+    QVERIFY(insert.exec());
+    QCOMPARE(countOpenCashSessions(*m_db), 1);
+    QCOMPARE(countCashSessions(*m_db), rowsBefore + 2);
+
+    // Hand the suite back a closed till, the way it was found.
+    const int rawSessionId = insert.lastInsertId().toInt();
+    QVERIFY(rawSessionId > 0);
+    QVERIFY(sessionRepo.close(rawSessionId, 5000, 5000, 0));
+    QCOMPARE(countOpenCashSessions(*m_db), 0);
+}
+
+void DataLayerTest::device_ledger_rejects_empty_device_id()
+{
+    // A database of its own: this test opens a cash session, and the suite
+    // shares one database whose open session every later test depends on.
+    const QString path = m_dir.filePath(QStringLiteral("ledgeremptyid.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000099");
+    product.name = QStringLiteral("منتج");
+    product.costPriceCents = 9500;
+    product.salePriceCents = 12000;
+    product.unit = QStringLiteral("وحدة");
+    product.packageSize = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+
+    core::StockMovement inbound;
+    inbound.productId = productId;
+    inbound.delta = 100;
+    inbound.reason = QStringLiteral("initial stock");
+    inbound.createdAt = QDateTime::currentDateTimeUtc();
+    QVERIFY(data::StockMovementRepository(db).insert(inbound) > 0);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 1.0;
+
+    data::CustomerRepository customers(db);
+    core::Customer customer;
+    customer.name = QStringLiteral("عميل");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    // Two flavours of "no identity", and the difference matters. DeviceIdentity
+    // returns QString() on failure, and Qt binds a null QString as SQL NULL, so
+    // the sales table's NOT NULL constraint already rejects that one with a
+    // driver error. A non-null but empty string binds as '' and would sail
+    // straight into the row, so the service has to refuse it itself.
+    const QString flavors[] = {QString(), QStringLiteral("")};
+    for (const QString& flavor : flavors) {
+        data::DeviceLedgerService ledger(db, flavor);
+        QVERIFY2(!ledger.isValid(), qPrintable(flavor));
+
+        // Every write goes through the same choke point, so all three must be
+        // refused, and each with a message an operator can act on rather than
+        // the empty string a swallowed driver error leaves behind.
+        const data::DeviceOpResult sale = ledger.recordSale({item}, sessionId);
+        QVERIFY2(!sale.ok, qPrintable(flavor));
+        QVERIFY2(sale.error.contains(QLatin1StringView("device id is empty")), qPrintable(sale.error));
+
+        const data::DeviceOpResult debt = ledger.recordCustomerDebt(customerId, {item});
+        QVERIFY2(!debt.ok, qPrintable(flavor));
+        QVERIFY2(debt.error.contains(QLatin1StringView("device id is empty")), qPrintable(debt.error));
+
+        const data::DeviceOpResult payment = ledger.recordCustomerPayment(customerId, 1000, sessionId, QString());
+        QVERIFY2(!payment.ok, qPrintable(flavor));
+        QVERIFY2(payment.error.contains(QLatin1StringView("device id is empty")), qPrintable(payment.error));
+
+        // Nothing was written: no sale row, no customer transaction, no payment,
+        // and above all no outbox row the server could never attribute to a
+        // device.
+        QCOMPARE(data::SaleRepository(db).findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), 0);
+        QCOMPARE(data::CustomerTransactionRepository(db)
+                     .findBetween(g_reversalWindowFrom, g_reversalWindowTo)
+                     .size(),
+                 0);
+        QCOMPARE(data::PaymentRepository(db).findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), 0);
+        QCOMPARE(data::SyncOutboxRepository(db).countPending(), 0);
+
+        // The op sequence must not have advanced either. A refused operation that
+        // still consumed an op id would leave a permanent gap in the device's
+        // sequence, which is documented as monotonic and never reused.
+        QSqlQuery sequence(db.handle());
+        QVERIFY(sequence.exec(QStringLiteral("SELECT value FROM sync_sequence WHERE id = 1")));
+        QVERIFY(sequence.next());
+        QCOMPARE(sequence.value(0).toLongLong(), 0LL);
+    }
+
+    // A service with a real id is unaffected, so the guard is not a blanket ban.
+    data::DeviceLedgerService working(db, QStringLiteral("pos-device-1"));
+    QVERIFY(working.isValid());
+    const data::DeviceOpResult ok = working.recordSale({item}, sessionId);
+    QVERIFY2(ok.ok, qPrintable(ok.error));
+    QCOMPARE(data::SaleRepository(db).findBetween(g_reversalWindowFrom, g_reversalWindowTo).size(), 1);
+    QVERIFY(data::SyncOutboxRepository(db).countPending() > 0);
+}
+
 void DataLayerTest::cashSessionLifecycle()
 {
     data::CashSessionRepository sessionRepo(*m_db);
@@ -903,6 +1382,53 @@ void DataLayerTest::language_setting_persists()
     // An unsupported value must not win over the default.
     settings.set(QStringLiteral("language"), QStringLiteral("de"));
     QCOMPARE(core::currentLanguage(*m_db), core::defaultLanguage());
+}
+
+void DataLayerTest::repository_error_is_recorded()
+{
+    data::ProductRepository products(*m_db);
+
+    // A write that has to succeed, so the failure below cannot pass for the
+    // wrong reason by being caused by a broken database.
+    core::Product good;
+    good.barcode = QStringLiteral("REC-0001");
+    good.name = QStringLiteral("Recorder Widget");
+    good.costPriceCents = 100;
+    good.salePriceCents = 200;
+    const int savedId = products.save(good);
+    QVERIFY2(savedId > 0,
+             qPrintable(QStringLiteral("valid insert failed: %1").arg(m_db->lastError())));
+
+    // Second row with the same barcode: the UNIQUE index rejects it and save()
+    // still returns 0. The return value is not the thing under test here, it is
+    // the guarantee that it does not move. The reason is: before repositories
+    // reported to Database, the driver error was dropped on the floor and the
+    // service showed the operator a blank message for a write that was refused.
+    core::Product duplicate;
+    duplicate.barcode = good.barcode;
+    duplicate.name = QStringLiteral("Recorder Widget Duplicate");
+    duplicate.costPriceCents = 1;
+    duplicate.salePriceCents = 2;
+    QCOMPARE(products.save(duplicate), 0);
+
+    const QString reason = m_db->lastError();
+    QVERIFY2(!reason.isEmpty(), "a refused write must leave a reason behind");
+    QCOMPARE(m_db->lastErrorContext(), QStringLiteral("ProductRepository::save"));
+    QVERIFY2(reason.contains(m_db->lastErrorContext()),
+             qPrintable(QStringLiteral("context missing from message: %1").arg(reason)));
+    QVERIFY2(reason.contains(QStringLiteral("UNIQUE"), Qt::CaseInsensitive),
+             qPrintable(QStringLiteral("driver text missing from message: %1").arg(reason)));
+
+    // The rejected row must not have been written, and the one that did succeed
+    // must still be there: recording the error is not allowed to half-apply.
+    const auto found = products.findByBarcode(good.barcode);
+    QVERIFY(found.has_value());
+    QCOMPARE(found->id, savedId);
+    QCOMPARE(found->name, QStringLiteral("Recorder Widget"));
+
+    // Leave the shared suite database as we found it.
+    QSqlQuery cleanup(m_db->handle());
+    QVERIFY(cleanup.exec(QStringLiteral("DELETE FROM products WHERE barcode = 'REC-0001'")));
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

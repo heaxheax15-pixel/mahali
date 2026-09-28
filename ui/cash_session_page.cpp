@@ -245,6 +245,20 @@ void CashSessionPage::closeSession(long long closingCountedCents)
     refresh();
 }
 
+bool CashSessionPage::amountFromInput(const QString& text, long long* cents) const
+{
+    const auto parsed = parseMoney(text);
+    // parseMoney already rejects junk and a leading '-', but zero is a valid
+    // parse: it used to sail through and close the session with nothing
+    // counted, which booked the whole till as a deficit and shut the operator
+    // out of it for the day with no message anywhere.
+    if (!parsed || *parsed <= 0) {
+        return false;
+    }
+    *cents = *parsed;
+    return true;
+}
+
 void CashSessionPage::onOpenClicked()
 {
     bool ok = false;
@@ -253,12 +267,15 @@ void CashSessionPage::onOpenClicked()
     if (!ok) {
         return;
     }
-    const auto cents = parseMoney(text);
-    if (!cents) {
-        QMessageBox::warning(this, tr("خطأ"), tr("المبلغ غير صالح"));
+    long long cents = 0;
+    if (!amountFromInput(text, &cents)) {
+        // The dialog is gone by now, so there is no field to focus: the operator
+        // clicks the button again and retypes. This page reports bad amounts
+        // this way already.
+        QMessageBox::warning(this, tr("خطأ"), tr("أدخل مبلغًا صحيحًا أكبر من صفر"));
         return;
     }
-    openSession(*cents);
+    openSession(cents);
 }
 
 void CashSessionPage::onCloseClicked()
@@ -274,12 +291,12 @@ void CashSessionPage::onCloseClicked()
     if (!ok) {
         return;
     }
-    const auto cents = parseMoney(text);
-    if (!cents) {
-        QMessageBox::warning(this, tr("خطأ"), tr("المبلغ غير صالح"));
+    long long cents = 0;
+    if (!amountFromInput(text, &cents)) {
+        QMessageBox::warning(this, tr("خطأ"), tr("أدخل مبلغًا صحيحًا أكبر من صفر"));
         return;
     }
-    closeSession(*cents);
+    closeSession(cents);
 }
 
 } // namespace app::ui

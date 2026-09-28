@@ -14,7 +14,11 @@ int SyncSequenceRepository::nextOpId()
 {
     QSqlQuery update(m_db.handle());
     update.prepare(QStringLiteral("UPDATE sync_sequence SET value = value + 1 WHERE id = 1"));
-    if (!update.exec() || update.numRowsAffected() != 1) {
+    if (!update.exec()) {
+        m_db.recordError(update.lastError(), QStringLiteral("SyncSequenceRepository::nextOpId"));
+        return 0;
+    }
+    if (update.numRowsAffected() != 1) {
         return 0;
     }
 

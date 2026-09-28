@@ -40,6 +40,7 @@ std::vector<core::ZakatSetting> ZakatSettingRepository::findAll() const
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT id, key, value FROM zakat_settings ORDER BY key"));
     if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ZakatSettingRepository::findAll"));
         return settings;
     }
     while (query.next()) {
@@ -56,7 +57,10 @@ void ZakatSettingRepository::set(const QString& key, const QString& value)
                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
     query.addBindValue(key);
     query.addBindValue(value);
-    query.exec();
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ZakatSettingRepository::set"));
+        return;
+    }
 }
 
 } // namespace app::data
