@@ -3,6 +3,8 @@
 #include <QSqlQuery>
 #include <QVariant>
 
+#include "date_utils.h"
+
 namespace app::data {
 
 PurchaseRepository::PurchaseRepository(Database& db)
@@ -76,14 +78,21 @@ QVector<core::Purchase> PurchaseRepository::findBySupplier(int supplierId) const
 QVector<core::Purchase> PurchaseRepository::findBetween(const QString& fromIso, const QString& toIso) const
 {
     QVector<core::Purchase> purchases;
+    // A caller asking for "2026-03-31" means that whole day. The stored value is
+    // a full timestamp, and "2026-03-31" sorts before "2026-03-31T10:00:00.000",
+    // so the upper bound has to reach the last moment of the day or the invoices
+    // of that day go missing from the range.
+    const QString from = widenToDayStart(fromIso);
+    const QString to = widenToDayEnd(toIso);
+
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral(
         "SELECT id, supplier_id, invoice_number, purchased_at, "
         "subtotal_cents, vat_cents, total_cents, paid_cents, "
         "add_to_stock, note, occasion_id, created_at "
         "FROM purchases WHERE purchased_at >= ? AND purchased_at <= ? ORDER BY purchased_at"));
-    query.addBindValue(fromIso);
-    query.addBindValue(toIso);
+    query.addBindValue(from);
+    query.addBindValue(to);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("PurchaseRepository::findBetween"));
         return purchases;

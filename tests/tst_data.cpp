@@ -111,6 +111,7 @@ private slots:
     void supplier_returns_schema_exists();
     void occasion_roundtrip();
     void occasion_service_activate_deactivate();
+    void findBetween_includes_boundary_days();
 
 private:
     QTemporaryDir m_dir;
@@ -2318,6 +2319,72 @@ void DataLayerTest::occasion_service_activate_deactivate()
     // The setting is dropped, not emptied, so an absent occasion is told from
     // one stored as an empty value.
     QVERIFY(!settings.value(QStringLiteral("active_occasion_id")).has_value());
+}
+
+void DataLayerTest::findBetween_includes_boundary_days()
+{
+    data::PurchaseRepository purchases(*m_db);
+    data::SupplierRepository suppliers(*m_db);
+    const int supplierId = addSupplierForPayments(suppliers, QStringLiteral("مورد نطاق"));
+    QVERIFY(supplierId > 0);
+
+    // The invoice sits in the middle of the day being asked about, which is the
+    // case that goes missing: the stored value is a full timestamp, and a bound
+    // left as the bare date "2026-03-31" sorts before "2026-03-31T14:00:00.000",
+    // so an inclusive "<=" against it would drop this row.
+    core::Purchase purchase;
+    purchase.supplierId = supplierId;
+    purchase.invoiceNumber = QStringLiteral("");
+    purchase.note = QStringLiteral("");
+    purchase.purchasedAt = QStringLiteral("2026-03-31T14:00:00.000");
+    purchase.createdAt = purchase.purchasedAt;
+    purchase.subtotalCents = 1000;
+    purchase.totalCents = 1000;
+    const int boundaryId = purchases.insert(purchase);
+    QVERIFY2(boundaryId > 0, qPrintable(m_db->lastError()));
+
+    // The first moment of the next day, which a bare upper bound must not reach.
+    core::Purchase nextDay = purchase;
+    nextDay.invoiceNumber = QStringLiteral("BW-2");
+    nextDay.purchasedAt = QStringLiteral("2026-04-01T00:00:00.000");
+    nextDay.createdAt = nextDay.purchasedAt;
+    const int nextDayId = purchases.insert(nextDay);
+    QVERIFY2(nextDayId > 0, qPrintable(m_db->lastError()));
+
+    // A single day named without any time, which is how an operator types it.
+    const QVector<core::Purchase> sameDay =
+        purchases.findBetween(QStringLiteral("2026-03-31"), QStringLiteral("2026-03-31"));
+    QCOMPARE(sameDay.size(), 1);
+    QCOMPARE(sameDay.first().id, boundaryId);
+    QCOMPARE(sameDay.first().purchasedAt, QStringLiteral("2026-03-31T14:00:00.000"));
+
+    // The first moment of the following day is outside it, so widening the upper
+    // bound has not turned the range into "from here on".
+    const QVector<core::Purchase> firstOfApril =
+        purchases.findBetween(QStringLiteral("2026-04-01"), QStringLiteral("2026-04-01"));
+    QCOMPARE(firstOfApril.size(), 1);
+    QCOMPARE(firstOfApril.first().id, nextDayId);
+
+    // A range whose ends already carry a time is left exactly as it was given,
+    // so an explicit instant still means that instant.
+    const QVector<core::Purchase> narrow = purchases.findBetween(QStringLiteral("2026-03-31T13:00:00.000"),
+                                                                 QStringLiteral("2026-03-31T15:00:00.000"));
+    QCOMPARE(narrow.size(), 1);
+    QCOMPARE(narrow.first().id, boundaryId);
+
+    // And the very first moment of the day is not excluded by its own day bound.
+    core::Purchase firstMoment = purchase;
+    firstMoment.invoiceNumber = QStringLiteral("BW-3");
+    firstMoment.purchasedAt = QStringLiteral("2026-03-31T00:00:00.000");
+    firstMoment.createdAt = firstMoment.purchasedAt;
+    const int firstMomentId = purchases.insert(firstMoment);
+    QVERIFY2(firstMomentId > 0, qPrintable(m_db->lastError()));
+
+    const QVector<core::Purchase> wholeDay =
+        purchases.findBetween(QStringLiteral("2026-03-31"), QStringLiteral("2026-03-31"));
+    QCOMPARE(wholeDay.size(), 2);
+    QCOMPARE(wholeDay.first().id, firstMomentId);
+    QCOMPARE(wholeDay.last().id, boundaryId);
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

@@ -46,6 +46,15 @@ target_link_libraries(tst_return_service
 
 add_test(NAME return_service COMMAND tst_return_service)
 
+add_executable(tst_supplier_report tst_supplier_report.cpp)
+target_link_libraries(tst_supplier_report
+    PRIVATE
+        mahali-core
+        mahali-data
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME supplier_report COMMAND tst_supplier_report)
+
 
 add_executable(tst_device tst_device.cpp)
 target_link_libraries(tst_device
