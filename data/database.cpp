@@ -270,7 +270,16 @@ bool Database::beginTransaction()
 bool Database::commit()
 {
     if (!m_db.commit()) {
-        m_lastError = m_db.lastError().text();
+        const QString commitError = m_db.lastError().text();
+        // A failed COMMIT (e.g. SQLITE_BUSY) leaves the SQLite transaction
+        // open, which would make every following beginTransaction() fail.
+        // Close it explicitly so the connection stays usable.
+        if (!m_db.rollback()) {
+            m_lastError = QStringLiteral("commit failed: %1; rollback also failed: %2")
+                              .arg(commitError, m_db.lastError().text());
+        } else {
+            m_lastError = commitError;
+        }
         return false;
     }
     return true;

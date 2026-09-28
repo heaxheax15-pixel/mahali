@@ -27,6 +27,14 @@ public:
     void setActive(int productId, bool active);
     void setSoldByWeight(int productId, bool value);
 
+    // Moving average cost (PMP) after a purchase line:
+    //   newCost = (oldQty * oldCost + addedQty * addedCost) / (oldQty + addedQty)
+    // Whole cents only, no float. A stock level that would not move past zero
+    // leaves the stored cost alone, since there is no ratio to weigh against.
+    // Returns false only when the UPDATE itself failed.
+    bool updateAverageCost(int productId, long long oldQty, long long oldCostCents, long long addedQty,
+                           long long addedCostCents);
+
 private:
     Database& m_db;
 };

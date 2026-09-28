@@ -1,0 +1,64 @@
+[1/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/theme.cpp.o
+[2/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/server_controller.cpp.o
+[3/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/quick_items_bar.cpp.o
+[4/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/cash_session_page.cpp.o
+[5/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/sales_page.cpp.o
+[6/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/mahali-ui_autogen/mocs_compilation.cpp.o
+[7/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/pos_page.cpp.o
+[8/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/main_window.cpp.o
+[9/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/settings_page.cpp.o
+[10/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/reports_page.cpp.o
+[11/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/audit_log_page.cpp.o
+[12/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/expenses_page.cpp.o
+[13/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/refunds_page.cpp.o
+[14/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/products_page.cpp.o
+[15/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/suppliers_page.cpp.o
+[16/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/customers_page.cpp.o
+[17/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/widgets/app_icon.cpp.o
+[18/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/widgets/ui_helpers.cpp.o
+[19/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/mahali-ui_autogen/3YJK5W5UP7/qrc_app.cpp.o
+[20/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/widgets/page_header.cpp.o
+[21/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/login_dialog.cpp.o
+/home/heax/mahali/ui/login_dialog.cpp: In member function ‘void app::ui::LoginDialog::showPinInput(int, const QString&)’:
+/home/heax/mahali/ui/login_dialog.cpp:245:36: warning: unused parameter ‘userId’ [-Wunused-parameter]
+  245 | void LoginDialog::showPinInput(int userId, const QString& userName)
+      |                                ~~~~^~~~~~
+[22/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/users_page.cpp.o
+[23/56] Linking CXX executable tests/tst_device
+[24/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/widgets/stat_card.cpp.o
+[25/56] Building CXX object ui/CMakeFiles/mahali-ui.dir/widgets/mini_bar_chart.cpp.o
+[26/56] Linking CXX static library ui/libmahali-ui.a
+[27/56] Automatic MOC for target mahali-desktop
+[28/56] Automatic MOC for target mahali-screenshot
+[29/56] Building CXX object apps/screenshot/CMakeFiles/mahali-screenshot.dir/mahali-screenshot_autogen/mocs_compilation.cpp.o
+[30/56] Automatic RCC for translations/mahali_translations.qrc
+[31/56] Building CXX object apps/desktop/CMakeFiles/mahali-desktop.dir/mahali-desktop_autogen/mocs_compilation.cpp.o
+[32/56] Building CXX object tests/CMakeFiles/tst_sync.dir/tst_sync.cpp.o
+[33/56] Building CXX object apps/desktop/CMakeFiles/mahali-desktop.dir/mahali-desktop_autogen/FE4VBTWS2P/qrc_mahali_translations.cpp.o
+[34/56] Building CXX object tests/CMakeFiles/tst_coordinator.dir/tst_coordinator.cpp.o
+[35/56] Linking CXX executable tests/tst_sync
+[36/56] Building CXX object tests/CMakeFiles/tst_sync_server.dir/tst_sync_server.cpp.o
+[37/56] Linking CXX executable tests/tst_coordinator
+[38/56] Building CXX object apps/screenshot/CMakeFiles/mahali-screenshot.dir/main.cpp.o
+[39/56] Building CXX object tests/CMakeFiles/tst_scheduler.dir/tst_scheduler.cpp.o
+[40/56] Building CXX object tests/CMakeFiles/tst_sync_client.dir/tst_sync_client.cpp.o
+[41/56] Linking CXX executable tests/tst_sync_server
+[42/56] Building CXX object tests/CMakeFiles/tst_data.dir/tst_data.cpp.o
+[43/56] Automatic MOC for target tst_smoke
+[44/56] Building CXX object tests/CMakeFiles/tst_smoke.dir/tst_smoke_autogen/mocs_compilation.cpp.o
+[45/56] Building CXX object apps/desktop/CMakeFiles/mahali-desktop.dir/main.cpp.o
+[46/56] Automatic MOC for target tst_ui
+[47/56] Building CXX object tests/CMakeFiles/tst_ui.dir/tst_ui_autogen/mocs_compilation.cpp.o
+[48/56] Linking CXX executable tests/tst_sync_client
+[49/56] Linking CXX executable tests/tst_scheduler
+[50/56] Linking CXX executable tests/tst_data
+[51/56] Linking CXX executable apps/screenshot/mahali-screenshot
+[52/56] Linking CXX executable apps/desktop/mahali-desktop
+[53/56] Building CXX object tests/CMakeFiles/tst_smoke.dir/tst_smoke.cpp.o
+[54/56] Linking CXX executable tests/tst_smoke
+[55/56] Building CXX object tests/CMakeFiles/tst_ui.dir/tst_ui.cpp.o
+/home/heax/mahali/tests/tst_ui.cpp: In member function ‘void UiTest::posSaleRequiresOpenSession()’:
+/home/heax/mahali/tests/tst_ui.cpp:435:15: warning: unused variable ‘productId’ [-Wunused-variable]
+  435 |     const int productId = seedProduct(path, &unusedSession, 8000);
+      |               ^~~~~~~~~
+[56/56] Linking CXX executable tests/tst_ui

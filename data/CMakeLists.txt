@@ -44,6 +44,7 @@ target_sources(mahali-data PRIVATE
     product_repository.cpp
     purchase_item_repository.cpp
     purchase_repository.cpp
+    purchase_service.cpp
     report_service.cpp
     sale_item_repository.cpp
     sale_repository.cpp

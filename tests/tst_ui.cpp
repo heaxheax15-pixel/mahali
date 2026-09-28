@@ -709,12 +709,15 @@ void UiTest::barcode_dialog_does_not_close()
     });
 
     // Safety net: a stuck modal must never hang the whole suite.
-    QTimer::singleShot(3000, [&]() {
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, [&]() {
         watchdogFired = true;
         if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
             modal->reject();
         }
     });
+    watchdog.start(3000);
 
     addBtn->click();
 

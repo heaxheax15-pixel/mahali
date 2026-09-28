@@ -19,6 +19,15 @@ target_link_libraries(tst_data
 
 add_test(NAME data COMMAND tst_data)
 
+add_executable(tst_purchase_service tst_purchase_service.cpp)
+target_link_libraries(tst_purchase_service
+    PRIVATE
+        mahali-core
+        mahali-data
+        Qt${QT_VERSION_MAJOR}::Test)
+
+add_test(NAME purchase_service COMMAND tst_purchase_service)
+
 
 add_executable(tst_device tst_device.cpp)
 target_link_libraries(tst_device

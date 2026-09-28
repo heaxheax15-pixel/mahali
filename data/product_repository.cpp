@@ -186,6 +186,26 @@ void ProductRepository::adjustStock(int productId, long long delta, const QStrin
     }
 }
 
+bool ProductRepository::updateAverageCost(int productId, long long oldQty, long long oldCostCents,
+                                          long long addedQty, long long addedCostCents)
+{
+    const long long newQty = oldQty + addedQty;
+    if (newQty <= 0) {
+        return true;
+    }
+    const long long newCost = (oldQty * oldCostCents + addedQty * addedCostCents) / newQty;
+
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral("UPDATE products SET cost_price_cents = ? WHERE id = ?"));
+    query.addBindValue(newCost);
+    query.addBindValue(productId);
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::updateAverageCost"));
+        return false;
+    }
+    return true;
+}
+
 void ProductRepository::setActive(int productId, bool active)
 {
     QSqlQuery query(m_db.handle());
