@@ -8,14 +8,14 @@ namespace app::data {
 
 PurchaseService::PurchaseService(Database& db, PurchaseRepository& purchases, PurchaseItemRepository& items,
                                  ProductRepository& products, StockMovementRepository& stockMovements,
-                                 SupplierRepository& suppliers, SupplierTransactionRepository& supplierTxs)
+                                 SupplierRepository& suppliers, SupplierPaymentRepository& supplierPayments)
     : m_db(db)
     , m_purchases(purchases)
     , m_items(items)
     , m_products(products)
     , m_stockMovements(stockMovements)
     , m_suppliers(suppliers)
-    , m_supplierTxs(supplierTxs)
+    , m_supplierPayments(supplierPayments)
 {
 }
 
@@ -102,10 +102,8 @@ PurchaseResult PurchaseService::recordPurchase(const core::Purchase& purchase,
     }
 
     // D. One line at a time inside the transaction this service owns.
-    // PurchaseItemRepository::insertAll() opens a transaction of its own, and the
-    // SQLite driver refuses a nested BEGIN (returning false) while its COMMIT
-    // would end the surrounding transaction early, so calling it here would
-    // either insert nothing or commit a half-written purchase.
+    // Items are inserted one at a time, inside this service's transaction,
+    // so the whole purchase commits or rolls back as a single unit.
     QVector<core::PurchaseItem> lines = items;
     for (core::PurchaseItem& line : lines) {
         line.purchaseId = purchaseId;
@@ -157,30 +155,21 @@ PurchaseResult PurchaseService::recordPurchase(const core::Purchase& purchase,
         }
     }
 
-    // The stock and the debt are two sides of one event, so they are written
-    // together or not at all. A negative amount is money leaving the supplier.
-    // TODO Phase 3: migrate to supplier_payments table
+    // What was paid on the invoice is a payment against it, written next to the
+    // stock it pays for so both land or neither does. The invoice total itself
+    // is already in purchases, which is what the balance is read from; adding a
+    // second row for it here would count the debt twice.
     if (header.paidCents > 0) {
-        core::SupplierTransaction payment;
+        core::SupplierPayment payment;
         payment.supplierId = header.supplierId;
-        payment.amountCents = -header.paidCents;
-        payment.createdAt = QDateTime::currentDateTime();
-        payment.note = QStringLiteral("Payment for Purchase #%1").arg(purchaseId);
-        if (m_supplierTxs.insert(payment) == 0) {
+        payment.purchaseId = purchaseId;
+        payment.amountCents = header.paidCents;
+        payment.paidAt = header.purchasedAt;
+        payment.note = QStringLiteral("Purchase #%1").arg(purchaseId);
+        payment.createdAt = nowIso();
+        if (m_supplierPayments.insert(payment) == 0) {
             m_db.rollback();
             result.error = stepError(m_db, QStringLiteral("inserting the supplier payment"));
-            return result;
-        }
-    }
-    if (header.addToStock) {
-        core::SupplierTransaction debt;
-        debt.supplierId = header.supplierId;
-        debt.amountCents = header.totalCents;
-        debt.createdAt = QDateTime::currentDateTime();
-        debt.note = QStringLiteral("Purchase #%1").arg(purchaseId);
-        if (m_supplierTxs.insert(debt) == 0) {
-            m_db.rollback();
-            result.error = stepError(m_db, QStringLiteral("inserting the supplier debt"));
             return result;
         }
     }

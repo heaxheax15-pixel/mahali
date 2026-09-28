@@ -425,14 +425,6 @@ void Database::createSchema()
             "active INTEGER NOT NULL DEFAULT 1);"),
 
         QStringLiteral(
-            "CREATE TABLE IF NOT EXISTS supplier_transactions ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "supplier_id INTEGER NOT NULL REFERENCES suppliers(id),"
-            "amount_cents INTEGER NOT NULL,"
-            "created_at TEXT NOT NULL,"
-            "note TEXT NOT NULL DEFAULT '');"),
-
-        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS payments ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "customer_id INTEGER NOT NULL REFERENCES customers(id),"

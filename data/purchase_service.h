@@ -11,7 +11,7 @@
 #include "purchase_repository.h"
 #include "stock_movement_repository.h"
 #include "supplier_repository.h"
-#include "supplier_transaction_repository.h"
+#include "supplier_payment_repository.h"
 
 namespace app::data {
 
@@ -25,7 +25,7 @@ class PurchaseService {
 public:
     PurchaseService(Database& db, PurchaseRepository& purchases, PurchaseItemRepository& items,
                     ProductRepository& products, StockMovementRepository& stockMovements,
-                    SupplierRepository& suppliers, SupplierTransactionRepository& supplierTxs);
+                    SupplierRepository& suppliers, SupplierPaymentRepository& supplierPayments);
 
     // Records a supplier invoice whole or not at all: the header, its lines, the
     // stock movements, the average costs and the supplier debt all land or none
@@ -40,7 +40,7 @@ private:
     ProductRepository& m_products;
     StockMovementRepository& m_stockMovements;
     SupplierRepository& m_suppliers;
-    SupplierTransactionRepository& m_supplierTxs;
+    SupplierPaymentRepository& m_supplierPayments;
 };
 
 } // namespace app::data

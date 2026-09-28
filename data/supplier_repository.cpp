@@ -138,8 +138,10 @@ bool SupplierRepository::setActive(int id, bool active)
 
 long long SupplierRepository::balanceCentsFor(int supplierId) const
 {
-    // opening_balance_cents + sum(supplier_transactions.amount_cents)
-    // TODO Phase 2: extend to add purchases, subtract payments and returns
+    // What the supplier is owed: the opening figure, every invoice recorded for
+    // them, minus everything paid against it. Invoices count whatever
+    // add_to_stock says, because a service that is billed is still a debt even
+    // when nothing lands on the shelf. Returns are subtracted in a later phase.
     long long balance = 0;
 
     QSqlQuery q1(m_db.handle());
@@ -152,11 +154,18 @@ long long SupplierRepository::balanceCentsFor(int supplierId) const
 
     QSqlQuery q2(m_db.handle());
     q2.prepare(QStringLiteral(
-        "SELECT COALESCE(SUM(amount_cents), 0) FROM supplier_transactions "
-        "WHERE supplier_id = ?"));
+        "SELECT COALESCE(SUM(total_cents), 0) FROM purchases WHERE supplier_id = ?"));
     q2.addBindValue(supplierId);
     if (q2.exec() && q2.next()) {
         balance += q2.value(0).toLongLong();
+    }
+
+    QSqlQuery q3(m_db.handle());
+    q3.prepare(QStringLiteral(
+        "SELECT COALESCE(SUM(amount_cents), 0) FROM supplier_payments WHERE supplier_id = ?"));
+    q3.addBindValue(supplierId);
+    if (q3.exec() && q3.next()) {
+        balance -= q3.value(0).toLongLong();
     }
 
     return balance;

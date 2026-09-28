@@ -63,9 +63,11 @@ int PurchaseItemRepository::insert(const core::PurchaseItem& item)
     } else {
         query.addBindValue(QVariant());
     }
-    query.addBindValue(item.description);
+    // description and unit are NOT NULL, so a null QString has to go in as the
+    // empty string rather than as SQL NULL.
+    query.addBindValue(item.description.isNull() ? QStringLiteral("") : item.description);
     query.addBindValue(item.quantity);
-    query.addBindValue(item.unit);
+    query.addBindValue(item.unit.isNull() ? QStringLiteral("") : item.unit);
     query.addBindValue(item.unitPriceCents);
     query.addBindValue(item.totalCents);
     if (!query.exec()) {
@@ -73,41 +75,6 @@ int PurchaseItemRepository::insert(const core::PurchaseItem& item)
         return 0;
     }
     return query.lastInsertId().toInt();
-}
-
-bool PurchaseItemRepository::insertAll(int purchaseId, const QVector<core::PurchaseItem>& items)
-{
-    if (!m_db.beginTransaction()) {
-        return false;
-    }
-
-    for (const core::PurchaseItem& item : items) {
-        QSqlQuery query(m_db.handle());
-        query.prepare(QStringLiteral(
-            "INSERT INTO purchase_items (purchase_id, product_id, description, "
-            "quantity, unit, unit_price_cents, total_cents) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)"));
-        query.addBindValue(item.purchaseId);
-        if (item.productId.has_value()) {
-            query.addBindValue(*item.productId);
-        } else {
-            query.addBindValue(QVariant());
-        }
-        query.addBindValue(item.description);
-        query.addBindValue(item.quantity);
-        query.addBindValue(item.unit);
-        query.addBindValue(item.unitPriceCents);
-        query.addBindValue(item.totalCents);
-        if (!query.exec()) {
-            m_db.recordError(query.lastError(), QStringLiteral("PurchaseItemRepository::insertAll"));
-            return false;
-        }
-    }
-
-    if (!m_db.commit()) {
-        return false;
-    }
-    return true;
 }
 
 bool PurchaseItemRepository::removeByPurchase(int purchaseId)

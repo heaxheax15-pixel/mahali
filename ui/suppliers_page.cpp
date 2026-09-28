@@ -16,10 +16,7 @@
 #include <QVBoxLayout>
 
 #include "scan_safe_dialog.h"
-#include "core/supplier_transaction.h"
 #include "data/supplier_repository.h"
-#include "data/supplier_transaction_repository.h"
-#include "format_utils.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
 #include "widgets/ui_helpers.h"
@@ -65,52 +62,6 @@ std::optional<core::Supplier> supplierDialog(QWidget* parent, bool forNew, const
     return supplier;
 }
 
-struct InvoiceInput {
-    long long amountCents = 0;
-    QString note;
-};
-
-std::optional<InvoiceInput> invoiceDialog(QWidget* parent, const QString& supplierName)
-{
-    ScanSafeDialog dialog(parent);
-    dialog.setWindowTitle(QCoreApplication::translate("app::ui::SuppliersPage", "فاتورة آجلة — %1").arg(supplierName));
-    dialog.setModal(true);
-
-    auto* amount = new QLineEdit;
-    amount->setPlaceholderText(QCoreApplication::translate("app::ui::SuppliersPage", "مثال: 4500.50"));
-    auto* note = new QLineEdit;
-
-    QFormLayout* form = new QFormLayout;
-    form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "المبلغ"), amount);
-    form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "ملاحظة"), note);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    for (QAbstractButton* b : buttons->buttons()) {
-        if (auto* pb = qobject_cast<QPushButton*>(b)) {
-            pb->setAutoDefault(false);
-            pb->setDefault(false);
-        }
-    }
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    layout->addLayout(form);
-    layout->addWidget(buttons);
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return std::nullopt;
-    }
-    const auto cents = parseMoney(amount->text());
-    if (!cents) {
-        return std::nullopt;
-    }
-    InvoiceInput input;
-    input.amountCents = *cents;
-    input.note = note->text().trimmed();
-    return input;
-}
-
 } // namespace
 
 SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
@@ -121,9 +72,6 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* edit = new QPushButton(tr("تعديل"));
     edit->setObjectName(QStringLiteral("secondary"));
-    m_addInvoice = new QPushButton(tr("فاتورة آجلة"));
-    m_addInvoice->setObjectName(QStringLiteral("secondary"));
-    m_addInvoice->setEnabled(false);
 
     m_suppliers = new QTableWidget;
     m_suppliers->setObjectName(QStringLiteral("supplierTable"));
@@ -138,24 +86,11 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     m_suppliers->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_suppliers->verticalHeader()->setDefaultSectionSize(42);
 
-    m_transactions = new QTableWidget;
-    m_transactions->setObjectName(QStringLiteral("supplierTransactionsTable"));
-    m_transactions->setAlternatingRowColors(true);
-    m_transactions->setFrameShape(QFrame::NoFrame);
-    m_transactions->setShowGrid(false);
-    m_transactions->setColumnCount(3);
-    m_transactions->setHorizontalHeaderLabels(
-        {tr("التاريخ"), tr("المبلغ"), tr("ملاحظة")});
-    m_transactions->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_transactions->horizontalHeader()->setStretchLastSection(true);
-    m_transactions->verticalHeader()->setDefaultSectionSize(42);
-
     auto* addRow = new QHBoxLayout;
     addRow->setSpacing(10);
     addRow->addStretch(1);
     addRow->addWidget(add);
     addRow->addWidget(edit);
-    addRow->addWidget(m_addInvoice);
 
     auto* suppliersCard = makeCard();
     auto* suppliersLayout = new QVBoxLayout(suppliersCard);
@@ -165,28 +100,14 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     suppliersLayout->addLayout(addRow);
     suppliersLayout->addWidget(m_suppliers, 1);
 
-    auto* transactionsCard = makeCard();
-    auto* transactionsLayout = new QVBoxLayout(transactionsCard);
-    transactionsLayout->setContentsMargins(18, 16, 18, 16);
-    transactionsLayout->setSpacing(10);
-    transactionsLayout->addWidget(makeCardTitle(tr("فواتير المورد المحدد")));
-    transactionsLayout->addWidget(m_transactions, 1);
-
-    auto* split = new QHBoxLayout;
-    split->setSpacing(12);
-    split->addWidget(suppliersCard, 2);
-    split->addWidget(transactionsCard, 3);
-
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
     root->addWidget(new PageHeader(tr("الموردون"),
                                    tr("الموردون والحسابات الآجلة عندهم")));
-    root->addLayout(split, 1);
+    root->addWidget(suppliersCard, 1);
 
     connect(add, &QPushButton::clicked, this, &SuppliersPage::onAddClicked);
     connect(edit, &QPushButton::clicked, this, &SuppliersPage::onEditClicked);
-    connect(m_addInvoice, &QPushButton::clicked, this, &SuppliersPage::onAddTransactionClicked);
-    connect(m_suppliers, &QTableWidget::itemSelectionChanged, this, &SuppliersPage::onSelectionChanged);
 
     refresh();
 }
@@ -203,17 +124,11 @@ void SuppliersPage::refresh()
         m_suppliers->setItem(row, 0, new QTableWidgetItem(supplier.name));
         m_suppliers->item(row, 0)->setData(Qt::UserRole, supplier.id);
     }
-    onSelectionChanged();
 }
 
 int SuppliersPage::supplierCount() const
 {
     return m_suppliers->rowCount();
-}
-
-int SuppliersPage::transactionCount() const
-{
-    return m_transactions->rowCount();
 }
 
 int SuppliersPage::selectedSupplierId() const
@@ -224,34 +139,6 @@ int SuppliersPage::selectedSupplierId() const
     }
     const QTableWidgetItem* item = m_suppliers->item(row, 0);
     return item ? item->data(Qt::UserRole).toInt() : 0;
-}
-
-void SuppliersPage::reloadTransactions()
-{
-    m_transactions->setRowCount(0);
-    const int supplierId = selectedSupplierId();
-    if (supplierId == 0) {
-        return;
-    }
-    data::SupplierTransactionRepository transactions(m_db);
-    for (const core::SupplierTransaction& tx : transactions.findBySupplierId(supplierId)) {
-        const int row = m_transactions->rowCount();
-        m_transactions->insertRow(row);
-        m_transactions->setItem(
-            row, 0,
-            new QTableWidgetItem(tx.createdAt.isValid()
-                                     ? tx.createdAt.toString(QStringLiteral("yyyy-MM-dd HH:mm"))
-                                     : QString()));
-        m_transactions->setItem(row, 1, new QTableWidgetItem(formatMoney(tx.amountCents)));
-        m_transactions->setItem(row, 2, new QTableWidgetItem(tx.note));
-    }
-}
-
-void SuppliersPage::onSelectionChanged()
-{
-    const bool has = selectedSupplierId() != 0;
-    m_addInvoice->setEnabled(has);
-    reloadTransactions();
 }
 
 void SuppliersPage::onAddClicked()
@@ -285,35 +172,6 @@ void SuppliersPage::onEditClicked()
     }
     suppliers.save(*maybeSupplier);
     refresh();
-}
-
-void SuppliersPage::onAddTransactionClicked()
-{
-    const int id = selectedSupplierId();
-    if (id == 0) {
-        return;
-    }
-    data::SupplierRepository suppliers(m_db);
-    const auto existing = suppliers.findById(id);
-    if (!existing) {
-        return;
-    }
-    const auto maybeInvoice = invoiceDialog(this, existing->name);
-    if (!maybeInvoice) {
-        return;
-    }
-    core::SupplierTransaction transaction;
-    transaction.supplierId = id;
-    transaction.amountCents = maybeInvoice->amountCents;
-    transaction.note = maybeInvoice->note;
-    transaction.createdAt = QDateTime::currentDateTime();
-
-    data::SupplierTransactionRepository repo(m_db);
-    if (repo.insert(transaction) == 0) {
-        QMessageBox::warning(this, tr("خطأ"), tr("تعذر حفظ الفاتورة"));
-        return;
-    }
-    reloadTransactions();
 }
 
 } // namespace app::ui

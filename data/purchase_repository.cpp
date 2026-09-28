@@ -122,20 +122,24 @@ int PurchaseRepository::insert(const core::Purchase& purchase)
         "add_to_stock, note, occasion_id, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(purchase.supplierId);
-    query.addBindValue(purchase.invoiceNumber);
-    query.addBindValue(purchase.purchasedAt);
+    // invoice_number, purchased_at, note and created_at are all NOT NULL. A null
+    // QString is bound as SQL NULL rather than as the empty string the column
+    // defaults to, so a caller that never touched the field would otherwise be
+    // turned away by the driver instead of getting the blank it meant.
+    query.addBindValue(purchase.invoiceNumber.isNull() ? QStringLiteral("") : purchase.invoiceNumber);
+    query.addBindValue(purchase.purchasedAt.isNull() ? QStringLiteral("") : purchase.purchasedAt);
     query.addBindValue(purchase.subtotalCents);
     query.addBindValue(purchase.vatCents);
     query.addBindValue(purchase.totalCents);
     query.addBindValue(purchase.paidCents);
     query.addBindValue(purchase.addToStock ? 1 : 0);
-    query.addBindValue(purchase.note);
+    query.addBindValue(purchase.note.isNull() ? QStringLiteral("") : purchase.note);
     if (purchase.occasionId.has_value()) {
         query.addBindValue(*purchase.occasionId);
     } else {
         query.addBindValue(QVariant());
     }
-    query.addBindValue(purchase.createdAt);
+    query.addBindValue(purchase.createdAt.isNull() ? QStringLiteral("") : purchase.createdAt);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("PurchaseRepository::insert"));
         return 0;

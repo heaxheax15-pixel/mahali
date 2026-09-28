@@ -44,7 +44,6 @@
 #include "data/setting_repository.h"
 #include "data/stock_movement_repository.h"
 #include "data/supplier_repository.h"
-#include "data/supplier_transaction_repository.h"
 #include "data/zakat_setting_repository.h"
 #include "data/user_repository.h"
 #include "network/sync_client.h"
@@ -191,13 +190,6 @@ void UiTest::seedMasterData(const QString& path)
     supplier.name = QStringLiteral("مورد الشاي");
     const int supplierId = suppliers.save(supplier);
     QVERIFY(supplierId > 0);
-
-    core::SupplierTransaction invoice;
-    invoice.supplierId = supplierId;
-    invoice.amountCents = 250000;
-    invoice.note = QStringLiteral("فاتورة");
-    invoice.createdAt = QDateTime::currentDateTime();
-    QVERIFY(data::SupplierTransactionRepository(db).insert(invoice) > 0);
 }
 
 void UiTest::serverStartStop()
@@ -321,8 +313,6 @@ void UiTest::pagesReflectSeededData()
 
     ui::SuppliersPage suppliers(db);
     QCOMPARE(suppliers.supplierCount(), 1);
-    suppliers.suppliersTable()->setCurrentCell(0, 0);
-    QCOMPARE(suppliers.transactionCount(), 1);
 }
 
 int UiTest::seedProduct(const QString& path, int* sessionId, long long salePriceCents)

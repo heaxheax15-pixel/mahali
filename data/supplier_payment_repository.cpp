@@ -39,7 +39,11 @@ std::optional<core::SupplierPayment> SupplierPaymentRepository::findById(int id)
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT %1 FROM supplier_payments WHERE id = ?").arg(QLatin1StringView(kPaymentColumns)));
     query.addBindValue(id);
-    if (!query.exec() || !query.next()) {
+    if (!query.exec()) {
+        m_db.recordError(query.lastError(), QStringLiteral("SupplierPaymentRepository::findById"));
+        return std::nullopt;
+    }
+    if (!query.next()) {
         return std::nullopt;
     }
     return paymentFromQuery(query);
@@ -114,9 +118,12 @@ int SupplierPaymentRepository::insert(const core::SupplierPayment& payment)
         query.addBindValue(QVariant());
     }
     query.addBindValue(payment.amountCents);
-    query.addBindValue(payment.paidAt);
+    // paid_at, note and created_at are all NOT NULL, and a null QString is bound
+    // as SQL NULL, which the driver refuses. Callers that never set them hold
+    // exactly such a null, so the blank the column defaults to is filled in here.
+    query.addBindValue(payment.paidAt.isNull() ? QStringLiteral("") : payment.paidAt);
     query.addBindValue(payment.note.isNull() ? QStringLiteral("") : payment.note);
-    query.addBindValue(payment.createdAt);
+    query.addBindValue(payment.createdAt.isNull() ? QStringLiteral("") : payment.createdAt);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("SupplierPaymentRepository::insert"));
         return 0;

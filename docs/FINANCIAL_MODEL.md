@@ -24,7 +24,9 @@ active	INTEGER DEFAULT 1	Enabled
 created_at	TEXT	—
 Current balance = opening_balance_cents + sum(purchases) − sum(payments) − sum(returns).
 
-Note: The legacy supplier_transactions table is kept for compatibility. Writes to it stop.
+Note: The balance is derived entirely from purchases and supplier_payments, so a
+supplier row never needs editing to record an invoice or a payment. Returns are not
+deducted yet.
 
 3. Purchase Invoices (purchases)
 Field	Type	Description

@@ -42,13 +42,28 @@ cur.executemany(
     [("مؤسسة الإمداد الغذائي",), ("تعاونية الخضار",)],
 )
 
-cur.execute(
-    "INSERT INTO supplier_transactions (supplier_id, amount_cents, created_at, note) VALUES (?,?,?,?)",
-    (1, 150000, ts(7, 30), "توريد دفعة بضاعة"),
-)
-cur.execute(
-    "INSERT INTO supplier_transactions (supplier_id, amount_cents, created_at, note) VALUES (?,?,?,?)",
-    (2, 60000, ts(8, 15), "توريد خضار"),)
+# Supplier invoices are recorded in purchases, and what was settled on one is a
+# payment against it in supplier_payments. The balance is opening + invoices -
+# payments, so a demo supplier only shows an outstanding figure if part of the
+# invoice is left unpaid.
+for supplier_id, invoice_number, total_cents, paid_cents, hour, minute, note in [
+    (1, "INV-1001", 150000, 100000, 7, 30, "توريد دفعة بضاعة"),
+    (2, "INV-1002", 60000, 60000, 8, 15, "توريد خضار"),
+]:
+    cur.execute(
+        "INSERT INTO purchases (supplier_id, invoice_number, purchased_at, subtotal_cents,"
+        " total_cents, paid_cents, add_to_stock, note, created_at)"
+        " VALUES (?,?,?,?,?,?,1,?,?)",
+        (supplier_id, invoice_number, ts(hour, minute), total_cents, total_cents,
+         paid_cents, note, ts(hour, minute)),
+    )
+    if paid_cents > 0:
+        cur.execute(
+            "INSERT INTO supplier_payments (supplier_id, purchase_id, amount_cents, paid_at,"
+            " note, created_at) VALUES (?,?,?,?,?,?)",
+            (supplier_id, cur.lastrowid, paid_cents, ts(hour, minute),
+             f"دفع على الفاتورة {invoice_number}", ts(hour, minute)),
+        )
 
 cur.execute(
     "INSERT INTO cash_sessions (opened_at, opening_float_cents, status) VALUES (?,?,?)",

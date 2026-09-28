@@ -17,7 +17,6 @@
 #include "customer_transaction_item_repository.h"
 #include "supplier_repository.h"
 #include "supplier_payment_repository.h"
-#include "supplier_transaction_repository.h"
 #include "purchase_repository.h"
 #include "payment_repository.h"
 #include "expense_repository.h"
@@ -63,7 +62,6 @@ private slots:
     void saleInsertAndItems();
     void customerTransactionAndItems();
     void paymentInsert();
-    void supplierTransactionInsert();
     void expenseAndDrawingInsert();
     void reverse_expense_returns_true_on_success();
     void reverse_expense_returns_false_on_missing();
@@ -120,7 +118,8 @@ void DataLayerTest::schemaContainsAllTables()
         QStringLiteral("products"), QStringLiteral("sales"), QStringLiteral("sale_items"),
         QStringLiteral("customers"), QStringLiteral("customer_transactions"),
         QStringLiteral("customer_transaction_items"), QStringLiteral("suppliers"),
-        QStringLiteral("supplier_transactions"), QStringLiteral("payments"),
+        QStringLiteral("purchases"), QStringLiteral("purchase_items"),
+        QStringLiteral("supplier_payments"), QStringLiteral("payments"),
         QStringLiteral("expenses"), QStringLiteral("owner_drawings"),
         QStringLiteral("stock_movements"), QStringLiteral("cash_sessions"),
         QStringLiteral("cash_movements"), QStringLiteral("users"), QStringLiteral("devices"),
@@ -545,28 +544,6 @@ void DataLayerTest::paymentInsert()
     const auto payments = paymentRepo.findByCustomerId(customerId);
     QCOMPARE(payments.size(), 1);
     QCOMPARE(payments[0].amountCents, 50000LL);
-}
-
-void DataLayerTest::supplierTransactionInsert()
-{
-    data::SupplierRepository supplierRepo(*m_db);
-    data::SupplierTransactionRepository txRepo(*m_db);
-
-    core::Supplier supplier;
-    supplier.name = QStringLiteral("المورد سعيد");
-    const int supplierId = supplierRepo.save(supplier);
-    QVERIFY(supplierId > 0);
-
-    core::SupplierTransaction tx;
-    tx.supplierId = supplierId;
-    tx.amountCents = 250000;
-    tx.note = QStringLiteral("فاتورة");
-    const int txId = txRepo.insert(tx);
-    QVERIFY(txId > 0);
-
-    const auto txs = txRepo.findBySupplierId(supplierId);
-    QCOMPARE(txs.size(), 1);
-    QCOMPARE(txs[0].amountCents, 250000LL);
 }
 
 void DataLayerTest::expenseAndDrawingInsert()
@@ -1751,29 +1728,6 @@ void DataLayerTest::supplier_list_active_excludes_inactive()
     QCOMPARE(active[0].name, QStringLiteral("Active One"));
 }
 
-void DataLayerTest::supplier_balance_uses_opening_and_transactions()
-{
-    data::SupplierRepository suppliers(*m_db);
-    data::SupplierTransactionRepository txRepo(*m_db);
-
-    core::Supplier s;
-    s.name = QStringLiteral("Balance Test");
-    s.openingBalanceCents = 10000;
-    s.active = true;
-    const int id = suppliers.save(s);
-    QVERIFY(id > 0);
-
-    core::SupplierTransaction tx;
-    tx.supplierId = id;
-    tx.amountCents = 5000;
-    tx.createdAt = QDateTime::currentDateTime();
-    tx.note = QStringLiteral("test tx");
-    QVERIFY(txRepo.insert(tx) > 0);
-
-    const long long balance = suppliers.balanceCentsFor(id);
-    QCOMPARE(balance, 15000LL);
-}
-
 namespace {
 
 // A purchase header, so a payment has a real invoice to point at. The supplier
@@ -1802,6 +1756,44 @@ int addSupplierForPayments(data::SupplierRepository& suppliers, const QString& n
 }
 
 } // namespace
+
+void DataLayerTest::supplier_balance_uses_opening_and_transactions()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::PurchaseRepository purchases(*m_db);
+    data::SupplierPaymentRepository payments(*m_db);
+
+    core::Supplier s;
+    s.name = QStringLiteral("Balance Test");
+    s.openingBalanceCents = 10000;
+    s.active = true;
+    const int id = suppliers.save(s);
+    QVERIFY(id > 0);
+
+    // 10000 opening, 50000 invoiced, 20000 paid: the supplier is still owed
+    // 40000. Both the invoice and the payment are checked on their own so a
+    // balance that happens to come out right cannot hide a row that was missed.
+    const int purchaseId = addPurchase(purchases, id, 50000);
+    QVERIFY(purchaseId > 0);
+    QCOMPARE(suppliers.balanceCentsFor(id), 60000LL);
+
+    core::SupplierPayment payment;
+    payment.supplierId = id;
+    payment.purchaseId = purchaseId;
+    payment.amountCents = 20000;
+    payment.paidAt = data::nowIso();
+    payment.createdAt = data::nowIso();
+    QVERIFY(payments.insert(payment) > 0);
+
+    QCOMPARE(suppliers.balanceCentsFor(id), 40000LL);
+
+    // A second supplier shares the tables but not the ledger.
+    core::Supplier other;
+    other.name = QStringLiteral("Other Balance Test");
+    const int otherId = suppliers.save(other);
+    QVERIFY(otherId > 0);
+    QCOMPARE(suppliers.balanceCentsFor(otherId), 0LL);
+}
 
 void DataLayerTest::supplier_payment_roundtrip()
 {

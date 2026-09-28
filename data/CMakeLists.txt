@@ -53,7 +53,6 @@ target_sources(mahali-data PRIVATE
     stock_movement_repository.cpp
     supplier_repository.cpp
     supplier_payment_repository.cpp
-    supplier_transaction_repository.cpp
     sync_outbox_repository.cpp
     sync_sequence_repository.cpp
     user_repository.cpp
