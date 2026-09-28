@@ -16,7 +16,9 @@
 #include "customer_transaction_repository.h"
 #include "customer_transaction_item_repository.h"
 #include "supplier_repository.h"
+#include "supplier_payment_repository.h"
 #include "supplier_transaction_repository.h"
+#include "purchase_repository.h"
 #include "payment_repository.h"
 #include "expense_repository.h"
 #include "owner_drawing_repository.h"
@@ -96,6 +98,10 @@ private slots:
     void supplier_new_fields_roundtrip();
     void supplier_list_active_excludes_inactive();
     void supplier_balance_uses_opening_and_transactions();
+    void supplier_payment_roundtrip();
+    void supplier_payment_find_by_supplier();
+    void supplier_payment_find_by_purchase();
+    void supplier_payment_schema_exists();
 
 private:
     QTemporaryDir m_dir;
@@ -1766,6 +1772,188 @@ void DataLayerTest::supplier_balance_uses_opening_and_transactions()
 
     const long long balance = suppliers.balanceCentsFor(id);
     QCOMPARE(balance, 15000LL);
+}
+
+namespace {
+
+// A purchase header, so a payment has a real invoice to point at. The supplier
+// and the invoice are part of the fixture because every check below is about
+// what a payment remembers, not about creating either of them.
+int addPurchase(data::PurchaseRepository& purchases, int supplierId, long long totalCents)
+{
+    core::Purchase purchase;
+    purchase.supplierId = supplierId;
+    // purchases.invoice_number and purchases.note are NOT NULL, and the struct
+    // leaves both as a null QString, which the driver binds as NULL.
+    purchase.invoiceNumber = QStringLiteral("");
+    purchase.note = QStringLiteral("");
+    purchase.purchasedAt = data::nowIso();
+    purchase.totalCents = totalCents;
+    purchase.subtotalCents = totalCents;
+    purchase.createdAt = data::nowIso();
+    return purchases.insert(purchase);
+}
+
+int addSupplierForPayments(data::SupplierRepository& suppliers, const QString& name)
+{
+    core::Supplier supplier;
+    supplier.name = name;
+    return suppliers.save(supplier);
+}
+
+} // namespace
+
+void DataLayerTest::supplier_payment_roundtrip()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::PurchaseRepository purchases(*m_db);
+    data::SupplierPaymentRepository payments(*m_db);
+
+    const int supplierId = addSupplierForPayments(suppliers, QStringLiteral("Payment Supplier"));
+    QVERIFY(supplierId > 0);
+    const int purchaseId = addPurchase(purchases, supplierId, 100000);
+    QVERIFY(purchaseId > 0);
+
+    core::SupplierPayment payment;
+    payment.supplierId = supplierId;
+    payment.purchaseId = purchaseId;
+    payment.amountCents = 30000;
+    payment.paidAt = data::nowIso();
+    payment.note = QStringLiteral("test");
+    payment.createdAt = data::nowIso();
+    const int paymentId = payments.insert(payment);
+    QVERIFY(paymentId > 0);
+
+    const auto stored = payments.findById(paymentId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->id, paymentId);
+    QCOMPARE(stored->supplierId, supplierId);
+    QVERIFY(stored->purchaseId.has_value());
+    QCOMPARE(*stored->purchaseId, purchaseId);
+    QCOMPARE(stored->amountCents, 30000LL);
+    QCOMPARE(stored->paidAt, payment.paidAt);
+    QCOMPARE(stored->note, QStringLiteral("test"));
+    QCOMPARE(stored->createdAt, payment.createdAt);
+
+    // A payment with no invoice behind it stays a general payment, so the
+    // caller can tell "not tied to a purchase" from "the id is zero".
+    core::SupplierPayment general;
+    general.supplierId = supplierId;
+    general.amountCents = 1000;
+    general.paidAt = data::nowIso();
+    general.createdAt = data::nowIso();
+    const int generalId = payments.insert(general);
+    QVERIFY(generalId > 0);
+    const auto generalStored = payments.findById(generalId);
+    QVERIFY(generalStored.has_value());
+    QVERIFY(!generalStored->purchaseId.has_value());
+}
+
+void DataLayerTest::supplier_payment_find_by_supplier()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::SupplierPaymentRepository payments(*m_db);
+
+    const int first = addSupplierForPayments(suppliers, QStringLiteral("Payment Supplier A"));
+    QVERIFY(first > 0);
+    const int second = addSupplierForPayments(suppliers, QStringLiteral("Payment Supplier B"));
+    QVERIFY(second > 0);
+
+    // Two payments for the first supplier, one older than the other, so the
+    // ordering is checked against known values rather than insertion order.
+    const QString older = data::toIso(QDateTime::currentDateTime().addSecs(-600));
+    const QString newer = data::toIso(QDateTime::currentDateTime().addSecs(-60));
+    core::SupplierPayment oldPayment;
+    oldPayment.supplierId = first;
+    oldPayment.amountCents = 1000;
+    oldPayment.paidAt = older;
+    oldPayment.createdAt = data::nowIso();
+    QVERIFY(payments.insert(oldPayment) > 0);
+    core::SupplierPayment newPayment;
+    newPayment.supplierId = first;
+    newPayment.amountCents = 2000;
+    newPayment.paidAt = newer;
+    newPayment.createdAt = data::nowIso();
+    QVERIFY(payments.insert(newPayment) > 0);
+    core::SupplierPayment otherPayment;
+    otherPayment.supplierId = second;
+    otherPayment.amountCents = 3000;
+    otherPayment.paidAt = newer;
+    otherPayment.createdAt = data::nowIso();
+    QVERIFY(payments.insert(otherPayment) > 0);
+
+    const auto found = payments.findBySupplierId(first);
+    QCOMPARE(found.size(), std::size_t(2));
+    // Newest first: the payment recorded last is the one being asked about.
+    QCOMPARE(found[0].amountCents, 2000LL);
+    QCOMPARE(found[1].amountCents, 1000LL);
+    for (const core::SupplierPayment& payment : found) {
+        QCOMPARE(payment.supplierId, first);
+    }
+
+    QCOMPARE(payments.findBySupplierId(second).size(), std::size_t(1));
+}
+
+void DataLayerTest::supplier_payment_find_by_purchase()
+{
+    data::SupplierRepository suppliers(*m_db);
+    data::PurchaseRepository purchases(*m_db);
+    data::SupplierPaymentRepository payments(*m_db);
+
+    const int supplierId = addSupplierForPayments(suppliers, QStringLiteral("Invoice Supplier"));
+    QVERIFY(supplierId > 0);
+    const int firstPurchase = addPurchase(purchases, supplierId, 100000);
+    QVERIFY(firstPurchase > 0);
+    const int secondPurchase = addPurchase(purchases, supplierId, 50000);
+    QVERIFY(secondPurchase > 0);
+
+    // One invoice paid in two instalments, another paid once.
+    for (const long long amount : {40000LL, 60000LL}) {
+        core::SupplierPayment part;
+        part.supplierId = supplierId;
+        part.purchaseId = firstPurchase;
+        part.amountCents = amount;
+        part.paidAt = data::nowIso();
+        part.createdAt = data::nowIso();
+        QVERIFY(payments.insert(part) > 0);
+    }
+    core::SupplierPayment full;
+    full.supplierId = supplierId;
+    full.purchaseId = secondPurchase;
+    full.amountCents = 50000;
+    full.paidAt = data::nowIso();
+    full.createdAt = data::nowIso();
+    QVERIFY(payments.insert(full) > 0);
+
+    const auto found = payments.findByPurchaseId(firstPurchase);
+    QCOMPARE(found.size(), std::size_t(2));
+    long long total = 0;
+    for (const core::SupplierPayment& payment : found) {
+        QVERIFY(payment.purchaseId.has_value());
+        QCOMPARE(*payment.purchaseId, firstPurchase);
+        total += payment.amountCents;
+    }
+    QCOMPARE(total, 100000LL);
+    QCOMPARE(payments.findByPurchaseId(secondPurchase).size(), std::size_t(1));
+}
+
+void DataLayerTest::supplier_payment_schema_exists()
+{
+    QSqlQuery query(m_db->handle());
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'supplier_payments'")));
+    QVERIFY(query.next());
+
+    // Both indexes exist: one to list a supplier's payments newest first, one to
+    // sum what a single invoice has already been paid.
+    QVERIFY(query.exec(QStringLiteral("PRAGMA index_list(supplier_payments)")));
+    QStringList indexes;
+    while (query.next()) {
+        indexes << query.value(1).toString();
+    }
+    QVERIFY(indexes.contains(QStringLiteral("idx_supplier_payments_supplier")));
+    QVERIFY(indexes.contains(QStringLiteral("idx_supplier_payments_purchase")));
+    QCOMPARE(indexes.size(), 2);
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

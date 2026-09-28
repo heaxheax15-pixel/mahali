@@ -588,6 +588,18 @@ void Database::createSchema()
             "FOREIGN KEY (product_id) REFERENCES products(id));"),
 
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS supplier_payments ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "supplier_id INTEGER NOT NULL,"
+            "purchase_id INTEGER,"
+            "amount_cents INTEGER NOT NULL,"
+            "paid_at TEXT NOT NULL,"
+            "note TEXT NOT NULL DEFAULT '',"
+            "created_at TEXT NOT NULL,"
+            "FOREIGN KEY (supplier_id) REFERENCES suppliers(id),"
+            "FOREIGN KEY (purchase_id) REFERENCES purchases(id));"),
+
+        QStringLiteral(
             "INSERT OR IGNORE INTO sync_sequence (id, value) VALUES (1, 0);"),
 
         QStringLiteral(
@@ -613,6 +625,12 @@ void Database::createSchema()
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase "
             "ON purchase_items(purchase_id);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier "
+            "ON supplier_payments(supplier_id, paid_at DESC);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_supplier_payments_purchase "
+            "ON supplier_payments(purchase_id);"),
     };
 
     if (!execStatements(schema, QStringLiteral("schema"))) {

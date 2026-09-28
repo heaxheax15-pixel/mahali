@@ -47,6 +47,7 @@ target_sources(mahali-core PRIVATE
     session.h
     stock_movement.h
     supplier.h
+    supplier_payment.h
     supplier_transaction.h
     sync_operation.h
     sync_operation_codec.cpp
