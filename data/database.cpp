@@ -93,6 +93,23 @@ void migrateSuppliersTable(const QSqlDatabase& db)
     }
 }
 
+// Idempotent, runs on every open. Adds the reference column that links a
+// movement to whatever produced it, e.g. "Purchase #42". Rows written before the
+// column existed get an empty reference rather than NULL, so a reader never has
+// to tell "no source" apart from "the column is missing".
+void migrateStockMovementsTable(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("stock_movements"));
+    if (columns.isEmpty()) {
+        return;
+    }
+    if (columns.contains(QStringLiteral("reference"))) {
+        return;
+    }
+    QSqlQuery alter(db);
+    alter.exec(QStringLiteral("ALTER TABLE stock_movements ADD COLUMN reference TEXT NOT NULL DEFAULT ''"));
+}
+
 // Reports whether `column` of `table` is declared NOT NULL. PRAGMA table_info
 // rows are (cid, name, type, notnull, dflt_value, pk).
 bool columnIsNotNull(const QSqlDatabase& db, const QString& table, const QString& column)
@@ -446,6 +463,7 @@ void Database::createSchema()
             "product_id INTEGER NOT NULL REFERENCES products(id),"
             "delta INTEGER NOT NULL,"
             "reason TEXT NOT NULL,"
+            "reference TEXT NOT NULL DEFAULT '',"
             "created_at TEXT NOT NULL,"
             "reversed_id INTEGER NOT NULL DEFAULT 0);"),
 
@@ -608,6 +626,7 @@ void Database::createSchema()
 
     migrateUsersTable(m_db);
     migrateSuppliersTable(m_db);
+    migrateStockMovementsTable(m_db);
     const QString productsError = migrateProductsTable(m_db);
     if (!productsError.isEmpty()) {
         m_lastError = QStringLiteral("products migration failed: %1").arg(productsError);

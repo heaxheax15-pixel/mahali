@@ -21,12 +21,13 @@ core::StockMovement movementFromQuery(const QSqlQuery& query)
     movement.productId = query.value(1).toInt();
     movement.delta = query.value(2).toLongLong();
     movement.reason = query.value(3).toString();
-    movement.createdAt = fromIso(query.value(4).toString()).value_or(QDateTime());
-    movement.reversedId = query.value(5).toInt();
+    movement.reference = query.value(4).toString();
+    movement.createdAt = fromIso(query.value(5).toString()).value_or(QDateTime());
+    movement.reversedId = query.value(6).toInt();
     return movement;
 }
 
-const char* kMovementColumns = "id, product_id, delta, reason, created_at, reversed_id";
+const char* kMovementColumns = "id, product_id, delta, reason, reference, created_at, reversed_id";
 
 } // namespace
 
@@ -94,11 +95,12 @@ int StockMovementRepository::insert(const core::StockMovement& movement)
 {
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("INSERT INTO stock_movements (product_id, delta, reason, created_at, reversed_id) "
-                       "VALUES (?, ?, ?, ?, ?)"));
+        QStringLiteral("INSERT INTO stock_movements (product_id, delta, reason, reference, created_at, reversed_id) "
+                       "VALUES (?, ?, ?, ?, ?, ?)"));
     query.addBindValue(movement.productId);
     query.addBindValue(movement.delta);
     query.addBindValue(movement.reason);
+    query.addBindValue(movement.reference.isNull() ? QStringLiteral("") : movement.reference);
     query.addBindValue(toIso(movement.createdAt.isValid() ? movement.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(movement.reversedId);
     if (!query.exec()) {

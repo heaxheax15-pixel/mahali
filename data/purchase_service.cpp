@@ -140,6 +140,7 @@ PurchaseResult PurchaseService::recordPurchase(const core::Purchase& purchase,
             movement.productId = productId;
             movement.delta = line.quantity;
             movement.reason = QStringLiteral("purchase");
+            movement.reference = QStringLiteral("Purchase #%1").arg(purchaseId);
             movement.createdAt = QDateTime::currentDateTime();
             if (m_stockMovements.insert(movement) == 0) {
                 m_db.rollback();

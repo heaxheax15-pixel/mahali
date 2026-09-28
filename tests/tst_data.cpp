@@ -57,6 +57,7 @@ private slots:
     void sold_by_weight_persists();
     void legacy_products_migration();
     void stockInvariantIsDerived();
+    void stock_movement_reference_roundtrip();
     void saleInsertAndItems();
     void customerTransactionAndItems();
     void paymentInsert();
@@ -400,6 +401,52 @@ void DataLayerTest::stockInvariantIsDerived()
     QVERIFY(after.has_value());
     QCOMPARE(after->quantity, 90LL);
     QVERIFY(m_db->verifyStockConsistency());
+}
+
+void DataLayerTest::stock_movement_reference_roundtrip()
+{
+    data::ProductRepository productRepo(*m_db);
+    data::StockMovementRepository movementRepo(*m_db);
+
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000099");
+    product.name = QStringLiteral("ماء معدني");
+    product.costPriceCents = 1000;
+    product.salePriceCents = 1500;
+    const int productId = productRepo.save(product);
+    QVERIFY(productId > 0);
+
+    core::StockMovement movement;
+    movement.productId = productId;
+    movement.delta = 12;
+    movement.reason = QStringLiteral("purchase");
+    movement.reference = QStringLiteral("Test #1");
+    const int movementId = movementRepo.insert(movement);
+    QVERIFY(movementId > 0);
+
+    // The reference is what tells a reader whether the stock came from a
+    // purchase, a sale or a correction, so it has to survive the round trip.
+    const auto stored = movementRepo.findById(movementId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->reference, QStringLiteral("Test #1"));
+    QCOMPARE(stored->reason, QStringLiteral("purchase"));
+    QCOMPARE(stored->delta, 12LL);
+
+    const auto byProduct = movementRepo.findByProductId(productId);
+    QCOMPARE(byProduct.size(), std::size_t(1));
+    QCOMPARE(byProduct[0].reference, QStringLiteral("Test #1"));
+
+    // A movement with nothing to point at still reads back as an empty string,
+    // not a null one, so the UI never has to guard the label.
+    core::StockMovement bare;
+    bare.productId = productId;
+    bare.delta = -2;
+    bare.reason = QStringLiteral("manual_adjustment");
+    const int bareId = movementRepo.insert(bare);
+    QVERIFY(bareId > 0);
+    const auto bareStored = movementRepo.findById(bareId);
+    QVERIFY(bareStored.has_value());
+    QVERIFY(bareStored->reference.isEmpty());
 }
 
 void DataLayerTest::saleInsertAndItems()

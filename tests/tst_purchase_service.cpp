@@ -134,6 +134,7 @@ void PurchaseServiceTest::cash_purchase_simple()
     QCOMPARE(movements.size(), std::size_t(1));
     QCOMPARE(movements[0].delta, 100LL);
     QCOMPARE(movements[0].reason, QStringLiteral("purchase"));
+    QCOMPARE(movements[0].reference, QStringLiteral("Purchase #%1").arg(result.purchaseId));
 
     const auto product = f.products.findById(productId);
     QVERIFY(product.has_value());
