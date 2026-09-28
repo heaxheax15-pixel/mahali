@@ -19,6 +19,7 @@ target_link_libraries(tst_data
 
 add_test(NAME data COMMAND tst_data)
 
+
 add_executable(tst_device tst_device.cpp)
 target_link_libraries(tst_device
     PRIVATE

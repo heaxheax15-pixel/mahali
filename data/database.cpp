@@ -532,6 +532,35 @@ void Database::createSchema()
             "value INTEGER NOT NULL DEFAULT 0);"),
 
         QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS purchases ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "supplier_id INTEGER NOT NULL,"
+            "invoice_number TEXT NOT NULL DEFAULT '',"
+            "purchased_at TEXT NOT NULL,"
+            "subtotal_cents INTEGER NOT NULL,"
+            "vat_cents INTEGER NOT NULL DEFAULT 0,"
+            "total_cents INTEGER NOT NULL,"
+            "paid_cents INTEGER NOT NULL DEFAULT 0,"
+            "add_to_stock INTEGER NOT NULL DEFAULT 1,"
+            "note TEXT NOT NULL DEFAULT '',"
+            "occasion_id INTEGER,"
+            "created_at TEXT NOT NULL,"
+            "FOREIGN KEY (supplier_id) REFERENCES suppliers(id));"),
+
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS purchase_items ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "purchase_id INTEGER NOT NULL,"
+            "product_id INTEGER,"
+            "description TEXT NOT NULL DEFAULT '',"
+            "quantity INTEGER NOT NULL,"
+            "unit TEXT NOT NULL DEFAULT 'piece',"
+            "unit_price_cents INTEGER NOT NULL,"
+            "total_cents INTEGER NOT NULL,"
+            "FOREIGN KEY (purchase_id) REFERENCES purchases(id),"
+            "FOREIGN KEY (product_id) REFERENCES products(id));"),
+
+        QStringLiteral(
             "INSERT OR IGNORE INTO sync_sequence (id, value) VALUES (1, 0);"),
 
         QStringLiteral(
@@ -551,6 +580,12 @@ void Database::createSchema()
             "CREATE INDEX IF NOT EXISTS idx_cash_movements_session_id ON cash_movements(session_id);"),
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_applied_ops_device_op ON applied_ops(device_id, op_id);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_purchases_supplier "
+            "ON purchases(supplier_id, purchased_at DESC);"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase "
+            "ON purchase_items(purchase_id);"),
     };
 
     if (!execStatements(schema, QStringLiteral("schema"))) {
@@ -559,6 +594,8 @@ void Database::createSchema()
     }
 
     createSingleOpenSessionIndex();
+
+    // purchases + purchase_items indexes are created via schema above.
 
     migrateUsersTable(m_db);
     migrateSuppliersTable(m_db);
