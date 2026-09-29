@@ -33,6 +33,22 @@ private:
     int m_productId;
 };
 
+// The trailing "+" tile that asks for a new product. Deliberately not a
+// QuickItemCard: it carries no product id, and keeping it out of that class is
+// what stops it from being counted as a listed item.
+class QuickAddCard : public QFrame {
+    Q_OBJECT
+
+public:
+    explicit QuickAddCard(QWidget* parent = nullptr);
+
+signals:
+    void clicked();
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
+};
+
 // A horizontal strip of quick items (active products with no barcode) for the
 // POS page. Typing in the search field rebuilds the strip; an empty query lists
 // every quick item. Cards are rebuilt from ProductRepository on each refresh,
@@ -53,9 +69,11 @@ public:
     bool isEmptyMessageVisible() const;
 
 signals:
-    // A quick item card was clicked. The cart is not wired up yet, so nothing
-    // on the POS page listens to this yet.
+    // A quick item card was clicked, and the product behind it was added to the
+    // cart.
     void productClicked(int productId);
+    // The trailing "+" tile was clicked: the page opens the new product dialog.
+    void addNewRequested();
 
 private:
     void clearCards();
@@ -66,6 +84,7 @@ private:
     QWidget* m_cards;
     QHBoxLayout* m_cardsLayout;
     QLabel* m_empty;
+    QuickAddCard* m_addCard = nullptr;
 };
 
 } // namespace app::ui

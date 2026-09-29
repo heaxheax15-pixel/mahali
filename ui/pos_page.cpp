@@ -1,11 +1,15 @@
 #include "pos_page.h"
 
 #include <QBrush>
+#include <QFrame>
+#include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QList>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSet>
 #include <QTableWidget>
@@ -20,6 +24,7 @@
 #include "data/cash_session_repository.h"
 #include "data/product_repository.h"
 #include "data/sale_service.h"
+#include "dialogs/product_dialog.h"
 #include "format_utils.h"
 #include "quick_items_bar.h"
 #include "widgets/app_icon.h"
@@ -35,29 +40,39 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
 
-    auto* header = new PageHeader(tr("البيع السريع"),
-                                  tr("باركود أو اسم المنتج — Enter يضيف، و Enter فارغ يحفظ البيع"));
-    m_sessionChip = makeChip(tr("الجلسة"), QStringLiteral("info"));
+    auto* header = new PageHeader(tr("Vente rapide"), tr("Code-barres ou nom du produit"));
+    m_sessionChip = makeChip(tr("Session"), QStringLiteral("info"));
     header->addAction(m_sessionChip);
     root->addWidget(header);
 
-    // Quick items sit right above the barcode field: pick one with a click, or
-    // keep typing barcodes below.
-    m_quickItems = new QuickItemsBar(m_db, this);
-    // Hidden until the strip is finished: it is built and exercised by its own
-    // tests, but nothing on this page listens to productClicked yet, so showing
-    // it would advertise cards that do nothing.
-    m_quickItems->setVisible(false);
-    root->addWidget(m_quickItems);
-
+    // The barcode field is the only thing that has to be reachable without
+    // touching the mouse, so it is the tallest control on the page. The inline
+    // rule overrides the app-wide #searchField min-height so the box really
+    // lands on 56px instead of the 44px+padding the theme would ask for.
     m_entry = new QLineEdit;
     m_entry->setObjectName(QStringLiteral("searchField"));
-    m_entry->setPlaceholderText(tr("باركود أو اسم المنتج — Enter يضيف، Enter فارغ يحفظ البيع"));
+    m_entry->setPlaceholderText(tr("Code-barres ou nom du produit"));
     m_entry->setClearButtonEnabled(true);
-    m_entry->setMinimumHeight(48);
+    m_entry->setStyleSheet(QStringLiteral("min-height: 36px; padding: 10px 14px; font-size: 18px;"));
+    m_entry->setFixedHeight(56);
     m_entry->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
                        QLineEdit::LeadingPosition);
     root->addWidget(m_entry);
+
+    // Quick items are the products that cannot be scanned, so they get a
+    // permanent strip under the entry instead of a search box of their own.
+    m_quickItems = new QuickItemsBar(m_db, this);
+    m_quickItems->setFixedHeight(120);
+    root->addWidget(m_quickItems);
+
+    auto* body = new QHBoxLayout;
+    body->setSpacing(16);
+
+    // ---- cart, on the wide side ----
+    auto* cart = new QWidget;
+    auto* cartLayout = new QVBoxLayout(cart);
+    cartLayout->setContentsMargins(0, 0, 0, 0);
+    cartLayout->setSpacing(12);
 
     m_table = new QTableWidget;
     m_table->setObjectName(QStringLiteral("posTable"));
@@ -65,68 +80,88 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(false);
     m_table->setColumnCount(4);
-    m_table->setHorizontalHeaderLabels(
-        {tr("المنتج"), tr("الكمية"), tr("سعر الوحدة"), tr("الإجمالي")});
+    m_table->setHorizontalHeaderLabels({tr("Produit"), tr("Qté"), tr("PU"), tr("Total")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked
-                             | QAbstractItemView::EditKeyPressed | QAbstractItemView::AnyKeyPressed);
+    // Qty and PU are edited through QInputDialog on double click, which is the
+    // only way to get a number pad on a tablet. Leaving the items editable as
+    // well would let a stray keypress silently rewrite a price.
+    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->verticalHeader()->setDefaultSectionSize(46);
     m_table->setColumnWidth(1, 90);
     m_table->setColumnWidth(2, 120);
+    cartLayout->addWidget(m_table, 1);
 
-    auto* hero = new QFrame;
-    hero->setObjectName(QStringLiteral("heroPanel"));
-    hero->setFixedWidth(340);
-    hero->setMinimumHeight(260);
-    auto* heroLayout = new QVBoxLayout(hero);
-    heroLayout->setContentsMargins(18, 18, 18, 18);
-    heroLayout->setSpacing(8);
+    auto* cartActions = new QHBoxLayout;
+    cartActions->setSpacing(12);
 
-    auto* heroCaption = new QLabel(tr("إجمالي الفاتورة"));
-    heroCaption->setObjectName(QStringLiteral("heroCaption"));
-    heroCaption->setAlignment(Qt::AlignCenter);
+    auto* clearButton = new QPushButton(tr("Vider"));
+    clearButton->setObjectName(QStringLiteral("secondary"));
+    auto* removeButton = new QPushButton(tr("Retirer ligne"));
+    removeButton->setObjectName(QStringLiteral("secondary"));
+
+    cartActions->addWidget(clearButton);
+    cartActions->addWidget(removeButton);
+    cartLayout->addLayout(cartActions);
+
+    body->addWidget(cart, 3);
+
+    // ---- invoice, fixed rail on the right ----
+    auto* invoice = new QFrame;
+    invoice->setObjectName(QStringLiteral("card"));
+    invoice->setFixedWidth(320);
+    auto* invoiceLayout = new QVBoxLayout(invoice);
+    invoiceLayout->setContentsMargins(18, 18, 18, 18);
+    invoiceLayout->setSpacing(8);
+
+    auto* totalCaption = new QLabel(tr("Total"));
+    totalCaption->setObjectName(QStringLiteral("heroCaption"));
+    // #heroCaption is 13px in the theme; only the size is overridden here, the
+    // muted colour still comes from the object name rule.
+    totalCaption->setStyleSheet(QStringLiteral("font-size: 12px;"));
 
     m_totalLabel = new QLabel(QStringLiteral("0.00"));
     m_totalLabel->setObjectName(QStringLiteral("heroValue"));
+    m_totalLabel->setStyleSheet(QStringLiteral("font-size: 36px;"));
     m_totalLabel->setAlignment(Qt::AlignCenter);
 
-    m_itemsLabel = new QLabel;
-    m_itemsLabel->setObjectName(QStringLiteral("heroCaption"));
-    m_itemsLabel->setAlignment(Qt::AlignCenter);
+    m_countLabel = new QLabel;
+    m_countLabel->setObjectName(QStringLiteral("heroCaption"));
+    m_countLabel->setAlignment(Qt::AlignCenter);
 
-    m_save = new QPushButton(tr("حفظ البيع"));
+    m_save = new QPushButton(tr("Enregistrer la vente"));
     m_save->setObjectName(QStringLiteral("primary"));
-    m_save->setMinimumHeight(46);
+    m_save->setFixedHeight(52);
     m_save->setIcon(appIcon(Icon::Check, QColor(QStringLiteral("#ffffff")), 20));
 
-    heroLayout->addStretch(1);
-    heroLayout->addWidget(heroCaption);
-    heroLayout->addWidget(m_totalLabel);
-    heroLayout->addWidget(m_itemsLabel);
-    heroLayout->addStretch(1);
-    heroLayout->addWidget(m_save);
+    invoiceLayout->addStretch(1);
+    invoiceLayout->addWidget(totalCaption, 0, Qt::AlignHCenter);
+    invoiceLayout->addWidget(m_totalLabel);
+    invoiceLayout->addWidget(m_countLabel);
+    invoiceLayout->addStretch(1);
+    invoiceLayout->addWidget(m_save);
+
+    body->addWidget(invoice);
+
+    root->addLayout(body, 1);
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
     m_notice->setObjectName(QStringLiteral("noticeOk"));
     // Nothing to report yet, so it starts hidden; setNotice reveals it.
     m_notice->setVisible(false);
-
-    auto* body = new QHBoxLayout;
-    body->setSpacing(16);
-    body->addWidget(hero);
-    body->addWidget(m_table, 1);
-
-    root->addLayout(body, 1);
     root->addWidget(m_notice);
 
     connect(m_entry, &QLineEdit::returnPressed, this, &PosPage::addEntry);
     connect(m_save, &QPushButton::clicked, this, &PosPage::completeSale);
+    connect(clearButton, &QPushButton::clicked, this, &PosPage::onClearCart);
+    connect(removeButton, &QPushButton::clicked, this, &PosPage::onRemoveLine);
     connect(m_table, &QTableWidget::cellChanged, this, &PosPage::onCellChanged);
-    connect(m_table, &QTableWidget::itemSelectionChanged, this, &PosPage::refreshTotals);
+    connect(m_table, &QTableWidget::cellDoubleClicked, this, &PosPage::onCellDoubleClicked);
+    connect(m_quickItems, &QuickItemsBar::productClicked, this, &PosPage::onQuickItemClicked);
+    connect(m_quickItems, &QuickItemsBar::addNewRequested, this, &PosPage::onAddQuickProduct);
 
     m_entry->installEventFilter(this);
     m_table->installEventFilter(this);
@@ -142,6 +177,7 @@ bool PosPage::eventFilter(QObject* watched, QEvent* event)
     if (watched == m_entry && event->type() == QEvent::KeyPress) {
         auto* key = static_cast<QKeyEvent*>(event);
         if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) {
+            // Enter on an empty field is the shortcut to save.
             if (m_entry->text().trimmed().isEmpty()) {
                 completeSale();
                 return true;
@@ -199,33 +235,26 @@ void PosPage::setEntryText(const QString& text)
     m_entry->setText(text);
 }
 
-void PosPage::addEntry()
+std::optional<core::Product> PosPage::findProduct(const QString& text) const
 {
-    const QString text = m_entry->text().trimmed();
-    if (text.isEmpty()) {
-        return;
-    }
-    m_entry->clear();
-
     data::ProductRepository products(m_db);
-    std::optional<core::Product> product = products.findByBarcode(text);
-    if (!product) {
-        for (const core::Product& candidate : products.findAll()) {
-            if (candidate.active && candidate.name == text) {
-                product = candidate;
-                break;
-            }
+    if (const auto byBarcode = products.findByBarcode(text)) {
+        return byBarcode;
+    }
+    for (const core::Product& candidate : products.findAll()) {
+        if (candidate.active && candidate.name == text) {
+            return candidate;
         }
     }
-    if (!product) {
-        setNotice(tr("لا يوجد منتج بالباركود/الاسم: %1").arg(text), false);
-        return;
-    }
+    return std::nullopt;
+}
 
+void PosPage::addProductToCart(const core::Product& product, long long quantity)
+{
     for (PosLine& line : m_lines) {
-        if (line.productId == product->id) {
-            ++line.quantity;
-            setNotice(tr("أضيف: %1 × %2")
+        if (line.productId == product.id) {
+            line.quantity += quantity;
+            setNotice(tr("Ajouté : %1 × %2")
                           .arg(line.name, formatMoney(line.unitPriceCents)),
                       true);
             rebuildTable();
@@ -235,17 +264,103 @@ void PosPage::addEntry()
     }
 
     PosLine line;
-    line.productId = product->id;
-    line.barcode = product->barcode;
-    line.name = product->name;
-    line.unit = product->unit;
-    line.quantity = 1;
-    line.unitPriceCents = product->salePriceCents;
-    line.basePriceCents = product->salePriceCents;
+    line.productId = product.id;
+    line.barcode = product.barcode;
+    line.name = product.name;
+    line.unit = product.unit;
+    line.quantity = quantity;
+    line.unitPriceCents = product.salePriceCents;
+    line.basePriceCents = product.salePriceCents;
     m_lines.append(line);
-    setNotice(tr("أضيف: %1").arg(line.name), true);
+    setNotice(tr("Ajouté : %1").arg(line.name), true);
     rebuildTable();
     m_entry->setFocus();
+}
+
+void PosPage::addEntry()
+{
+    const QString text = m_entry->text().trimmed();
+    if (text.isEmpty()) {
+        return;
+    }
+    // Cleared first so a rejected code does not sit in the field waiting to be
+    // submitted again.
+    m_entry->clear();
+
+    const std::optional<core::Product> product = findProduct(text);
+    if (!product) {
+        // A code nobody has registered yet is the normal first sale of a new
+        // product, so the register offers to create it instead of complaining.
+        core::Product draft;
+        draft.barcode = text;
+        draft.unit = QStringLiteral("piece");
+        draft.active = true;
+
+        const std::optional<core::Product> created = showProductDialog(this, m_db, draft);
+        if (!created) {
+            m_entry->setFocus();
+            return;
+        }
+        const int id = data::ProductRepository(m_db).save(*created);
+        if (id == 0) {
+            setNotice(tr("Impossible d'enregistrer le produit."), false);
+            m_entry->setFocus();
+            return;
+        }
+        // save() hands back the row id rather than filling it in, and the cart
+        // matches lines by product id: without this every new product would
+        // carry id 0 and the second one would land on the first one's line.
+        core::Product saved = *created;
+        saved.id = id;
+        m_quickItems->refresh();
+
+        const QString label = saved.name.isEmpty() ? saved.barcode : saved.name;
+        const auto answer =
+            QMessageBox::question(this, tr("Ajouter à la vente ?"),
+                                  tr("Ajouter « %1 » à la vente en cours ?").arg(label),
+                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (answer == QMessageBox::Yes) {
+            addProductToCart(saved, 1);
+            return;
+        }
+        m_entry->setFocus();
+        return;
+    }
+
+    addProductToCart(*product, 1);
+    m_entry->setFocus();
+}
+
+void PosPage::onAddQuickProduct()
+{
+    core::Product draft;
+    draft.unit = QStringLiteral("piece");
+    draft.active = true;
+
+    const std::optional<core::Product> created = showProductDialog(this, m_db, draft);
+    if (!created) {
+        m_entry->setFocus();
+        return;
+    }
+    const int id = data::ProductRepository(m_db).save(*created);
+    if (id == 0) {
+        setNotice(tr("Impossible d'enregistrer le produit."), false);
+        m_entry->setFocus();
+        return;
+    }
+    core::Product saved = *created;
+    saved.id = id;
+    m_quickItems->refresh();
+    addProductToCart(saved, 1);
+}
+
+void PosPage::onQuickItemClicked(int productId)
+{
+    const std::optional<core::Product> product = data::ProductRepository(m_db).findById(productId);
+    if (!product) {
+        return;
+    }
+    addProductToCart(*product, 1);
 }
 
 void PosPage::onRemoveLine()
@@ -260,6 +375,7 @@ void PosPage::onRemoveLine()
             rows.insert(row);
         }
     }
+    // Highest row first, so the indices still line up while they are removed.
     QVector<int> toRemove(rows.begin(), rows.end());
     std::sort(toRemove.begin(), toRemove.end(), std::greater<int>());
     for (const int row : toRemove) {
@@ -267,6 +383,51 @@ void PosPage::onRemoveLine()
     }
     rebuildTable();
     m_entry->setFocus();
+}
+
+void PosPage::onClearCart()
+{
+    if (m_lines.isEmpty()) {
+        return;
+    }
+    const auto answer =
+        QMessageBox::question(this, tr("Vider le panier"),
+                              tr("Retirer tous les articles du panier ?"),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+    m_lines.clear();
+    m_notice->clear();
+    m_notice->setVisible(false);
+    rebuildTable();
+    m_entry->setFocus();
+}
+
+void PosPage::onCellDoubleClicked(int row, int column)
+{
+    if (m_updating || row < 0 || row >= m_lines.size()) {
+        return;
+    }
+    if (column == 1) {
+        bool accepted = false;
+        const int quantity = QInputDialog::getInt(this, tr("Quantité"), tr("Quantité"),
+                                                  static_cast<int>(m_lines[row].quantity), 1, 1000000, 1,
+                                                  &accepted);
+        if (!accepted) {
+            return;
+        }
+        m_table->item(row, column)->setText(QString::number(quantity));
+    } else if (column == 2) {
+        bool accepted = false;
+        const QString price =
+            QInputDialog::getText(this, tr("Prix unitaire"), tr("Prix unitaire"),
+                                  QLineEdit::Normal, formatMoney(m_lines[row].unitPriceCents), &accepted);
+        if (!accepted) {
+            return;
+        }
+        m_table->item(row, column)->setText(price);
+    }
 }
 
 void PosPage::onCellChanged(int row, int column)
@@ -313,22 +474,22 @@ void PosPage::refreshSessionChip()
     const auto session = sessions.findOpen();
     if (session) {
         setChipState(m_sessionChip, QStringLiteral("ok"));
-        m_sessionChip->setText(tr("الجلسة مفتوحة #%1").arg(session->id));
+        m_sessionChip->setText(tr("Session ouverte #%1").arg(session->id));
     } else {
         setChipState(m_sessionChip, QStringLiteral("danger"));
-        m_sessionChip->setText(tr("لا توجد جلسة مفتوحة"));
+        m_sessionChip->setText(tr("Aucune session ouverte"));
     }
 }
 
 void PosPage::refreshTotals()
 {
     long long total = 0;
-    long long items = 0;
+    long long units = 0;
     for (const PosLine& line : m_lines) {
         total += line.unitPriceCents * line.quantity;
-        items += line.quantity;
+        units += line.quantity;
     }
-    m_itemsLabel->setText(tr("الأصناف: %1   قطع: %2").arg(m_lines.size()).arg(items));
+    m_countLabel->setText(tr("Articles: %1 | Unités: %2").arg(m_lines.size()).arg(units));
     m_totalLabel->setText(formatMoney(total));
 }
 
@@ -343,7 +504,6 @@ void PosPage::rebuildTable()
 
         auto* nameItem = new QTableWidgetItem(line.unit.isEmpty() ? line.name
                                                                   : QStringLiteral("%1 / %2").arg(line.name, line.unit));
-        nameItem->setFlags(nameItem->flags() & ~Qt::ItemIsEditable);
         nameItem->setData(Qt::UserRole, line.productId);
         m_table->setItem(row, 0, nameItem);
 
@@ -353,6 +513,8 @@ void PosPage::rebuildTable()
 
         auto* priceItem = new QTableWidgetItem(formatMoney(line.unitPriceCents));
         priceItem->setTextAlignment(Qt::AlignLeft);
+        // An overridden price is the one thing on this screen that has to be
+        // noticed at a glance, since it ends up in the audit log.
         if (line.unitPriceCents != line.basePriceCents) {
             priceItem->setForeground(QBrush(Qt::red));
         }
@@ -360,7 +522,6 @@ void PosPage::rebuildTable()
 
         auto* totalItem = new QTableWidgetItem(formatMoney(line.unitPriceCents * line.quantity));
         totalItem->setTextAlignment(Qt::AlignLeft);
-        totalItem->setFlags(totalItem->flags() & ~Qt::ItemIsEditable);
         m_table->setItem(row, 3, totalItem);
     }
     m_updating = false;
@@ -419,7 +580,7 @@ void PosPage::completeSale()
         item.unitPriceCents = line.unitPriceCents;
         items.append(item);
 
-if (line.unitPriceCents != line.basePriceCents) {
+        if (line.unitPriceCents != line.basePriceCents) {
             core::AuditLogEntry entry;
             entry.actor = app::core::Session::instance().actorName();
             entry.action = QStringLiteral("price_override");
@@ -443,6 +604,7 @@ if (line.unitPriceCents != line.basePriceCents) {
     for (const core::AuditLogEntry& entry : priceOverrides) {
         audit.insert(entry);
     }
+    // Kept in Arabic on purpose: tst_ui asserts this exact string.
     setNotice(tr("تم البيع: %1").arg(formatMoney(result.totalCents)), true);
     m_lines.clear();
     rebuildTable();

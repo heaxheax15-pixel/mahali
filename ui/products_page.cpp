@@ -19,6 +19,7 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+#include "dialogs/product_dialog.h"
 #include "scan_safe_dialog.h"
 #include "data/product_repository.h"
 #include "data/stock_movement_repository.h"
@@ -35,82 +36,6 @@ struct StockAdjustment {
     long long delta = 0;
     QString reason;
 };
-
-std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const core::Product& initial)
-{
-    ScanSafeDialog dialog(parent);
-    dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::ProductsPage", "منتج جديد")
-                                 : QCoreApplication::translate("app::ui::ProductsPage", "تعديل المنتج"));
-    dialog.setModal(true);
-
-    auto* barcode = new QLineEdit(initial.barcode);
-    auto* name = new QLineEdit(initial.name);
-    auto* cost = new QLineEdit(forNew ? QString() : formatMoney(initial.costPriceCents));
-    auto* sale = new QLineEdit(forNew ? QString() : formatMoney(initial.salePriceCents));
-    auto* unit = new QLineEdit(initial.unit);
-    auto* package = new QSpinBox;
-    package->setRange(1, 1000000);
-    package->setValue(initial.packageSize ? initial.packageSize : 1);
-    auto* active = new QCheckBox;
-    active->setChecked(forNew || initial.active);
-
-    QFormLayout* form = new QFormLayout;
-    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "الباركود"), barcode);
-    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "الاسم"), name);
-    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "سعر التكلفة"), cost);
-    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "سعر البيع"), sale);
-    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "الوحدة"), unit);
-    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "المحتوى (عدد وحدات الوجبة)"), package);
-    form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "مُفعّل"), active);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
-    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
-    okBtn->setText(QStringLiteral("OK"));
-    cancelBtn->setText(QStringLiteral("Annuler"));
-    okBtn->setIcon(QIcon());
-    cancelBtn->setIcon(QIcon());
-    // A barcode scanner appends Enter to every scan, so no button may claim the
-    // default action: Enter must walk the form instead of saving and closing.
-    for (QAbstractButton* b : buttons->buttons()) {
-        if (auto* pb = qobject_cast<QPushButton*>(b)) {
-            pb->setAutoDefault(false);
-            pb->setDefault(false);
-        }
-    }
-    // The scanner's Enter walks the form: barcode -> name, it must not submit.
-    QObject::connect(barcode, &QLineEdit::returnPressed, &dialog, [name]() {
-        name->setFocus();
-    });
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    layout->addLayout(form);
-    layout->addWidget(buttons);
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return std::nullopt;
-    }
-    const auto costCents = parseMoney(cost->text());
-    const auto saleCents = parseMoney(sale->text());
-    if (!costCents || !saleCents) {
-        return std::nullopt;
-    }
-    if (barcode->text().trimmed().isEmpty() || name->text().trimmed().isEmpty()) {
-        return std::nullopt;
-    }
-
-    core::Product product = initial;
-    product.barcode = barcode->text().trimmed();
-    product.name = name->text().trimmed();
-    product.costPriceCents = *costCents;
-    product.salePriceCents = *saleCents;
-    product.unit = unit->text().trimmed();
-    product.packageSize = package->value();
-    product.active = active->isChecked();
-    return product;
-}
 
 std::optional<StockAdjustment> stockDialog(QWidget* parent, const QString& productName)
 {
@@ -289,7 +214,7 @@ void ProductsPage::onSelectionChanged()
 
 void ProductsPage::onAddClicked()
 {
-    const auto maybeProduct = productDialog(this, true, core::Product{});
+    const auto maybeProduct = showProductDialog(this, m_db);
     if (!maybeProduct) {
         return;
     }
@@ -314,7 +239,7 @@ void ProductsPage::onEditClicked()
     if (!existing) {
         return;
     }
-    const auto maybeProduct = productDialog(this, false, *existing);
+    const auto maybeProduct = showProductDialog(this, m_db, *existing);
     if (!maybeProduct) {
         return;
     }

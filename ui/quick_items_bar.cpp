@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 
 #include "data/product_repository.h"
+#include "widgets/app_icon.h"
 #include "format_utils.h"
 #include "widgets/ui_helpers.h"
 
@@ -60,6 +61,30 @@ void QuickItemCard::mousePressEvent(QMouseEvent* event)
     QFrame::mousePressEvent(event);
 }
 
+QuickAddCard::QuickAddCard(QWidget* parent)
+    : QFrame(parent)
+{
+    setObjectName(QStringLiteral("quickCard"));
+    setFixedSize(kCardWidth, kCardHeight);
+    setCursor(Qt::PointingHandCursor);
+    setToolTip(tr("Ajouter un produit"));
+
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(10, 10, 10, 10);
+    auto* glyph = new QLabel(this);
+    glyph->setPixmap(appIcon(Icon::Plus, QColor(QStringLiteral("#66757a")), 28).pixmap(28, 28));
+    glyph->setAlignment(Qt::AlignCenter);
+    layout->addWidget(glyph, 1);
+}
+
+void QuickAddCard::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+    }
+    QFrame::mousePressEvent(event);
+}
+
 QuickItemsBar::QuickItemsBar(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
@@ -103,8 +128,12 @@ QuickItemsBar::QuickItemsBar(app::data::Database& db, QWidget* parent)
     strip->addWidget(m_scroll);
     strip->addWidget(m_empty);
 
+    m_addCard = new QuickAddCard(this);
+    connect(m_addCard, &QuickAddCard::clicked, this, &QuickItemsBar::addNewRequested);
+
     root->addWidget(m_search);
     root->addLayout(strip, 1);
+    root->addWidget(m_addCard);
 
     connect(m_search, &QLineEdit::textChanged, this, [this](const QString& text) { refresh(text); });
 

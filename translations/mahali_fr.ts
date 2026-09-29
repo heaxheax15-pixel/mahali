@@ -2,14 +2,78 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="fr_FR">
 <context>
+    <name>ProductDialog</name>
+    <message>
+        <location filename="../ui/dialogs/product_dialog.cpp" line="+28"/>
+        <source>منتج جديد</source>
+        <translation>Nouveau produit</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>تعديل المنتج</source>
+        <translation>Modifier le produit</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>الباركود</source>
+        <translation>Code-barres</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>الاسم</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>سعر التكلفة</source>
+        <translation>Prix de revient</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>سعر البيع</source>
+        <translation>Prix de vente</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>الوحدة</source>
+        <translation>Unité</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>المحتوى (عدد وحدات الوجبة)</source>
+        <translation>Contenu (nombre d&apos;unités par colis)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>مُفعّل</source>
+        <translation>Actif</translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <location line="+13"/>
+        <source>خطأ</source>
+        <translation>Erreur</translation>
+    </message>
+    <message>
+        <location line="-13"/>
+        <source>سعر البيع مطلوب ويجب أن يكون أكبر من صفر</source>
+        <translation>Le prix de vente est requis et doit être supérieur à zéro</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>الباركود مستخدم مسبقاً</source>
+        <translation>Code-barres déjà utilisé</translation>
+    </message>
+</context>
+<context>
     <name>app::ui::AuditLogPage</name>
     <message>
         <location filename="../ui/audit_log_page.cpp" line="+24"/>
         <source>اليوم فقط</source>
-        <translation>Aujourd'hui uniquement</translation>
+        <translation>Aujourd&apos;hui uniquement</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+16"/>
         <source>الوقت</source>
         <translation>Heure</translation>
     </message>
@@ -31,7 +95,7 @@
     <message>
         <location line="+22"/>
         <source>سجل التدقيق</source>
-        <translation>Journal d'audit</translation>
+        <translation>Journal d&apos;audit</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -41,7 +105,7 @@
     <message>
         <location line="+40"/>
         <source>عدد الأحداث: %1</source>
-        <translation>Nombre d'événements : %1</translation>
+        <translation>Nombre d&apos;événements : %1</translation>
     </message>
 </context>
 <context>
@@ -77,7 +141,7 @@
         <translation>Démarrer une session</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+3"/>
         <source>أغلق الجلسة</source>
         <translation>Clôturer la session</translation>
     </message>
@@ -89,7 +153,7 @@
     <message>
         <location line="+1"/>
         <source>جلسة يومية مشتركة — تفتح بالرأس المبدئي وتُغلق بالجرد</source>
-        <translation>Session quotidienne partagée — s'ouvre avec le fonds de départ et se clôture par inventaire</translation>
+        <translation>Session quotidienne partagée — s&apos;ouvre avec le fonds de départ et se clôture par inventaire</translation>
     </message>
     <message>
         <location line="+4"/>
@@ -109,10 +173,10 @@
     <message>
         <location line="+2"/>
         <source>الفرق (عند الجرد)</source>
-        <translation>Écart (à l'inventaire)</translation>
+        <translation>Écart (à l&apos;inventaire)</translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+25"/>
         <source>الوقت</source>
         <translation>Heure</translation>
     </message>
@@ -137,18 +201,18 @@
         <translation>Mouvements de la session</translation>
     </message>
     <message>
-        <location line="+26"/>
+        <location line="+27"/>
         <source>لا توجد جلسة مفتوحة حالياً — ابدأ جلسة برصيد الفتح.</source>
         <translation>Aucune session ouverte pour le moment — démarrez une session avec un fonds de départ.</translation>
     </message>
     <message>
         <location line="+2"/>
-        <location line="+25"/>
+        <location line="+26"/>
         <source>—</source>
         <translation>—</translation>
     </message>
     <message>
-        <location line="-21"/>
+        <location line="-22"/>
         <source>آخر جلسة أُغلقت بفرق %1</source>
         <translation>Dernière session clôturée avec un écart de %1</translation>
     </message>
@@ -158,7 +222,7 @@
         <translation>Aucune session ouverte pour le moment.</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+13"/>
         <source>الجلسة #%1 مفتوحة منذ %2</source>
         <translation>Session n° %1 ouverte depuis %2</translation>
     </message>
@@ -173,17 +237,17 @@
         <translation>Session n° %1 — ouverte : %2  |  %3  |  %4</translation>
     </message>
     <message>
-        <location line="+53"/>
+        <location line="+54"/>
         <source>تعذر فتح الجلسة.</source>
-        <translation>Impossible d'ouvrir la session.</translation>
+        <translation>Impossible d&apos;ouvrir la session.</translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+23"/>
         <source>تعذر إغلاق الجلسة.</source>
         <translation>Impossible de clôturer la session.</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>المعدود: %1  |  المتوقع: %2  |  الفرق: %3 (%4)</source>
         <translation>Compté : %1  |  Attendu : %2  |  Écart : %3 (%4)</translation>
     </message>
@@ -198,7 +262,7 @@
         <translation>Excédent en caisse</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+23"/>
         <source>بدء جلسة</source>
         <translation>Démarrer une session</translation>
     </message>
@@ -208,7 +272,7 @@
         <translation>Fonds de départ :</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+9"/>
         <location line="+21"/>
         <source>خطأ</source>
         <translation>Erreur</translation>
@@ -216,8 +280,8 @@
     <message>
         <location line="-21"/>
         <location line="+21"/>
-        <source>المبلغ غير صالح</source>
-        <translation>Montant invalide</translation>
+        <source>أدخل مبلغًا صحيحًا أكبر من صفر</source>
+        <translation>Saisissez un montant valide supérieur à zéro.</translation>
     </message>
     <message>
         <location line="-7"/>
@@ -233,7 +297,7 @@
 <context>
     <name>app::ui::CustomersPage</name>
     <message>
-        <location filename="../ui/customers_page.cpp" line="+42"/>
+        <location filename="../ui/customers_page.cpp" line="+45"/>
         <source>عميل جديد</source>
         <translation>Nouveau client</translation>
     </message>
@@ -244,24 +308,24 @@
     </message>
     <message>
         <location line="+7"/>
-        <location line="+207"/>
+        <location line="+238"/>
         <source>الاسم</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location line="-206"/>
-        <location line="+206"/>
+        <location line="-237"/>
+        <location line="+237"/>
         <source>الهاتف</source>
         <translation>Téléphone</translation>
     </message>
     <message>
-        <location line="-160"/>
-        <location line="+140"/>
+        <location line="-179"/>
+        <location line="+157"/>
         <source>بيع آجل</source>
         <translation>Vente à crédit</translation>
     </message>
     <message>
-        <location line="-122"/>
+        <location line="-139"/>
         <source>اضغط لتغيير سعر/كغ</source>
         <translation>Cliquez pour modifier le prix/kg</translation>
     </message>
@@ -276,7 +340,7 @@
         <translation>Supprimer la ligne sélectionnée</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+9"/>
         <source>المنتج</source>
         <translation>Produit</translation>
     </message>
@@ -298,28 +362,28 @@
     <message>
         <location line="+7"/>
         <source>الكمية والسعر عشري؟ عدّل في الأسطر قبل الحفظ.</source>
-        <translation>Quantité et prix décimaux ? Modifiez les lignes avant d'enregistrer.</translation>
+        <translation>Quantité et prix décimaux ? Modifiez les lignes avant d&apos;enregistrer.</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+16"/>
         <source>حفظ البيع الآجل</source>
         <translation>Enregistrer la vente à crédit</translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+24"/>
         <source>الإجمالي: %1</source>
         <translation>Total : %1</translation>
     </message>
     <message>
         <location line="+7"/>
         <location line="+13"/>
-        <location line="+177"/>
+        <location line="+187"/>
         <location line="+53"/>
         <source>خطأ</source>
         <translation>Erreur</translation>
     </message>
     <message>
-        <location line="-242"/>
+        <location line="-252"/>
         <source>اختر منتجاً من القائمة</source>
         <translation>Sélectionnez un produit dans la liste</translation>
     </message>
@@ -334,18 +398,18 @@
         <translation>Ajouter un client</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+3"/>
         <source>تعديل</source>
         <translation>Modifier</translation>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+164"/>
+        <location line="+173"/>
         <source>سداد</source>
         <translation>Remboursement</translation>
     </message>
     <message>
-        <location line="-146"/>
+        <location line="-153"/>
         <source>المطلوب (رصيد)</source>
         <translation>Dû (solde)</translation>
     </message>
@@ -365,9 +429,9 @@
         <translation>Ventes à crédit et remboursement des soldes</translation>
     </message>
     <message>
-        <location line="+74"/>
+        <location line="+81"/>
         <source>تعذر حفظ العميل</source>
-        <translation>Impossible d'enregistrer le client</translation>
+        <translation>Impossible d&apos;enregistrer le client</translation>
     </message>
     <message>
         <location line="+47"/>
@@ -380,32 +444,32 @@
         <translation>Montant invalide</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+11"/>
         <source>لا يوجد بنود للبيع الآجل</source>
         <translation>Aucun article à vendre à crédit</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+8"/>
         <source>تعذر تسجيل البيع الآجل: %1</source>
-        <translation>Impossible d'enregistrer la vente à crédit : %1</translation>
+        <translation>Impossible d&apos;enregistrer la vente à crédit : %1</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>سُجّل دين: %1</source>
         <translation>Dette enregistrée : %1</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+12"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً</source>
-        <translation>Aucune session ouverte — ouvrez d'abord une session de caisse</translation>
+        <translation>Aucune session ouverte — ouvrez d&apos;abord une session de caisse</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+8"/>
         <source>تعذر تسجيل السداد: %1</source>
-        <translation>Impossible d'enregistrer le remboursement : %1</translation>
+        <translation>Impossible d&apos;enregistrer le remboursement : %1</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>سُجّل سداد: %1</source>
         <translation>Remboursement enregistré : %1</translation>
     </message>
@@ -434,25 +498,25 @@
     </message>
     <message>
         <location line="+8"/>
-        <location line="+130"/>
+        <location line="+134"/>
         <location line="+5"/>
         <source>مصروف جديد</source>
         <translation>Nouvelle dépense</translation>
     </message>
     <message>
-        <location line="-133"/>
-        <location line="+150"/>
+        <location line="-136"/>
+        <location line="+153"/>
         <location line="+6"/>
         <source>سحب مالك</source>
         <translation>Retrait du propriétaire</translation>
     </message>
     <message>
-        <location line="-154"/>
+        <location line="-157"/>
         <source>عكس المحدد</source>
         <translation>Annuler la sélection</translation>
     </message>
     <message>
-        <location line="+26"/>
+        <location line="+28"/>
         <source>الوقت</source>
         <translation>Heure</translation>
     </message>
@@ -492,7 +556,7 @@
         <translation>Dépenses du jour : %1  |  Retraits du jour : %2</translation>
     </message>
     <message>
-        <location line="+30"/>
+        <location line="+31"/>
         <source>البيان (مثل: كهرباء):</source>
         <translation>Libellé (par ex. : électricité) :</translation>
     </message>
@@ -520,39 +584,39 @@
         <translation>Note (facultatif) :</translation>
     </message>
     <message>
-        <location line="+25"/>
-        <location line="+19"/>
-        <location line="+29"/>
+        <location line="+26"/>
+        <location line="+23"/>
+        <location line="+33"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً</source>
-        <translation>Aucune session ouverte — ouvrez d'abord une session de caisse</translation>
+        <translation>Aucune session ouverte — ouvrez d&apos;abord une session de caisse</translation>
     </message>
     <message>
-        <location line="-42"/>
+        <location line="-49"/>
         <source>تعذر تسجيل المصروف: %1</source>
-        <translation>Impossible d'enregistrer la dépense : %1</translation>
+        <translation>Impossible d&apos;enregistrer la dépense : %1</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>سُجّل مصروف: %1 — %2</source>
         <translation>Dépense enregistrée : %1 — %2</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+19"/>
         <source>تعذر تسجيل السحب: %1</source>
-        <translation>Impossible d'enregistrer le retrait : %1</translation>
+        <translation>Impossible d&apos;enregistrer le retrait : %1</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>سُجّل سحب: %1</source>
         <translation>Retrait enregistré : %1</translation>
     </message>
     <message>
-        <location line="+29"/>
+        <location line="+32"/>
         <source>تعذر العكس: %1</source>
-        <translation>Impossible d'annuler : %1</translation>
+        <translation>Impossible d&apos;annuler : %1</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+9"/>
         <source>أُلغي: %1</source>
         <translation>Annulé : %1</translation>
     </message>
@@ -560,7 +624,7 @@
 <context>
     <name>app::ui::LoginDialog</name>
     <message>
-        <location filename="../ui/login_dialog.cpp" line="+28"/>
+        <location filename="../ui/login_dialog.cpp" line="+29"/>
         <source>تسجيل الدخول — محلي</source>
         <translation>Connexion — Mahali</translation>
     </message>
@@ -625,7 +689,7 @@
         <translation>Créer</translation>
     </message>
     <message>
-        <location line="+115"/>
+        <location line="+120"/>
         <source>أدخل حرفين فقط</source>
         <translation>Saisissez uniquement deux lettres</translation>
     </message>
@@ -657,17 +721,17 @@
     <message>
         <location line="+11"/>
         <source>فشل إنشاء المستخدم</source>
-        <translation>Échec de la création de l'utilisateur</translation>
+        <translation>Échec de la création de l&apos;utilisateur</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>فشل حفظ PIN</source>
-        <translation>Échec de l'enregistrement du PIN</translation>
+        <translation>Échec de l&apos;enregistrement du PIN</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>فشل حفظ كلمة الاستعادة</source>
-        <translation>Échec de l'enregistrement du mot de récupération</translation>
+        <translation>Échec de l&apos;enregistrement du mot de récupération</translation>
     </message>
     <message>
         <location line="+48"/>
@@ -678,22 +742,12 @@
 <context>
     <name>app::ui::MainWindow</name>
     <message>
-        <location filename="../ui/main_window.cpp" line="+56"/>
+        <location filename="../ui/main_window.cpp" line="+106"/>
         <source>محلي — نظام نقاط البيع والمحاسبة</source>
         <translation>Mahali — point de vente et comptabilité</translation>
     </message>
     <message>
-        <location line="+28"/>
-        <source>محلي</source>
-        <translation>Mahali</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>نظام البيع والمحاسبة</source>
-        <translation>Système de vente et comptabilité</translation>
-    </message>
-    <message>
-        <location line="+15"/>
+        <location line="+258"/>
         <source>حول محلي…</source>
         <translation>À propos de Mahali…</translation>
     </message>
@@ -705,23 +759,60 @@
     <message>
         <location line="+1"/>
         <source>&lt;h3&gt;محلي — نظام نقاط البيع والمحاسبة&lt;/h3&gt;&lt;p&gt;إدارة البيع السريع، الجرد، حسابات العملاء والموردين، جلسات الصندوق، المصاريف، التقارير والاستردادات — بدون اتصال وبثيَمَين فاتح/داكن.&lt;/p&gt;&lt;p&gt;&lt;b&gt;الإصدار:&lt;/b&gt; %1&lt;/p&gt;</source>
-        <translation>&lt;h3&gt;Mahali — point de vente et comptabilité&lt;/h3&gt;&lt;p&gt;Gestion de la vente rapide, de l'inventaire, des comptes clients et fournisseurs, des sessions de caisse, des dépenses, des rapports et des remboursements — fonctionne hors ligne, en thème clair ou sombre.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Version :&lt;/b&gt; %1&lt;/p&gt;</translation>
+        <translation>&lt;h3&gt;Mahali — point de vente et comptabilité&lt;/h3&gt;&lt;p&gt;Gestion de la vente rapide, de l&apos;inventaire, des comptes clients et fournisseurs, des sessions de caisse, des dépenses, des rapports et des remboursements — fonctionne hors ligne, en thème clair ou sombre.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Version :&lt;/b&gt; %1&lt;/p&gt;</translation>
     </message>
     <message>
-        <location line="+66"/>
-        <location line="+153"/>
+        <location line="-62"/>
+        <location line="+337"/>
         <source>المستخدم: %1</source>
         <translation>Utilisateur : %1</translation>
     </message>
     <message>
-        <location line="-149"/>
-        <source>تبديل المستخدم</source>
-        <translation>Changer d'utilisateur</translation>
+        <location line="-501"/>
+        <location line="+313"/>
+        <source>Achats</source>
+        <translation>Achats</translation>
     </message>
     <message>
-        <location line="+83"/>
+        <location line="-313"/>
+        <location line="+1"/>
+        <source>Page en construction.</source>
+        <translation>Page en construction.</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Occasions</source>
+        <translation>Occasions</translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <source>تبديل المستخدم</source>
+        <translation>Changer d&apos;utilisateur</translation>
+    </message>
+    <message>
+        <location line="+106"/>
+        <source>Mahali</source>
+        <translation>Mahali</translation>
+    </message>
+    <message>
+        <location line="+26"/>
+        <source>تبديل السمة</source>
+        <translation>Changer de thème</translation>
+    </message>
+    <message>
+        <location line="+133"/>
+        <source>نقطة البيع</source>
+        <translation>Point de vente</translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>البيع السريع</source>
         <translation>Vente rapide</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>الإدارة</source>
+        <translation>Administration</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -739,7 +830,77 @@
         <translation>Fournisseurs</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+20"/>
+        <source>النظام</source>
+        <translation>Système</translation>
+    </message>
+    <message>
+        <location line="+208"/>
+        <source>تحديث متاح: %1</source>
+        <translation>Mise à jour disponible : %1</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <location line="+76"/>
+        <source>تنزيل</source>
+        <translation>Télécharger</translation>
+    </message>
+    <message>
+        <location line="-71"/>
+        <source>لاحقًا</source>
+        <translation>Plus tard</translation>
+    </message>
+    <message>
+        <location line="+36"/>
+        <source>جاري التنزيل: 0%</source>
+        <translation>Téléchargement : 0 %</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>جاري التنزيل: %1%</source>
+        <translation>Téléchargement : %1 %</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>إعادة التشغيل لتثبيت</source>
+        <translation>Redémarrer pour installer</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <location line="+10"/>
+        <location line="+14"/>
+        <location line="+9"/>
+        <location line="+8"/>
+        <source>التحديث</source>
+        <translation>Mettre à jour</translation>
+    </message>
+    <message>
+        <location line="-40"/>
+        <source>فشل التنزيل. تحقق من الاتصال وحاول مرة أخرى.</source>
+        <translation>Échec du téléchargement. Vérifiez la connexion et réessayez.</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>التحديث التلقائي متاح على Windows فقط. نزّل الإصدار الجديد يدويًا.</source>
+        <translation>La mise à jour automatique n&apos;est disponible que sous Windows. Téléchargez la nouvelle version manuellement.</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>تعذّر إنشاء ملف التحديث لهذا المسار.</source>
+        <translation>Impossible de créer le fichier de mise à jour pour ce chemin.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>تعذّر إنشاء ملف التحديث.</source>
+        <translation>Impossible de créer le fichier de mise à jour.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>تعذّر بدء التحديث.</source>
+        <translation>Impossible de démarrer la mise à jour.</translation>
+    </message>
+    <message>
+        <location line="-357"/>
         <source>جلسة الصندوق</source>
         <translation>Session de caisse</translation>
     </message>
@@ -747,6 +908,16 @@
         <location line="+1"/>
         <source>مبيعات اليوم</source>
         <translation>Ventes du jour</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>المناسبات</source>
+        <translation>Occasions</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>المالية</source>
+        <translation>Finances</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -764,44 +935,19 @@
         <translation>Remboursements</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+4"/>
         <source>سجل المراجعة</source>
-        <translation>Journal d'audit</translation>
+        <translation>Journal d&apos;audit</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-147"/>
         <source>الإعدادات</source>
         <translation>Paramètres</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+153"/>
         <source>إدارة المستخدمين</source>
         <translation>Gestion des utilisateurs</translation>
-    </message>
-    <message>
-        <location line="+23"/>
-        <source>خادم المزامنة: يعمل على المنفذ %1</source>
-        <translation>Serveur de synchronisation : actif sur le port %1</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>خادم المزامنة: متوقف</source>
-        <translation>Serveur de synchronisation : arrêté</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>  |  عمليات منفّذة حتى اليوم: %1</source>
-        <translation>  |  Opérations effectuées aujourd'hui : %1</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>  |  أجهزة متصلة: %1</source>
-        <translation>  |  Appareils connectés : %1</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>  |  مبيعات اليوم: %1 (%2)</source>
-        <translation>  |  Ventes du jour : %1 (%2)</translation>
     </message>
 </context>
 <context>
@@ -815,107 +961,140 @@
 <context>
     <name>app::ui::PosPage</name>
     <message>
-        <location filename="../ui/pos_page.cpp" line="+37"/>
-        <source>البيع السريع</source>
+        <location filename="../ui/pos_page.cpp" line="+43"/>
+        <source>Vente rapide</source>
         <translation>Vente rapide</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>باركود أو اسم المنتج — Enter يضيف، و Enter فارغ يحفظ البيع</source>
-        <translation>Code-barres ou nom du produit — Entrée ajoute, Entrée vide enregistre la vente</translation>
+        <location line="+0"/>
+        <location line="+11"/>
+        <source>Code-barres ou nom du produit</source>
+        <translation>Code-barres ou nom du produit</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>الجلسة</source>
+        <location line="-10"/>
+        <source>Session</source>
         <translation>Session</translation>
     </message>
     <message>
-        <location line="+6"/>
-        <source>باركود أو اسم المنتج — Enter يضيف، Enter فارغ يحفظ البيع</source>
-        <translation>Code-barres ou nom du produit — Entrée ajoute, Entrée vide enregistre la vente</translation>
-    </message>
-    <message>
-        <location line="+14"/>
-        <source>المنتج</source>
+        <location line="+39"/>
+        <source>Produit</source>
         <translation>Produit</translation>
     </message>
     <message>
         <location line="+0"/>
-        <source>الكمية</source>
-        <translation>Quantité</translation>
+        <source>Qté</source>
+        <translation>Qté</translation>
     </message>
     <message>
         <location line="+0"/>
-        <source>سعر الوحدة</source>
-        <translation>Prix unitaire</translation>
+        <source>PU</source>
+        <translation>PU</translation>
     </message>
     <message>
         <location line="+0"/>
-        <source>الإجمالي</source>
+        <location line="+36"/>
+        <source>Total</source>
         <translation>Total</translation>
     </message>
     <message>
-        <location line="+19"/>
-        <source>إجمالي الفاتورة</source>
-        <translation>Total de la facture</translation>
+        <location line="-19"/>
+        <source>Vider</source>
+        <translation>Vider</translation>
     </message>
     <message>
-        <location line="+12"/>
-        <source>حفظ البيع</source>
+        <location line="+2"/>
+        <source>Retirer ligne</source>
+        <translation>Retirer ligne</translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <source>Enregistrer la vente</source>
         <translation>Enregistrer la vente</translation>
     </message>
     <message>
-        <location line="+117"/>
-        <source>لا يوجد منتج بالباركود/الاسم: %1</source>
-        <translation>Aucun produit trouvé par code-barres/nom : %1</translation>
-    </message>
-    <message>
-        <location line="+7"/>
-        <source>أضيف: %1 × %2</source>
+        <location line="+123"/>
+        <source>Ajouté : %1 × %2</source>
         <translation>Ajouté : %1 × %2</translation>
     </message>
     <message>
         <location line="+18"/>
-        <source>أضيف: %1</source>
+        <source>Ajouté : %1</source>
         <translation>Ajouté : %1</translation>
     </message>
     <message>
-        <location line="+67"/>
-        <source>الجلسة مفتوحة #%1</source>
-        <translation>Session ouverte n° %1</translation>
+        <location line="+31"/>
+        <location line="+41"/>
+        <source>Impossible d&apos;enregistrer le produit.</source>
+        <translation>Impossible d&apos;enregistrer le produit.</translation>
+    </message>
+    <message>
+        <location line="-28"/>
+        <source>Ajouter à la vente ?</source>
+        <translation>Ajouter à la vente ?</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Ajouter « %1 » à la vente en cours ?</source>
+        <translation>Ajouter « %1 » à la vente en cours ?</translation>
+    </message>
+    <message>
+        <location line="+74"/>
+        <source>Vider le panier</source>
+        <translation>Vider le panier</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Retirer tous les articles du panier ?</source>
+        <translation>Retirer tous les articles du panier ?</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Quantité</source>
+        <translation>Quantité</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Prix unitaire</source>
+        <translation>Prix unitaire</translation>
+    </message>
+    <message>
+        <location line="+53"/>
+        <source>Session ouverte #%1</source>
+        <translation>Session ouverte #%1</translation>
     </message>
     <message>
         <location line="+3"/>
-        <source>لا توجد جلسة مفتوحة</source>
+        <source>Aucune session ouverte</source>
         <translation>Aucune session ouverte</translation>
     </message>
     <message>
         <location line="+12"/>
-        <source>الأصناف: %1   قطع: %2</source>
-        <translation>Articles : %1   unités : %2</translation>
+        <source>Articles: %1 | Unités: %2</source>
+        <translation>Articles: %1 | Unités: %2</translation>
     </message>
     <message>
-        <location line="+65"/>
+        <location line="+66"/>
         <source>لا يوجد بنود للبيع</source>
         <translation>Aucun article à vendre</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>الكمية أو السعر غير صالح في أحد الأسطر</source>
-        <translation>Quantité ou prix invalide dans l'une des lignes</translation>
+        <translation>Quantité ou prix invalide dans l&apos;une des lignes</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة من قسم &quot;جلسة الصندوق&quot; أولاً</source>
-        <translation>Aucune session ouverte — ouvrez d'abord une session dans la section « Session de caisse »</translation>
+        <translation>Aucune session ouverte — ouvrez d&apos;abord une session dans la section « Session de caisse »</translation>
     </message>
     <message>
         <location line="+30"/>
         <source>تعذر حفظ البيع: %1</source>
-        <translation>Échec de l'enregistrement de la vente : %1</translation>
+        <translation>Échec de l&apos;enregistrement de la vente : %1</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+9"/>
         <source>تم البيع: %1</source>
         <translation>Vente enregistrée : %1</translation>
     </message>
@@ -923,57 +1102,32 @@
 <context>
     <name>app::ui::ProductsPage</name>
     <message>
-        <location filename="../ui/products_page.cpp" line="+39"/>
-        <source>منتج جديد</source>
-        <translation>Nouveau produit</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>تعديل المنتج</source>
-        <translation>Modifier le produit</translation>
-    </message>
-    <message>
-        <location line="+15"/>
-        <location line="+103"/>
+        <location filename="../ui/products_page.cpp" line="+117"/>
         <source>الباركود</source>
         <translation>Code-barres</translation>
     </message>
     <message>
-        <location line="-102"/>
-        <location line="+102"/>
+        <location line="+0"/>
         <source>الاسم</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location line="-101"/>
-        <location line="+102"/>
+        <location line="+1"/>
         <source>سعر التكلفة</source>
         <translation>Prix de revient</translation>
     </message>
     <message>
-        <location line="-101"/>
-        <location line="+101"/>
+        <location line="+0"/>
         <source>سعر البيع</source>
         <translation>Prix de vente</translation>
     </message>
     <message>
-        <location line="-100"/>
-        <location line="+101"/>
+        <location line="+1"/>
         <source>الوحدة</source>
         <translation>Unité</translation>
     </message>
     <message>
-        <location line="-100"/>
-        <source>المحتوى (عدد وحدات الوجبة)</source>
-        <translation>Contenu (nombre d'unités par colis)</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>مُفعّل</source>
-        <translation>Activé</translation>
-    </message>
-    <message>
-        <location line="+36"/>
+        <location line="-76"/>
         <source>تعديل المخزون — %1</source>
         <translation>Ajustement du stock — %1</translation>
     </message>
@@ -1003,7 +1157,7 @@
         <translation>Motif</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+40"/>
         <source>بحث بالباركود أو الاسم...</source>
         <translation>Rechercher par code-barres ou nom...</translation>
     </message>
@@ -1013,7 +1167,7 @@
         <translation>Ajouter un produit</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+3"/>
         <source>تعديل</source>
         <translation>Modifier</translation>
     </message>
@@ -1063,17 +1217,38 @@
     <message>
         <location line="-46"/>
         <source>تعذر حفظ المنتج — الباركود مستخدم مسبقاً أو بيانات ناقصة</source>
-        <translation>Impossible d'enregistrer le produit — code-barres déjà utilisé ou données incomplètes</translation>
+        <translation>Impossible d&apos;enregistrer le produit — code-barres déjà utilisé ou données incomplètes</translation>
     </message>
     <message>
         <location line="+24"/>
         <source>تعذر حفظ التعديل — الباركود مستخدم مسبقاً</source>
-        <translation>Impossible d'enregistrer la modification — code-barres déjà utilisé</translation>
+        <translation>Impossible d&apos;enregistrer la modification — code-barres déjà utilisé</translation>
     </message>
     <message>
         <location line="+23"/>
         <source>الكمية السالبة أكبر من المتوفر (الكثافة %1)</source>
         <translation>La quantité négative dépasse le stock disponible (densité %1)</translation>
+    </message>
+</context>
+<context>
+    <name>app::ui::QuickAddCard</name>
+    <message>
+        <location filename="../ui/quick_items_bar.cpp" line="+70"/>
+        <source>Ajouter un produit</source>
+        <translation>Ajouter un produit</translation>
+    </message>
+</context>
+<context>
+    <name>app::ui::QuickItemsBar</name>
+    <message>
+        <location line="+29"/>
+        <source>بحث سريع</source>
+        <translation>Recherche rapide</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>لا منتجات سريعة</source>
+        <translation>Aucun produit rapide</translation>
     </message>
 </context>
 <context>
@@ -1102,7 +1277,7 @@
     <message>
         <location line="+7"/>
         <source>استرداد المبيع</source>
-        <translation>Remboursement d'une vente</translation>
+        <translation>Remboursement d&apos;une vente</translation>
     </message>
     <message>
         <location line="+9"/>
@@ -1127,7 +1302,7 @@
     <message>
         <location line="+7"/>
         <source>استرداد السداد</source>
-        <translation>Remboursement d'un règlement</translation>
+        <translation>Remboursement d&apos;un règlement</translation>
     </message>
     <message>
         <location line="+9"/>
@@ -1137,10 +1312,10 @@
     <message>
         <location line="+8"/>
         <source>استرداد سداد عميل</source>
-        <translation>Rembourser le règlement d'un client</translation>
+        <translation>Rembourser le règlement d&apos;un client</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+12"/>
         <source>الاستردادات</source>
         <translation>Remboursements</translation>
     </message>
@@ -1196,18 +1371,18 @@
         <translation>Note (facultatif) :</translation>
     </message>
     <message>
-        <location line="+12"/>
-        <location line="+24"/>
+        <location line="+13"/>
+        <location line="+28"/>
         <source>لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً</source>
-        <translation>Aucune session ouverte — ouvrez d'abord une session de caisse</translation>
+        <translation>Aucune session ouverte — ouvrez d&apos;abord une session de caisse</translation>
     </message>
     <message>
-        <location line="-18"/>
-        <source>تعذر استرداد المبيع</source>
-        <translation>Impossible de rembourser la vente</translation>
+        <location line="-21"/>
+        <source>تعذر استرداد المبيع: %1</source>
+        <translation>Remboursement de la vente impossible : %1</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+7"/>
         <source>مبيع #%1 (%2)</source>
         <translation>Vente n° %1 (%2)</translation>
     </message>
@@ -1222,12 +1397,12 @@
         <translation>Remboursement effectué, les articles sont retournés en rayon</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+19"/>
         <source>تعذر استرداد السداد: %1</source>
         <translation>Impossible de rembourser le règlement : %1</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>سداد #%1</source>
         <translation>Règlement n° %1</translation>
     </message>
@@ -1267,7 +1442,7 @@
     <message>
         <location line="+28"/>
         <source>اليوم</source>
-        <translation>Aujourd'hui</translation>
+        <translation>Aujourd&apos;hui</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -1290,7 +1465,7 @@
         <translation>Tout</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+25"/>
         <source>العملية</source>
         <translation>Opération</translation>
     </message>
@@ -1335,20 +1510,20 @@
         <translation>Ventes : %1 opérations (net : %2)  |  Bénéfice brut : %3  |  Bénéfice net : %4</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+7"/>
         <source>تكلفة المبيعات: %1  |  المصاريف: %2  |  السحوبات: %3</source>
         <translation>Coût des ventes : %1  |  Dépenses : %2  |  Retraits : %3</translation>
     </message>
     <message>
         <location line="+5"/>
         <source>وعاء الزكاة: %1  |  الزكاة (2.5%): %2   —   جلسات في الفترة: %3 (رأس الفتح: %4)   —   ديون العملاء المستحقة اليوم: %5</source>
-        <translation>Base de la Zakat : %1  |  Zakat (2,5 %) : %2   —   Sessions sur la période : %3 (fonds de départ : %4)   —   Dettes clients dues aujourd'hui : %5</translation>
+        <translation>Base de la Zakat : %1  |  Zakat (2,5 %) : %2   —   Sessions sur la période : %3 (fonds de départ : %4)   —   Dettes clients dues aujourd&apos;hui : %5</translation>
     </message>
 </context>
 <context>
     <name>app::ui::SalesPage</name>
     <message>
-        <location filename="../ui/sales_page.cpp" line="+31"/>
+        <location filename="../ui/sales_page.cpp" line="+34"/>
         <source>الحاسوب</source>
         <translation>Poste</translation>
     </message>
@@ -1388,7 +1563,7 @@
         <translation>Bénéfice estimé</translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+22"/>
         <source>الوقت</source>
         <translation>Heure</translation>
     </message>
@@ -1399,12 +1574,12 @@
     </message>
     <message>
         <location line="+0"/>
-        <location line="+113"/>
+        <location line="+114"/>
         <source>الإجمالي</source>
         <translation>Total</translation>
     </message>
     <message>
-        <location line="-113"/>
+        <location line="-114"/>
         <source>الحالة</source>
         <translation>État</translation>
     </message>
@@ -1429,7 +1604,7 @@
         <translation>Ventes du jour : %1  |  Total (net) : %2  |  Bénéfice estimé : %3</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+36"/>
         <source>تفاصيل البيع #%1 (%2)</source>
         <translation>Détails de la vente n° %1 (%2)</translation>
     </message>
@@ -1447,6 +1622,11 @@
         <location line="+0"/>
         <source>سعر الوحدة</source>
         <translation>Prix unitaire</translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>Fermer</source>
+        <translation>Fermer</translation>
     </message>
 </context>
 <context>
@@ -1475,7 +1655,7 @@
 <context>
     <name>app::ui::SettingsPage</name>
     <message>
-        <location filename="../ui/settings_page.cpp" line="+32"/>
+        <location filename="../ui/settings_page.cpp" line="+33"/>
         <source>مثال: دج  أو  DA</source>
         <translation>Exemple : دج  ou  DA</translation>
     </message>
@@ -1515,7 +1695,7 @@
         <translation>Enregistrer les paramètres</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+10"/>
         <source>اسم المتجر:</source>
         <translation>Nom de la boutique :</translation>
     </message>
@@ -1540,7 +1720,13 @@
         <translation>Clé de synchronisation (nécessite un redémarrage) :</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+2"/>
+        <location line="+89"/>
+        <source>Vérifier les mises à jour</source>
+        <translation>Vérifier les mises à jour</translation>
+    </message>
+    <message>
+        <location line="-73"/>
         <source>الإعدادات</source>
         <translation>Paramètres</translation>
     </message>
@@ -1551,18 +1737,18 @@
     </message>
     <message>
         <location line="+6"/>
-        <location line="+52"/>
+        <location line="+99"/>
         <location line="+61"/>
         <source>معاينة: %1</source>
         <translation>Aperçu : %1</translation>
     </message>
     <message>
-        <location line="-107"/>
+        <location line="-151"/>
         <source>طُبّقت السمة الجديدة — احفظ للإبقاء عليها</source>
         <translation>Nouveau thème appliqué — enregistrez pour le conserver</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+14"/>
         <source>اللغة</source>
         <translation>Langue</translation>
     </message>
@@ -1572,7 +1758,38 @@
         <translation>Redémarrez le programme pour appliquer complètement la langue</translation>
     </message>
     <message>
-        <location line="+94"/>
+        <location line="+15"/>
+        <source>جارٍ التحقق...</source>
+        <translation>Vérification...</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>تحديث متاح</source>
+        <translation>Mise à jour disponible</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>الإصدار %1 متاح. افتح Mahali من جديد لاحقًا لتثبيته.</source>
+        <translation>La version %1 est disponible. Rouvrez Mahali plus tard pour l&apos;installer.</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <location line="+5"/>
+        <source>التحديث</source>
+        <translation>Mettre à jour</translation>
+    </message>
+    <message>
+        <location line="-5"/>
+        <source>أنت تستخدم أحدث إصدار.</source>
+        <translation>Vous utilisez la dernière version.</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>تعذّر الاتصال. تحقق من الإنترنت.</source>
+        <translation>Connexion impossible. Vérifiez votre connexion Internet.</translation>
+    </message>
+    <message>
+        <location line="+105"/>
         <source>حُفظت الإعدادات</source>
         <translation>Paramètres enregistrés</translation>
     </message>
@@ -1595,107 +1812,64 @@
         <translation>Nom</translation>
     </message>
     <message>
-        <location line="+29"/>
-        <source>فاتورة آجلة — %1</source>
-        <translation>Facture à crédit — %1</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>مثال: 4500.50</source>
-        <translation>Exemple : 4500,50</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <location line="+58"/>
-        <source>المبلغ</source>
-        <translation>Montant</translation>
-    </message>
-    <message>
-        <location line="-57"/>
-        <location line="+57"/>
-        <source>ملاحظة</source>
-        <translation>Note</translation>
-    </message>
-    <message>
-        <location line="-28"/>
+        <location line="+39"/>
         <source>إضافة مورد</source>
         <translation>Ajouter un fournisseur</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+3"/>
         <source>تعديل</source>
         <translation>Modifier</translation>
     </message>
     <message>
-        <location line="+2"/>
-        <source>فاتورة آجلة</source>
-        <translation>Facture à crédit</translation>
-    </message>
-    <message>
-        <location line="+10"/>
+        <location line="+9"/>
         <source>المورد</source>
         <translation>Fournisseur</translation>
     </message>
     <message>
-        <location line="+14"/>
-        <source>التاريخ</source>
-        <translation>Date</translation>
-    </message>
-    <message>
-        <location line="+16"/>
-        <location line="+18"/>
+        <location line="+17"/>
+        <location line="+6"/>
         <source>الموردون</source>
         <translation>Fournisseurs</translation>
     </message>
     <message>
-        <location line="-10"/>
-        <source>فواتير المورد المحدد</source>
-        <translation>Factures du fournisseur sélectionné</translation>
-    </message>
-    <message>
-        <location line="+11"/>
+        <location line="+1"/>
         <source>الموردون والحسابات الآجلة عندهم</source>
         <translation>Fournisseurs et leurs comptes à crédit</translation>
     </message>
     <message>
-        <location line="+82"/>
-        <location line="+48"/>
+        <location line="+46"/>
         <source>خطأ</source>
         <translation>Erreur</translation>
     </message>
     <message>
-        <location line="-48"/>
+        <location line="+0"/>
         <source>تعذر حفظ المورد</source>
-        <translation>Impossible d'enregistrer le fournisseur</translation>
-    </message>
-    <message>
-        <location line="+48"/>
-        <source>تعذر حفظ الفاتورة</source>
-        <translation>Impossible d'enregistrer la facture</translation>
+        <translation>Impossible d&apos;enregistrer le fournisseur</translation>
     </message>
 </context>
 <context>
     <name>app::ui::UsersPage</name>
     <message>
-        <location filename="../ui/users_page.cpp" line="+31"/>
-        <location line="+77"/>
+        <location filename="../ui/users_page.cpp" line="+34"/>
+        <location line="+89"/>
         <source>إضافة كاشير</source>
         <translation>Ajouter un caissier</translation>
     </message>
     <message>
-        <location line="-77"/>
+        <location line="-89"/>
         <source>تعديل المستخدم</source>
-        <translation>Modifier l'utilisateur</translation>
+        <translation>Modifier l&apos;utilisateur</translation>
     </message>
     <message>
         <location line="+5"/>
         <location line="+26"/>
-        <location line="+61"/>
+        <location line="+74"/>
         <source>الاسم</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location line="-85"/>
+        <location line="-98"/>
         <source>PIN (حرفان)</source>
         <translation>PIN (2 lettres)</translation>
     </message>
@@ -1707,24 +1881,24 @@
     </message>
     <message>
         <location line="-1"/>
-        <location line="+60"/>
+        <location line="+73"/>
         <source>PIN</source>
         <translation>PIN</translation>
     </message>
     <message>
-        <location line="-58"/>
-        <location line="+58"/>
+        <location line="-71"/>
+        <location line="+71"/>
         <source>الدور</source>
         <translation>Rôle</translation>
     </message>
     <message>
-        <location line="-57"/>
-        <location line="+57"/>
+        <location line="-70"/>
+        <location line="+70"/>
         <source>نشط</source>
         <translation>Actif</translation>
     </message>
     <message>
-        <location line="-18"/>
+        <location line="-19"/>
         <source>إدارة المستخدمين</source>
         <translation>Gestion des utilisateurs</translation>
     </message>
@@ -1734,12 +1908,12 @@
         <translation>Gérer les comptes des caissiers et leurs permissions</translation>
     </message>
     <message>
-        <location line="+17"/>
+        <location line="+18"/>
         <source>إجراءات</source>
         <translation>Actions</translation>
     </message>
     <message>
-        <location line="+69"/>
+        <location line="+68"/>
         <source>تعديل</source>
         <translation>Modifier</translation>
     </message>
@@ -1761,17 +1935,17 @@
     <message>
         <location line="-94"/>
         <source>فشل إنشاء المستخدم</source>
-        <translation>Échec de la création de l'utilisateur</translation>
+        <translation>Échec de la création de l&apos;utilisateur</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>فشل حفظ PIN</source>
-        <translation>Échec de l'enregistrement du PIN</translation>
+        <translation>Échec de l&apos;enregistrement du PIN</translation>
     </message>
     <message>
         <location line="+35"/>
         <source>فشل تحديث المستخدم</source>
-        <translation>Échec de la mise à jour de l'utilisateur</translation>
+        <translation>Échec de la mise à jour de l&apos;utilisateur</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -1791,24 +1965,24 @@
     <message>
         <location line="+8"/>
         <source>فشل حذف المستخدم</source>
-        <translation>Échec de la suppression de l'utilisateur</translation>
+        <translation>Échec de la suppression de l&apos;utilisateur</translation>
     </message>
     <message>
         <location line="+20"/>
         <source>فشل تحديث حالة المستخدم</source>
-        <translation>Échec de la mise à jour du statut de l'utilisateur</translation>
+        <translation>Échec de la mise à jour du statut de l&apos;utilisateur</translation>
     </message>
 </context>
 <context>
     <name>main</name>
     <message>
-        <location filename="../apps/desktop/main.cpp" line="+24"/>
-        <location filename="../apps/screenshot/main.cpp" line="+34"/>
+        <location filename="../apps/desktop/main.cpp" line="+29"/>
+        <location filename="../apps/screenshot/main.cpp" line="+39"/>
         <source>محلي</source>
         <translation>Mahali</translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+24"/>
         <location filename="../apps/screenshot/main.cpp" line="+11"/>
         <source>محلي — خطأ</source>
         <translation>Mahali — erreur</translation>
@@ -1818,7 +1992,7 @@
         <location filename="../apps/screenshot/main.cpp" line="+1"/>
         <source>تعذر فتح قاعدة البيانات:
 %1</source>
-        <translation>Échec de l'ouverture de la base de données :
+        <translation>Échec de l&apos;ouverture de la base de données :
 %1</translation>
     </message>
 </context>
