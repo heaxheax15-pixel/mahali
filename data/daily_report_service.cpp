@@ -116,11 +116,17 @@ DailyReport DailyReportService::forDay(const QString& dayIso) const
     // Debts taken on during the day. customer_transactions has no type column, the
     // sign of the amount is the direction: a positive row is what the customer now
     // owes, a negative one is what they paid.
+    //
+    // Every row in the window is listed, signs and all. A reversal is written as
+    // a negative row against the original (that is what reversed_transaction_id
+    // marks it with), so keeping only amount_cents > 0 would hide the reversal
+    // and list the cancelled credit sale as a debt taken today — the customer
+    // would appear to owe something that was undone before the day was out.
     query.prepare(QStringLiteral(
         "SELECT ct.customer_id, c.name, ct.amount_cents, ct.created_at "
         "FROM customer_transactions ct "
         "JOIN customers c ON c.id = ct.customer_id "
-        "WHERE ct.created_at >= ? AND ct.created_at <= ? AND ct.amount_cents > 0 "
+        "WHERE ct.created_at >= ? AND ct.created_at <= ? "
         "ORDER BY ct.created_at DESC"));
     query.addBindValue(from);
     query.addBindValue(to);

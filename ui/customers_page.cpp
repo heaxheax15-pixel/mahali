@@ -1,258 +1,54 @@
 #include "customers_page.h"
 
-#include <QIcon>
-#include <QAbstractButton>
-#include <QComboBox>
-#include <QCoreApplication>
-#include <QDialog>
-#include <QDialogButtonBox>
-#include <QFormLayout>
+#include <QColor>
+#include <QDateTime>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QInputDialog>
 #include <QLabel>
-#include <QLayout>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSpinBox>
+#include <QSignalBlocker>
 #include <QTableWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 
-#include "scan_safe_dialog.h"
-#include "core/customer_transaction.h"
 #include "core/payment.h"
-#include "core/sale_item.h"
+#include "core/customer_transaction.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/customer_transaction_repository.h"
 #include "data/payment_repository.h"
 #include "data/payment_service.h"
-#include "data/product_repository.h"
 #include "data/sale_service.h"
+#include "dialogs/customer_dialog.h"
+#include "format_utils.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
 #include "widgets/ui_helpers.h"
-#include "format_utils.h"
 
 namespace app::ui {
 
 namespace {
 
-std::optional<core::Customer> customerDialog(QWidget* parent, bool forNew, const core::Customer& initial)
+// Column order shared by the grid and the row readers. Solde stays at index 2
+// because balanceAt() is read by the UI test and by anything else that grew up
+// with this page.
+constexpr int kColName = 0;
+constexpr int kColPhone = 1;
+constexpr int kColBalance = 2;
+constexpr int kColLastOperation = 3;
+
+constexpr int kSearchDebounceMs = 200;
+
+void addRow(QTableWidget* table, const QStringList& cells)
 {
-    ScanSafeDialog dialog(parent);
-    dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::CustomersPage", "عميل جديد")
-                                 : QCoreApplication::translate("app::ui::CustomersPage", "تعديل العميل"));
-    dialog.setModal(true);
-
-    auto* name = new QLineEdit(initial.name);
-    auto* phone = new QLineEdit(initial.phone);
-
-    QFormLayout* form = new QFormLayout;
-    form->addRow(QCoreApplication::translate("app::ui::CustomersPage", "الاسم"), name);
-    form->addRow(QCoreApplication::translate("app::ui::CustomersPage", "الهاتف"), phone);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
-    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
-    okBtn->setText(QStringLiteral("OK"));
-    cancelBtn->setText(QStringLiteral("Annuler"));
-    okBtn->setIcon(QIcon());
-    cancelBtn->setIcon(QIcon());
-    for (QAbstractButton* b : buttons->buttons()) {
-        if (auto* pb = qobject_cast<QPushButton*>(b)) {
-            pb->setAutoDefault(false);
-            pb->setDefault(false);
-        }
+    const int row = table->rowCount();
+    table->insertRow(row);
+    for (int column = 0; column < cells.size() && column < table->columnCount(); ++column) {
+        table->setItem(row, column, new QTableWidgetItem(cells.at(column)));
     }
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    layout->addLayout(form);
-    layout->addWidget(buttons);
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return std::nullopt;
-    }
-    if (name->text().trimmed().isEmpty()) {
-        return std::nullopt;
-    }
-    core::Customer customer = initial;
-    customer.name = name->text().trimmed();
-    customer.phone = phone->text().trimmed();
-    return customer;
-}
-
-long long balanceFor(app::data::Database& db, int customerId)
-{
-    // Money the customer owes = credit purchases minus payments (reversals are
-    // recorded as negative rows, so summing handles refunds automatically).
-    app::data::CustomerTransactionRepository transactions(db);
-    long long balance = 0;
-    for (const core::CustomerTransaction& tx : transactions.findByCustomerId(customerId)) {
-        balance += tx.amountCents;
-    }
-    app::data::PaymentRepository payments(db);
-    for (const core::Payment& payment : payments.findByCustomerId(customerId)) {
-        balance -= payment.amountCents;
-    }
-    return balance;
-}
-
-// A compact credit-sale builder: pick products, set quantity/price, and return
-// the resulting sale items (prices resolved to cents) on accept.
-bool collectDebtItems(QWidget* parent, app::data::Database& db, QVector<core::SaleItem>* out)
-{
-    app::data::ProductRepository products(db);
-    const auto catalog = products.findAll();
-
-    ScanSafeDialog dialog(parent);
-    dialog.setWindowTitle(QCoreApplication::translate("app::ui::CustomersPage", "بيع آجل"));
-    dialog.setModal(true);
-    dialog.resize(560, 400);
-
-    auto* combo = new QComboBox;
-    combo->setEditable(true);
-    for (const core::Product& product : catalog) {
-        const QString label = product.barcode.isEmpty() ? product.name
-                                                        : QStringLiteral("%1 (%2)").arg(product.name, product.barcode);
-        combo->addItem(label, product.id);
-        if (product.barcode == QLatin1String("6130000000004") && catalog.size() == 1) {
-            combo->setCurrentIndex(combo->count() - 1);
-        }
-    }
-    auto* qty = new QSpinBox;
-    qty->setRange(1, 1000000);
-    qty->setValue(1);
-    auto* price = new QLineEdit;
-    price->setPlaceholderText(QCoreApplication::translate("app::ui::CustomersPage", "اضغط لتغيير سعر/كغ"));
-    auto* addButton = new QPushButton(QCoreApplication::translate("app::ui::CustomersPage", "أضف سطر"));
-    auto* removeButton = new QPushButton(QCoreApplication::translate("app::ui::CustomersPage", "حذف السطر المحدد"));
-    addButton->setAutoDefault(false);
-    addButton->setDefault(false);
-    removeButton->setAutoDefault(false);
-    removeButton->setDefault(false);
-
-    auto* table = new QTableWidget;
-    table->setColumnCount(4);
-    table->setHorizontalHeaderLabels(
-        {QCoreApplication::translate("app::ui::CustomersPage", "المنتج"),
-         QCoreApplication::translate("app::ui::CustomersPage", "الكمية"),
-         QCoreApplication::translate("app::ui::CustomersPage", "سعر الوحدة"),
-         QCoreApplication::translate("app::ui::CustomersPage", "الإجمالي")});
-    table->setSelectionBehavior(QAbstractItemView::SelectRows);
-    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table->horizontalHeader()->setStretchLastSection(true);
-
-    auto* totalLabel = new QLabel;
-    auto* hintLabel = new QLabel(
-        QCoreApplication::translate("app::ui::CustomersPage", "الكمية والسعر عشري؟ عدّل في الأسطر قبل الحفظ."));
-
-    auto* picker = new QHBoxLayout;
-    picker->addWidget(combo, 1);
-    picker->addWidget(qty);
-    picker->addWidget(price);
-    picker->addWidget(addButton);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
-    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
-    okBtn->setText(QStringLiteral("OK"));
-    cancelBtn->setText(QStringLiteral("Annuler"));
-    okBtn->setIcon(QIcon());
-    cancelBtn->setIcon(QIcon());
-    // This dialog records a sale, not a customer, so its confirm button says so.
-    okBtn->setText(QCoreApplication::translate("app::ui::CustomersPage", "حفظ البيع الآجل"));
-    for (QAbstractButton* b : buttons->buttons()) {
-        if (auto* pb = qobject_cast<QPushButton*>(b)) {
-            pb->setAutoDefault(false);
-            pb->setDefault(false);
-        }
-    }
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    layout->addLayout(picker);
-    layout->addWidget(table);
-    layout->addWidget(totalLabel);
-    layout->addWidget(removeButton);
-    layout->addWidget(hintLabel);
-    layout->addWidget(buttons);
-
-    auto refreshTotal = [table, totalLabel]() {
-        long long total = 0;
-        for (int i = 0; i < table->rowCount(); ++i) {
-            total += parseMoney(table->item(i, 3)->text()).value_or(0);
-        }
-        totalLabel->setText(
-            QCoreApplication::translate("app::ui::CustomersPage", "الإجمالي: %1").arg(formatMoney(total)));
-    };
-
-    QObject::connect(addButton, &QPushButton::clicked, &dialog, [&]() {
-        const int productId = combo->currentData().toInt();
-        if (productId <= 0) {
-            QMessageBox::warning(
-                &dialog, QCoreApplication::translate("app::ui::CustomersPage", "خطأ"),
-                QCoreApplication::translate("app::ui::CustomersPage", "اختر منتجاً من القائمة"));
-            return;
-        }
-        const auto product = products.findById(productId);
-        if (!product) {
-            return;
-        }
-        long long unitPrice = product->salePriceCents;
-        if (!price->text().trimmed().isEmpty()) {
-            const auto overridePrice = parseMoney(price->text());
-            if (!overridePrice || *overridePrice < 0) {
-                QMessageBox::warning(
-                    &dialog, QCoreApplication::translate("app::ui::CustomersPage", "خطأ"),
-                    QCoreApplication::translate("app::ui::CustomersPage", "السعر غير صالح"));
-                return;
-            }
-            unitPrice = *overridePrice;
-        }
-        const int row = table->rowCount();
-        table->insertRow(row);
-        auto* nameItem = new QTableWidgetItem(product->name);
-        nameItem->setData(Qt::UserRole, productId);
-        table->setItem(row, 0, nameItem);
-        table->setItem(row, 1, new QTableWidgetItem(QString::number(qty->value())));
-        table->setItem(row, 2, new QTableWidgetItem(formatMoney(unitPrice)));
-        table->setItem(row, 3, new QTableWidgetItem(formatMoney(unitPrice * qty->value())));
-        price->clear();
-        refreshTotal();
-    });
-
-    QObject::connect(removeButton, &QPushButton::clicked, &dialog, [&]() {
-        const int row = table->currentRow();
-        if (row >= 0) {
-            table->removeRow(row);
-            refreshTotal();
-        }
-    });
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return false;
-    }
-
-    out->clear();
-    for (int i = 0; i < table->rowCount(); ++i) {
-        bool qtyOk = false;
-        const qlonglong quantity = table->item(i, 1)->text().toLongLong(&qtyOk);
-        const auto unitPrice = parseMoney(table->item(i, 2)->text());
-        if (!qtyOk || quantity <= 0 || !unitPrice || *unitPrice < 0) {
-            return false;
-        }
-        core::SaleItem item;
-        item.productId = table->item(i, 0)->data(Qt::UserRole).toInt();
-        item.quantity = quantity;
-        item.unitPriceCents = *unitPrice;
-        out->append(item);
-    }
-    return !out->isEmpty();
 }
 
 } // namespace
@@ -261,18 +57,10 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
-    auto* add = new QPushButton(tr("إضافة عميل"));
-    add->setObjectName(QStringLiteral("primary"));
-    add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
-    m_edit = new QPushButton(tr("تعديل"));
-    m_edit->setObjectName(QStringLiteral("secondary"));
-    m_debt = new QPushButton(tr("بيع آجل"));
-    m_debt->setObjectName(QStringLiteral("secondary"));
-    m_pay = new QPushButton(tr("سداد"));
-    m_pay->setObjectName(QStringLiteral("secondary"));
-    m_edit->setEnabled(false);
-    m_debt->setEnabled(false);
-    m_pay->setEnabled(false);
+    auto* root = new QVBoxLayout(this);
+    padPageLayout(root);
+
+    root->addWidget(new PageHeader(tr("Clients"), tr("Suivez les dettes et les remboursements")));
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
@@ -281,67 +69,178 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     m_notice->setText(QString());
     m_notice->setVisible(false);
 
+    // ---- card 1: search, filters, add ----
+    m_search = new QLineEdit;
+    m_search->setObjectName(QStringLiteral("searchField"));
+    m_search->setMinimumHeight(48);
+    m_search->setPlaceholderText(tr("Rechercher un nom ou un téléphone..."));
+    m_search->setClearButtonEnabled(true);
+    m_search->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
+                        QLineEdit::LeadingPosition);
+
+    // Typing refreshes straight away, but one keystroke at a time over a whole
+    // customer book is a lot of queries for nothing: the grid follows 200ms
+    // after the last key instead.
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(kSearchDebounceMs);
+
+    // "Tous" is the customers still being served. A closed-out account is kept,
+    // not shown, so an old debt can be settled without the everyday list filling
+    // up with names nobody serves any more.
+    const QList<QPair<QString, QString>> filters = {
+        {QStringLiteral("all"), tr("Tous")},
+        {QStringLiteral("debt"), tr("Avec dette")},
+        {QStringLiteral("clear"), tr("Sans dette")},
+    };
+    auto* chipRow = new QHBoxLayout;
+    chipRow->setSpacing(8);
+    for (const auto& [key, label] : filters) {
+        auto* chip = new QPushButton(label);
+        chip->setObjectName(QStringLiteral("filterChip"));
+        chip->setCursor(Qt::PointingHandCursor);
+        chip->setCheckable(true);
+        chip->setProperty("filterKey", key);
+        m_chips.insert(key, chip);
+        chipRow->addWidget(chip);
+    }
+    chipRow->addStretch(1);
+
+    auto* add = new QPushButton(tr("Ajouter"));
+    add->setObjectName(QStringLiteral("primary"));
+    add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
+
+    auto* toolbar = new QHBoxLayout;
+    toolbar->setSpacing(10);
+    toolbar->addWidget(m_search, 1);
+    toolbar->addLayout(chipRow);
+    toolbar->addWidget(add);
+
+    auto* toolbarCard = makeCard();
+    auto* toolbarLayout = new QVBoxLayout(toolbarCard);
+    toolbarLayout->setContentsMargins(18, 16, 18, 16);
+    toolbarLayout->setSpacing(12);
+    toolbarLayout->addLayout(toolbar);
+
+    // ---- card 2: the grid ----
     m_table = new QTableWidget;
     m_table->setObjectName(QStringLiteral("customerTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(false);
-    m_table->setColumnCount(3);
+    m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
-        {tr("الاسم"), tr("الهاتف"), tr("المطلوب (رصيد)")});
+        {tr("Nom"), tr("Téléphone"), tr("Solde"), tr("Dernière opération")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
+    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->verticalHeader()->setDefaultSectionSize(42);
 
-    auto* toolbar = new QHBoxLayout;
-    toolbar->setSpacing(10);
-    toolbar->addStretch(1);
-    toolbar->addWidget(add);
-    toolbar->addWidget(m_edit);
-    toolbar->addWidget(m_debt);
-    toolbar->addWidget(m_pay);
+    auto* gridCard = makeCard();
+    auto* gridLayout = new QVBoxLayout(gridCard);
+    gridLayout->setContentsMargins(18, 16, 18, 16);
+    gridLayout->setSpacing(12);
+    gridLayout->addWidget(makeCardTitle(tr("Clients et soldes")));
+    gridLayout->addWidget(m_table, 1);
 
-    auto* card = makeCard();
-    auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(18, 16, 18, 16);
-    cardLayout->setSpacing(12);
-    cardLayout->addWidget(makeCardTitle(tr("العملاء والرصيد")));
-    cardLayout->addLayout(toolbar);
-    cardLayout->addWidget(m_table, 1);
+    // ---- footer ----
+    m_footer = new QLabel;
+    m_footer->setObjectName(QStringLiteral("faintText"));
 
-    auto* root = new QVBoxLayout(this);
-    padPageLayout(root);
-    root->addWidget(new PageHeader(tr("العملاء"),
-                                   tr("المبيعات الآجلة وسداد الأرصدة")));
-    root->addWidget(card, 1);
+    root->addWidget(toolbarCard);
+    root->addWidget(gridCard, 1);
+    root->addWidget(m_footer);
     root->addWidget(m_notice);
 
+    connect(m_search, &QLineEdit::textChanged, this, &CustomersPage::onSearchChanged);
+    connect(m_searchDebounce, &QTimer::timeout, this, &CustomersPage::refresh);
     connect(add, &QPushButton::clicked, this, &CustomersPage::onAddClicked);
-    connect(m_edit, &QPushButton::clicked, this, &CustomersPage::onEditClicked);
-    connect(m_debt, &QPushButton::clicked, this, &CustomersPage::onDebtClicked);
-    connect(m_pay, &QPushButton::clicked, this, &CustomersPage::onPaymentClicked);
-    connect(m_table, &QTableWidget::itemSelectionChanged, this, &CustomersPage::onSelectionChanged);
+    connect(m_table, &QTableWidget::cellDoubleClicked, this, &CustomersPage::onRowActivated);
+    for (auto* chip : m_chips) {
+        connect(chip, &QPushButton::clicked, this, &CustomersPage::onFilterChipClicked);
+    }
 
+    setFilterActive(m_filterKey);
     refresh();
+}
+
+QString CustomersPage::lastOperationAt(int customerId) const
+{
+    // The newer of the two ledgers. A blank cell is honest: a customer who has
+    // never been given credit and never paid has no last operation, and showing
+    // a date there would invent one.
+    QDateTime latest;
+    for (const core::CustomerTransaction& tx :
+         data::CustomerTransactionRepository(m_db).findByCustomerId(customerId)) {
+        if (!latest.isValid() || tx.createdAt > latest) {
+            latest = tx.createdAt;
+        }
+    }
+    for (const core::Payment& payment : data::PaymentRepository(m_db).findByCustomerId(customerId)) {
+        if (!latest.isValid() || payment.createdAt > latest) {
+            latest = payment.createdAt;
+        }
+    }
+    if (!latest.isValid()) {
+        return QString();
+    }
+    return latest.date().toString(QStringLiteral("dd/MM/yyyy"));
 }
 
 void CustomersPage::refresh()
 {
+    const QString query = m_search->text().trimmed();
+    // Every balance comes from one place, so the grid, the footer and the
+    // customer card cannot end up quoting three different numbers.
     data::CustomerRepository customers(m_db);
     const auto all = customers.findAll();
 
+    int shown = 0;
+    int withDebt = 0;
+    long long totalDebt = 0;
+
+    // The grid is rebuilt from scratch, so a selection change made while filling
+    // it would otherwise come back through the signal and fight the new rows.
+    const QSignalBlocker blocker(m_table);
+    m_updating = true;
     m_table->setRowCount(0);
+
     for (const core::Customer& customer : all) {
-        const int row = m_table->rowCount();
-        m_table->insertRow(row);
-        m_table->setItem(row, 0, new QTableWidgetItem(customer.name));
-        m_table->setItem(row, 1, new QTableWidgetItem(customer.phone));
-        m_table->setItem(row, 2, new QTableWidgetItem(formatMoney(balanceFor(m_db, customer.id))));
-        m_table->item(row, 0)->setData(Qt::UserRole, customer.id);
+        if (m_filterKey == QLatin1String("all") && !customer.active) {
+            continue;
+        }
+        if (!query.isEmpty() && !customer.name.contains(query, Qt::CaseInsensitive)
+            && !customer.phone.contains(query, Qt::CaseInsensitive)) {
+            continue;
+        }
+        const long long balance = customers.balanceCentsFor(customer.id);
+        if (m_filterKey == QLatin1String("debt") && balance <= 0) {
+            continue;
+        }
+        if (m_filterKey == QLatin1String("clear") && balance > 0) {
+            continue;
+        }
+
+        ++shown;
+        if (balance > 0) {
+            ++withDebt;
+            totalDebt += balance;
+        }
+
+        addRow(m_table, {customer.name, customer.phone, formatMoney(balance),
+                         lastOperationAt(customer.id)});
+        for (int column = 0; column < m_table->columnCount(); ++column) {
+            m_table->item(m_table->rowCount() - 1, column)->setData(Qt::UserRole, customer.id);
+        }
     }
-    onSelectionChanged();
+
+    m_updating = false;
+    m_footer->setText(tr("Total : %1 clients · %2 avec dette · %3 dus")
+                          .arg(shown)
+                          .arg(withDebt)
+                          .arg(formatMoney(totalDebt)));
 
     // refresh() also runs right after a debt or a payment is recorded, so this
     // only bites when the notice genuinely has nothing in it. The guard keeps a
@@ -361,7 +260,7 @@ QString CustomersPage::balanceAt(int row) const
     if (row < 0 || row >= m_table->rowCount()) {
         return QString();
     }
-    return m_table->item(row, 2)->text();
+    return m_table->item(row, kColBalance)->text();
 }
 
 QString CustomersPage::noticeText() const
@@ -369,89 +268,88 @@ QString CustomersPage::noticeText() const
     return m_notice->text();
 }
 
-int CustomersPage::selectedCustomerId() const
+int CustomersPage::customerIdAt(int row) const
 {
-    const int row = m_table->currentRow();
-    if (row < 0) {
+    if (row < 0 || row >= m_table->rowCount()) {
         return 0;
     }
-    const QTableWidgetItem* item = m_table->item(row, 0);
-    return item ? item->data(Qt::UserRole).toInt() : 0;
+    const QTableWidgetItem* cell = m_table->item(row, kColName);
+    return cell ? cell->data(Qt::UserRole).toInt() : 0;
 }
 
-void CustomersPage::onSelectionChanged()
+int CustomersPage::selectedCustomerId() const
 {
-    const bool has = selectedCustomerId() != 0;
-    m_edit->setEnabled(has);
-    m_debt->setEnabled(has);
-    m_pay->setEnabled(has);
+    return customerIdAt(m_table->currentRow());
+}
+
+void CustomersPage::setFilterActive(const QString& key)
+{
+    m_filterKey = key;
+    for (auto it = m_chips.cbegin(); it != m_chips.cend(); ++it) {
+        QPushButton* chip = it.value();
+        const bool on = it.key() == key;
+        // A stylesheet keyed on the object name needs a repolish to notice the
+        // change; setObjectName alone repaints with the old rule still cached.
+        chip->setObjectName(on ? QStringLiteral("filterChipActive") : QStringLiteral("filterChip"));
+        chip->setChecked(on);
+        chip->style()->unpolish(chip);
+        chip->style()->polish(chip);
+        chip->update();
+    }
+}
+
+void CustomersPage::onSearchChanged()
+{
+    m_searchDebounce->start();
+}
+
+void CustomersPage::onFilterChipClicked()
+{
+    auto* chip = qobject_cast<QPushButton*>(sender());
+    if (!chip) {
+        return;
+    }
+    const QString key = chip->property("filterKey").toString();
+    if (key.isEmpty()) {
+        return;
+    }
+    setFilterActive(key);
+    refresh();
 }
 
 void CustomersPage::onAddClicked()
 {
-    const auto maybeCustomer = customerDialog(this, true, core::Customer{});
+    // A new customer starts with nothing owed and an opening figure of zero: the
+    // "all" filter hides nothing and the balance reads 0.00 until a debt is
+    // recorded.
+    const auto maybeCustomer = showCustomerInfoDialog(this, m_db, core::Customer{});
     if (!maybeCustomer) {
         return;
     }
-    data::CustomerRepository customers(m_db);
-    if (customers.save(*maybeCustomer) == 0) {
-        QMessageBox::warning(this, tr("خطأ"), tr("تعذر حفظ العميل"));
+    if (data::CustomerRepository(m_db).save(*maybeCustomer) == 0) {
+        QMessageBox::warning(this, tr("Erreur"), tr("Impossible d'enregistrer le client"));
         return;
     }
     refresh();
 }
 
-void CustomersPage::onEditClicked()
+void CustomersPage::onRowActivated(int row, int column)
 {
-    const int id = selectedCustomerId();
+    // Any column opens the card: the name, the phone and the balance are all
+    // labels here, so a double click anywhere on the line means "open this
+    // customer".
+    Q_UNUSED(column)
+    const int id = customerIdAt(row);
     if (id == 0) {
         return;
     }
-    data::CustomerRepository customers(m_db);
-    const auto existing = customers.findById(id);
+    const auto existing = data::CustomerRepository(m_db).findById(id);
     if (!existing) {
         return;
     }
-    const auto maybeCustomer = customerDialog(this, false, *existing);
-    if (!maybeCustomer) {
-        return;
+    if (showCustomerCardDialog(this, m_db, *existing)) {
+        refresh();
     }
-    customers.save(*maybeCustomer);
-    refresh();
-}
-
-void CustomersPage::onDebtClicked()
-{
-    const int id = selectedCustomerId();
-    if (id == 0) {
-        return;
-    }
-    QVector<core::SaleItem> items;
-    if (!collectDebtItems(this, m_db, &items)) {
-        return;
-    }
-    recordDebt(id, items);
-}
-
-void CustomersPage::onPaymentClicked()
-{
-    const int id = selectedCustomerId();
-    if (id == 0) {
-        return;
-    }
-    bool ok = false;
-    const QString text =
-        QInputDialog::getText(this, tr("سداد"),
-                              tr("المبلغ الذي دفعه العميل الآن:"), QLineEdit::Normal, QString(), &ok);
-    if (!ok) {
-        return;
-    }
-    const auto cents = parseMoney(text);
-    if (!cents || *cents <= 0) {
-        QMessageBox::warning(this, tr("خطأ"), tr("المبلغ غير صالح"));
-        return;
-    }
-    recordPayment(id, *cents, QString());
 }
 
 void CustomersPage::recordDebt(int customerId, const QVector<core::SaleItem>& items)
@@ -459,19 +357,20 @@ void CustomersPage::recordDebt(int customerId, const QVector<core::SaleItem>& it
     m_notice->clear();
     m_notice->setVisible(false);
     if (customerId <= 0 || items.isEmpty()) {
-        m_notice->setText(tr("لا يوجد بنود للبيع الآجل"));
+        m_notice->setText(tr("Aucun article à facturer"));
         m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::SaleService service(m_db);
     const data::SaleRecordResult result =
-        service.recordCustomerDebt(customerId, items, QStringLiteral("desktop"), /*allowOversold=*/false);
+        service.recordCustomerDebt(customerId, items, QStringLiteral("desktop"),
+                                   /*allowOversold=*/false);
     if (!result.ok) {
-        m_notice->setText(tr("تعذر تسجيل البيع الآجل: %1").arg(result.error));
+        m_notice->setText(tr("Vente à crédit impossible : %1").arg(result.error));
         m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
-    m_notice->setText(tr("سُجّل دين: %1").arg(formatMoney(result.totalCents)));
+    m_notice->setText(tr("Dette enregistrée : %1").arg(formatMoney(result.totalCents)));
     m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
@@ -483,7 +382,7 @@ void CustomersPage::recordPayment(int customerId, long long amountCents, const Q
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
-        m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setText(tr("Aucune caisse ouverte — ouvrez-la d'abord"));
         m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
@@ -491,11 +390,11 @@ void CustomersPage::recordPayment(int customerId, long long amountCents, const Q
     const data::PaymentResult result =
         service.recordCustomerPayment(customerId, amountCents, session->id, note);
     if (!result.ok) {
-        m_notice->setText(tr("تعذر تسجيل السداد: %1").arg(result.error));
+        m_notice->setText(tr("Remboursement impossible : %1").arg(result.error));
         m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
-    m_notice->setText(tr("سُجّل سداد: %1").arg(formatMoney(result.amountCents)));
+    m_notice->setText(tr("Remboursement enregistré : %1").arg(formatMoney(result.amountCents)));
     m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }

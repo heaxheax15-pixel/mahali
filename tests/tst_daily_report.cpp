@@ -232,23 +232,31 @@ void DailyReportTest::daily_report_new_debts()
     debtB.createdAt = QDateTime::fromString(atNoon(todayIso()), Qt::ISODateWithMs);
     QVERIFY(f.customerTx.insert(debtB) > 0);
 
-    // A repayment is a negative row, and a day of settling up is not a day of
-    // taking on debt.
-    core::CustomerTransaction paid;
-    paid.customerId = ahmad;
-    paid.amountCents = -5000;
-    paid.createdAt = QDateTime::fromString(atNoon(todayIso()), Qt::ISODateWithMs);
-    QVERIFY(f.customerTx.insert(paid) > 0);
+    // A reversal is a negative row against the original, which is what
+    // reversed_transaction_id marks it with. It has to show up on its own: if the
+    // report kept only the positive rows, the cancelled sale would still be
+    // listed as a debt taken today and nothing on the day would say it was
+    // undone.
+    core::CustomerTransaction reversal;
+    reversal.customerId = ahmad;
+    reversal.amountCents = -5000;
+    reversal.createdAt = QDateTime::fromString(atNoon(todayIso()), Qt::ISODateWithMs);
+    QVERIFY(f.customerTx.insert(reversal) > 0);
 
     const data::DailyReport report = f.service.forDay(todayIso());
-    QCOMPARE(report.newDebts.size(), 2);
+    QCOMPARE(report.newDebts.size(), 3);
 
+    // Signed as written, so the day's rows add up to what was actually kept.
     long long total = 0;
+    int negativeRows = 0;
     for (const data::NewDebt& debt : report.newDebts) {
-        QVERIFY(debt.amountCents > 0);
         total += debt.amountCents;
+        if (debt.amountCents < 0) {
+            ++negativeRows;
+        }
     }
-    QCOMPARE(total, 7000LL);
+    QCOMPARE(negativeRows, 1);
+    QCOMPARE(total, 2000LL);
 }
 
 void DailyReportTest::daily_report_ignores_other_days()

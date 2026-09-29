@@ -17,9 +17,16 @@
 }
 
 QMainWindow,
-QWidget#content,
 QMessageBox {
     background: #f8fafc;
+}
+
+/* The page stack. Its own colour, not the window's: the pages leave a gutter of
+   their padding uncovered, and in the window's off-white that gutter read as a
+   band down the edge of every page. The sidebar's surface, so the frame around
+   a page is one colour. */
+QWidget#content {
+    background: #f1f5f9;
 }
 
 QDialog {

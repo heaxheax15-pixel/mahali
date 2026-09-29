@@ -69,6 +69,8 @@ private slots:
     void stock_movement_reference_roundtrip();
     void saleInsertAndItems();
     void customerTransactionAndItems();
+    void customer_balance_uses_opening_and_transactions();
+    void customer_active_filter();
     void paymentInsert();
     void expenseAndDrawingInsert();
     void reverse_expense_returns_true_on_success();
@@ -657,6 +659,99 @@ void DataLayerTest::customerTransactionAndItems()
     const auto txs = txRepo.findByCustomerId(customerId);
     QCOMPARE(txs.size(), 1);
     QCOMPARE(txs[0].amountCents, 70000LL);
+}
+
+void DataLayerTest::customer_balance_uses_opening_and_transactions()
+{
+    // Dedicated DB: the balance is an absolute figure, so anything already in
+    // the suite-wide ledger would move the expected number.
+    data::Database db(m_dir.filePath(QStringLiteral("customer_balance.sqlite")));
+    data::CustomerRepository customers(db);
+
+    core::Customer customer;
+    customer.name = QStringLiteral("Amine");
+    customer.openingBalanceCents = 10000;
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    // The opening figure has to come back on its own before anything is
+    // recorded against the account, or a carried-in balance is silently lost.
+    QCOMPARE(customers.balanceCentsFor(customerId), 10000LL);
+
+    data::CustomerTransactionRepository transactions(db);
+    core::CustomerTransaction debt;
+    debt.customerId = customerId;
+    debt.amountCents = 50000;
+    QVERIFY(transactions.insert(debt) > 0);
+
+    // 10000 opening + 50000 credit, still nothing paid off.
+    QCOMPARE(customers.balanceCentsFor(customerId), 60000LL);
+
+    data::PaymentRepository payments(db);
+    core::Payment payment;
+    payment.customerId = customerId;
+    payment.amountCents = 20000;
+    QVERIFY(payments.insert(payment) > 0);
+    QCOMPARE(customers.balanceCentsFor(customerId), 40000LL);
+
+    // A reversal is written as a negative row against the original, which is
+    // what reversed_transaction_id / reversed_id are for. Summing the raw
+    // signs — rather than only the positive ones — is what makes it land: a
+    // filter on amount_cents > 0 would drop this row and leave the cancelled
+    // credit sale still standing.
+    core::CustomerTransaction reversal;
+    reversal.customerId = customerId;
+    reversal.amountCents = -50000;
+    reversal.reversedTransactionId = 1;
+    QVERIFY(transactions.insert(reversal) > 0);
+    QCOMPARE(customers.balanceCentsFor(customerId), -10000LL);
+
+    core::Payment refund;
+    refund.customerId = customerId;
+    refund.amountCents = -20000;
+    refund.reversedId = 1;
+    QVERIFY(payments.insert(refund) > 0);
+    QCOMPARE(customers.balanceCentsFor(customerId), 10000LL);
+}
+
+void DataLayerTest::customer_active_filter()
+{
+    // Dedicated DB, for the same reason as above: listActive() has to return
+    // exactly the two rows written here.
+    data::Database db(m_dir.filePath(QStringLiteral("customer_active.sqlite")));
+    data::CustomerRepository customers(db);
+
+    core::Customer activeCustomer;
+    activeCustomer.name = QStringLiteral("Actif");
+    activeCustomer.active = true;
+    QVERIFY(customers.save(activeCustomer) > 0);
+
+    core::Customer inactiveCustomer;
+    inactiveCustomer.name = QStringLiteral("Inactif");
+    inactiveCustomer.active = false;
+    const int inactiveId = customers.save(inactiveCustomer);
+    QVERIFY(inactiveId > 0);
+
+    const QVector<core::Customer> active = customers.listActive();
+    QCOMPARE(active.size(), 1);
+    QCOMPARE(active[0].name, QStringLiteral("Actif"));
+
+    // setActive() reports whether a row actually changed, like the supplier
+    // equivalent does: re-setting a flag to the value it already holds touches
+    // no row, so it answers false. Callers treat that as "nothing to do", not
+    // as a failure, which is why the toggles below always flip the other way.
+    QVERIFY(customers.setActive(inactiveId, true));
+    QCOMPARE(customers.listActive().size(), 2);
+
+    // Closing an account hides it from the list without losing it: the row is
+    // still there, still carrying its opening balance, so the history stays
+    // readable afterwards.
+    QVERIFY(customers.setActive(inactiveId, false));
+    QCOMPARE(customers.listActive().size(), 1);
+    const auto reloaded = customers.findById(inactiveId);
+    QVERIFY(reloaded.has_value());
+    QCOMPARE(reloaded->openingBalanceCents, 0LL);
+    QCOMPARE(reloaded->active, false);
 }
 
 void DataLayerTest::paymentInsert()

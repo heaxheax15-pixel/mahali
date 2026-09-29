@@ -93,6 +93,31 @@ void migrateSuppliersTable(const QSqlDatabase& db)
     }
 }
 
+// Idempotent, runs on every open. Adds the two columns the customer card and the
+// page's own filters need: the opening figure the balance starts from, and the
+// flag the "Tous" filter reads to hide a customer who is no longer served.
+// Same shape as migrateSuppliersTable, and for the same reason: the table is
+// created above with only id/name/phone, and ALTER fills old rows with the
+// defaults below, so no existing customer changes balance or visibility.
+void migrateCustomersTable(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("customers"));
+    if (columns.isEmpty()) {
+        return;
+    }
+    QStringList statements;
+    if (!columns.contains(QStringLiteral("opening_balance_cents"))) {
+        statements << QStringLiteral("ALTER TABLE customers ADD COLUMN opening_balance_cents INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!columns.contains(QStringLiteral("active"))) {
+        statements << QStringLiteral("ALTER TABLE customers ADD COLUMN active INTEGER NOT NULL DEFAULT 1");
+    }
+    for (const QString& statement : statements) {
+        QSqlQuery alter(db);
+        alter.exec(statement);
+    }
+}
+
 // Idempotent, runs on every open. Adds the reference column that links a
 // movement to whatever produced it, e.g. "Purchase #42". Rows written before the
 // column existed get an empty reference rather than NULL, so a reader never has
@@ -697,6 +722,7 @@ void Database::createSchema()
     // purchases + purchase_items indexes are created via schema above.
 
     migrateUsersTable(m_db);
+    migrateCustomersTable(m_db);
     migrateSuppliersTable(m_db);
     migrateStockMovementsTable(m_db);
     migrateSalesTable(m_db);

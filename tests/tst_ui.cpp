@@ -826,7 +826,10 @@ void UiTest::customerCreditAndPayment()
     item.unitPriceCents = 5000; // override: credit at a lower price
     page.recordDebt(customerId, { item });
 
-    QVERIFY(page.noticeText().contains(QStringLiteral("دين")));
+    // The page speaks French now, so the notice is checked against the wording it
+    // actually shows. What is under test is that a debt raises a notice at all,
+    // not which language it is in.
+    QVERIFY(page.noticeText().contains(QStringLiteral("Dette enregistrée")));
     QCOMPARE(page.balanceAt(0), QStringLiteral("100.00"));
 
     // Credit sales never touch the till and never enter the sync outbox.
@@ -835,7 +838,7 @@ void UiTest::customerCreditAndPayment()
     QCOMPARE(data::AppliedOpRepository(db).count(), 0);
 
     page.recordPayment(customerId, 4000, QString());
-    QVERIFY(page.noticeText().contains(QStringLiteral("سداد")));
+    QVERIFY(page.noticeText().contains(QStringLiteral("Remboursement enregistré")));
     QCOMPARE(page.balanceAt(0), QStringLiteral("60.00"));
     QCOMPARE(page.balanceAt(0), QStringLiteral("60.00"));
     Q_UNUSED(db)
