@@ -3,6 +3,7 @@
 #include <QSqlQuery>
 
 #include "date_utils.h"
+#include "format_utils.h"
 
 namespace app::data {
 
@@ -66,7 +67,27 @@ SupplierPaymentResult SupplierPaymentService::recordPayment(int supplierId,
             result.error = QStringLiteral("purchase does not belong to supplier");
             return result;
         }
+        // And it is money for what is left of that invoice: settling it and then
+        // some would leave a credit that the balance reports as a debt nobody can
+        // explain.
+        long long settledCents = 0;
+        for (const core::SupplierPayment& payment : m_payments.findByPurchaseId(*purchaseId)) {
+            settledCents += payment.amountCents;
+        }
+        const long long remainingCents = purchase->totalCents - settledCents;
+        if (amountCents > remainingCents) {
+            result.error = QStringLiteral("Le montant dépasse le reste à payer sur cette facture (%1)")
+                               .arg(ui::formatMoney(remainingCents));
+            return result;
+        }
     }
+
+    // A general payment is deliberately not capped here. An advance to a
+    // supplier the shop owes nothing yet is a real thing a shop does — goods are
+    // paid for before they arrive — and refusing it would mean the balance can
+    // never show a supplier in credit. The payment form still checks the figure
+    // against the balance, but that is there to catch a mistyped amount, not to
+    // make advances impossible.
 
     // B.
     if (!m_db.beginTransaction()) {

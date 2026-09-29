@@ -39,6 +39,8 @@
 #include "format_utils.h"
 #include "purchase_dialog.h"
 #include "scan_safe_dialog.h"
+#include "supplier_payment_dialog.h"
+#include "supplier_return_dialog.h"
 
 namespace app::ui {
 
@@ -111,14 +113,6 @@ QDateTime stampOf(const QString& iso)
 QString tr(const char* text)
 {
     return QCoreApplication::translate("SupplierDialog", text);
-}
-
-// The three "write a new line" buttons all do the same thing for now, and saying
-// so once here keeps the three tabs honest instead of leaving buttons that
-// swallow the click.
-void announceComing(QWidget* parent)
-{
-    QMessageBox::information(parent, tr("Bientôt"), tr("À venir dans 4ب"));
 }
 
 } // namespace
@@ -463,10 +457,26 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
         }
     });
     QObject::connect(newPaymentButton, &QPushButton::clicked, &dialog, [&]() {
-        announceComing(&dialog);
+        // A payment against a specific invoice is the case that needs the list,
+        // and this button is reached from the Payments tab rather than from an
+        // invoice row, so the dialog opens on the general entry and lets the
+        // operator name the invoice when they know it.
+        if (showSupplierPaymentDialog(&dialog, db, supplierId).saved) {
+            // reload() re-reads the ledgers rather than the supplier the card was
+            // opened with, so the payment shows up in its own tab, in the
+            // history with its running balance, and in the balance on the first
+            // tab, all at once.
+            reload();
+        }
     });
     QObject::connect(newReturnButton, &QPushButton::clicked, &dialog, [&]() {
-        announceComing(&dialog);
+        if (showSupplierReturnDialog(&dialog, db, supplierId).saved) {
+            // reload() re-reads the ledgers rather than the supplier the card was
+            // opened with, so the credit shows up in its own tab, in the history
+            // with its running balance, and in the balance on the first tab, all
+            // at once.
+            reload();
+        }
     });
     QObject::connect(saveButton, &QPushButton::clicked, &dialog, [&]() {
         const QString name = nameField->text().trimmed();

@@ -67,6 +67,8 @@ class SupplierPaymentServiceTest : public QObject {
 private slots:
     void record_payment_simple();
     void record_payment_linked_to_purchase();
+    void payment_above_invoice_remaining_fails();
+    void record_payment_above_balance_allowed();
     void record_payment_rejects_zero();
     void record_payment_rejects_negative();
     void record_payment_rejects_wrong_supplier();
@@ -127,6 +129,51 @@ void SupplierPaymentServiceTest::record_payment_linked_to_purchase()
     QCOMPARE(unpaid.size(), 1);
     QCOMPARE(unpaid[0].purchase.id, purchaseId);
     QCOMPARE(unpaid[0].remainingCents, 30000LL);
+}
+
+void SupplierPaymentServiceTest::payment_above_invoice_remaining_fails()
+{
+    QTemporaryDir m_dir;
+    Fixture f(m_dir.filePath(QStringLiteral("payment_above_invoice_remaining_fails.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int purchaseId = addPurchase(f.purchases, supplierId, 50000);
+    QVERIFY(purchaseId > 0);
+    QCOMPARE(f.service.balanceFor(supplierId), 50000LL);
+
+    // 50000 is what the invoice is worth, so 50001 against it is not a payment:
+    // it would leave a credit the balance then reports as a debt.
+    const data::SupplierPaymentResult result =
+        f.service.recordPayment(supplierId, purchaseId, 50000LL + 1LL, data::nowIso(), QString());
+    QVERIFY(!result.ok);
+    QVERIFY(!result.error.isEmpty());
+    QCOMPARE(f.service.balanceFor(supplierId), 50000LL);
+    QCOMPARE(f.payments.findBySupplierId(supplierId).size(), 0);
+}
+
+void SupplierPaymentServiceTest::record_payment_above_balance_allowed()
+{
+    QTemporaryDir m_dir;
+    Fixture f(m_dir.filePath(QStringLiteral("record_payment_above_balance_allowed.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int purchaseId = addPurchase(f.purchases, supplierId, 50000);
+    QVERIFY(purchaseId > 0);
+
+    // The invoice is paid, so the balance is back to nothing owed.
+    const data::SupplierPaymentResult settled =
+        f.service.recordPayment(supplierId, purchaseId, 50000, data::nowIso(), QString());
+    QVERIFY2(settled.ok, qPrintable(settled.error));
+    QCOMPARE(f.service.balanceFor(supplierId), 0LL);
+
+    // Money handed over on top of that, with no invoice named, is an advance:
+    // the shop paid for goods before they arrived, so the supplier is in credit
+    // and the balance says so. A general payment is not capped at the balance.
+    const data::SupplierPaymentResult advance =
+        f.service.recordPayment(supplierId, std::nullopt, 20000, data::nowIso(), QString());
+    QVERIFY2(advance.ok, qPrintable(advance.error));
+    QCOMPARE(f.service.balanceFor(supplierId), -20000LL);
+    QCOMPARE(f.service.unpaidInvoicesFor(supplierId).size(), 0);
 }
 
 void SupplierPaymentServiceTest::record_payment_rejects_zero()

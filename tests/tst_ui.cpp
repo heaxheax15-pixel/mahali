@@ -54,7 +54,7 @@
 #include "ui/cash_session_page.h"
 #include "ui/customers_page.h"
 #include "ui/expenses_page.h"
-#include "ui/format_utils.h"
+#include "core/format_utils.h"
 #include "ui/pos_page.h"
 #include "ui/products_page.h"
 #include "ui/quick_items_bar.h"

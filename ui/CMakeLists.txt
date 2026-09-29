@@ -15,7 +15,6 @@ target_link_libraries(mahali-ui
         Qt${QT_VERSION_MAJOR}::Widgets)
 
 target_sources(mahali-ui PRIVATE
-    format_utils.h
     theme.cpp
     theme.h
     main_window.cpp
@@ -32,6 +31,10 @@ target_sources(mahali-ui PRIVATE
     dialogs/supplier_dialog.h
     dialogs/purchase_dialog.cpp
     dialogs/purchase_dialog.h
+    dialogs/supplier_payment_dialog.cpp
+    dialogs/supplier_payment_dialog.h
+    dialogs/supplier_return_dialog.cpp
+    dialogs/supplier_return_dialog.h
     quick_items_bar.cpp
     quick_items_bar.h
     cash_session_page.cpp

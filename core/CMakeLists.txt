@@ -30,6 +30,7 @@ target_sources(mahali-core PRIVATE
     cash_session_calculator.h
     customer.h
     customer_transaction.h
+    format_utils.h
     customer_transaction_item.h
     device.h
     expense.h

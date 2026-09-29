@@ -11,7 +11,7 @@
 #include "data/database.h"
 #include "data/setting_repository.h"
 #include "data/user_repository.h"
-#include "ui/format_utils.h"
+#include "core/format_utils.h"
 #include "ui/login_dialog.h"
 #include "ui/main_window.h"
 #include "ui/server_controller.h"
