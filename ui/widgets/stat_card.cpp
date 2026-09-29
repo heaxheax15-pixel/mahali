@@ -14,7 +14,7 @@ StatCard::StatCard(const QString& caption, QWidget* parent)
 
     m_icon = new QLabel;
     m_icon->setObjectName(QStringLiteral("statIcon"));
-    m_icon->setFixedSize(40, 40);
+    m_icon->setFixedSize(32, 32);
     m_icon->setAlignment(Qt::AlignCenter);
 
     m_caption = new QLabel(caption);
@@ -39,8 +39,10 @@ StatCard::StatCard(const QString& caption, QWidget* parent)
 
 void StatCard::setIcon(Icon kind, const QString& accentColor)
 {
-    Q_UNUSED(accentColor);
-    m_icon->setPixmap(appIcon(kind, QColor(QStringLiteral("#4f46e5")), 22).pixmap(22, 22));
+    // The caller's colour, so each card's icon matches the number it labels.
+    // The grey is the fallback for a card built without one.
+    const QColor color(accentColor.isEmpty() ? QStringLiteral("#64748b") : accentColor);
+    m_icon->setPixmap(appIcon(kind, color, 22).pixmap(22, 22));
 }
 
 void StatCard::setValue(const QString& text)

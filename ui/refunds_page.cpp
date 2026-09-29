@@ -123,6 +123,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_notice->setWordWrap(true);
     m_notice->setMinimumHeight(42);
     m_notice->setObjectName(QStringLiteral("noticeOk"));
+    m_notice->setVisible(false);
 
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
@@ -246,16 +247,19 @@ void RefundsPage::onRefundPaymentClicked()
 void RefundsPage::refundSale(int saleId)
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
         m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::SaleService service(m_db);
     const data::SaleReverseResult result = service.reverseSale(saleId, session->id);
     if (!result.ok) {
         m_notice->setText(tr("تعذر استرداد المبيع: %1").arg(result.error));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::SaleRepository sales(m_db);
@@ -264,27 +268,32 @@ void RefundsPage::refundSale(int saleId)
 original ? tr("مبيع #%1 (%2)").arg(saleId).arg(formatMoney(original->totalCents))
                          : tr("مبيع #%1").arg(saleId));
     m_notice->setText(tr("تم الاسترداد وعادت البضاعة للرف"));
+    m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
 
 void RefundsPage::refundPayment(int paymentId, const QString& note)
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
         m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::PaymentService service(m_db);
     const data::PaymentResult result = service.refundCustomerPayment(paymentId, session->id, note);
     if (!result.ok) {
         m_notice->setText(tr("تعذر استرداد السداد: %1").arg(result.error));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     writeAudit(m_db, QStringLiteral("customer_payment_refund"),
                tr("سداد #%1").arg(paymentId));
     m_notice->setText(tr("تم استرداد السداد"));
+    m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
 

@@ -12,7 +12,6 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
-#include <QListWidget>
 #include <QMessageBox>
 #include <QProcess>
 #include <QPropertyAnimation>
@@ -20,6 +19,7 @@
 #include <QScreen>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -37,7 +37,6 @@
 #include "data/occasion_service.h"
 #include "data/setting_repository.h"
 #include "expenses_page.h"
-#include "format_utils.h"
 #include "login_dialog.h"
 #include "pos_page.h"
 #include "products_page.h"
@@ -54,11 +53,48 @@ namespace app::ui {
 
 namespace {
 
-struct NavEntry {
-    Icon icon;
-    QString label;
-    int pageIndex;
-};
+// The page indices the sidebar and the stacked widget agree on. Grouped
+// constants rather than bare numbers so a page added in the middle cannot
+// silently shift the switch that refreshes a page on entry.
+namespace page {
+constexpr int QuickSale = 0;
+constexpr int Products = 1;
+constexpr int Customers = 2;
+constexpr int Suppliers = 3;
+constexpr int CashSession = 4;
+constexpr int SalesOfDay = 5;
+constexpr int Expenses = 6;
+constexpr int Reports = 7;
+constexpr int Refunds = 8;
+constexpr int AuditLog = 9;
+constexpr int Users = 10;
+constexpr int Purchases = 11;
+constexpr int Occasions = 12;
+constexpr int Settings = 13;
+} // namespace page
+
+// A page that is on the roadmap but not written yet. It exists so its sidebar
+// entry leads somewhere and says so, rather than to a button that does nothing
+// when clicked.
+QWidget* makeStubPage(const QString& title, const QString& body)
+{
+    auto* page = new QWidget;
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    layout->addStretch(1);
+
+    auto* heading = new QLabel(title);
+    heading->setObjectName(QStringLiteral("pageHeaderTitle"));
+    heading->setAlignment(Qt::AlignCenter);
+    auto* note = new QLabel(body);
+    note->setObjectName(QStringLiteral("hint"));
+    note->setAlignment(Qt::AlignCenter);
+    layout->addWidget(heading);
+    layout->addWidget(note);
+    layout->addStretch(1);
+    return page;
+}
 
 } // namespace
 
@@ -74,72 +110,13 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     setWindowIcon(QIcon(QStringLiteral(":/mahali/icons/app.ico")));
 
-    m_nav = new QListWidget;
-    m_nav->setObjectName(QStringLiteral("nav"));
-    m_nav->setIconSize(QSize(20, 20));
-    m_nav->setSpacing(4);
-    m_nav->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_nav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_nav->setTextElideMode(Qt::ElideRight);
-    m_nav->setUniformItemSizes(false);
-
-    auto* brandIcon = new QLabel;
-    brandIcon->setObjectName(QStringLiteral("brandIcon"));
-    brandIcon->setFixedSize(42, 42);
-    brandIcon->setAlignment(Qt::AlignCenter);
-    brandIcon->setPixmap(appIcon(Icon::Shop, QColor(QStringLiteral("#ffffff")), 24).pixmap(24, 24));
-    auto* brandTitle = new QLabel(tr("محلي"));
-    brandTitle->setObjectName(QStringLiteral("appTitle"));
-    auto* brandSub = new QLabel(tr("نظام البيع والمحاسبة"));
-    brandSub->setObjectName(QStringLiteral("appSub"));
-
-    auto* brandTexts = new QVBoxLayout;
-    brandTexts->setContentsMargins(0, 0, 0, 0);
-    brandTexts->setSpacing(0);
-    brandTexts->addWidget(brandTitle);
-    brandTexts->addWidget(brandSub);
-
-    auto* brandRow = new QHBoxLayout;
-    brandRow->setContentsMargins(18, 16, 18, 12);
-    brandRow->setSpacing(12);
-    brandRow->addWidget(brandIcon);
-    brandRow->addLayout(brandTexts, 1);
-
-    auto* about = new QPushButton(tr("حول محلي…"));
-    about->setObjectName(QStringLiteral("about"));
-    about->setCursor(Qt::PointingHandCursor);
-    connect(about, &QPushButton::clicked, this, [this]() {
-        QMessageBox::about(
-            this, tr("حول محلي"),
-            tr("<h3>محلي — نظام نقاط البيع والمحاسبة</h3>"
-                           "<p>إدارة البيع السريع، الجرد، حسابات العملاء والموردين، "
-                           "جلسات الصندوق، المصاريف، التقارير والاستردادات — "
-                           "بدون اتصال وبثيَمَين فاتح/داكن.</p>"
-                           "<p><b>الإصدار:</b> %1</p>")
-                .arg(qApp->applicationVersion()));
-    });
-
-    auto* sidebar = new QWidget;
-    sidebar->setObjectName(QStringLiteral("sidebar"));
-    sidebar->setFixedWidth(240);
-    auto* sidebarLayout = new QVBoxLayout(sidebar);
-    sidebarLayout->setContentsMargins(0, 0, 0, 12);
-    sidebarLayout->setSpacing(8);
-    sidebarLayout->addLayout(brandRow);
-    sidebarLayout->addWidget(m_nav, 1);
-    sidebarLayout->addWidget(about, 0, Qt::AlignCenter);
-
     m_pages = new QStackedWidget;
     m_pages->setObjectName(QStringLiteral("content"));
+    // The order here defines the page indices the sidebar refers to. It follows
+    // the page:: constants above rather than the order the buttons appear in,
+    // because a button can sit anywhere in the sidebar and still open a given
+    // page.
     m_pos = new PosPage(db);
-    m_cashSession = new CashSessionPage(db);
-    m_sales = new SalesPage(db);
-    m_expenses = new ExpensesPage(db);
-    m_reports = new ReportsPage(db);
-    m_refunds = new RefundsPage(db);
-    m_auditLog = new AuditLogPage(db);
-    m_settings = new SettingsPage(db);
-    m_usersPage = new UsersPage(db);
     m_pages->addWidget(m_pos);
     m_products = new ProductsPage(db);
     m_pages->addWidget(m_products);
@@ -147,52 +124,60 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     m_pages->addWidget(m_customers);
     m_suppliers = new SuppliersPage(db);
     m_pages->addWidget(m_suppliers);
+    m_cashSession = new CashSessionPage(db);
     m_pages->addWidget(m_cashSession);
+    m_sales = new SalesPage(db);
     m_pages->addWidget(m_sales);
+    m_expenses = new ExpensesPage(db);
     m_pages->addWidget(m_expenses);
+    m_reports = new ReportsPage(db);
     m_pages->addWidget(m_reports);
+    m_refunds = new RefundsPage(db);
     m_pages->addWidget(m_refunds);
+    m_auditLog = new AuditLogPage(db);
     m_pages->addWidget(m_auditLog);
-    m_pages->addWidget(m_settings);
+    m_usersPage = new UsersPage(db);
     m_pages->addWidget(m_usersPage);
+    // Two placeholders so the navigation has somewhere to land for the pages
+    // that do not exist yet. They are real pages in the stack, so clicking the
+    // entry shows an honest "not built yet" instead of doing nothing.
+    m_pages->addWidget(makeStubPage(tr("Achats"), tr("Page en construction.")));
+    m_pages->addWidget(makeStubPage(tr("Occasions"), tr("Page en construction.")));
+    m_settings = new SettingsPage(db);
+    m_pages->addWidget(m_settings);
+    // The settings page can change the theme without going through the toggle,
+    // so the icons have to be told about that route too.
+    connect(m_settings, &SettingsPage::themeChanged, this, &MainWindow::refreshThemeIcons);
+
+    // Index guards rather than trust: the stack and the page:: constants above
+    // are written side by side, and a mismatch should fail loudly here rather
+    // than show the wrong page to someone trying to take money.
+    Q_ASSERT(m_pages->count() == page::Settings + 1);
 
     auto* central = new QWidget;
-    // The root is vertical: the update bar, when it exists, is a banner across
-    // the top, and the horizontal row below it holds the sidebar and the pages.
+    // The root is vertical: the top bar spans the full width, the update bar
+    // sits under it as a banner when there is something to say, and the
+    // horizontal row below holds the sidebar and the pages.
     auto* layout = new QVBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+    layout->addWidget(buildTopBar());
 
     auto* bodyLayout = new QHBoxLayout;
     bodyLayout->setContentsMargins(0, 0, 0, 0);
     bodyLayout->setSpacing(0);
-    bodyLayout->addWidget(sidebar);
+    bodyLayout->addWidget(buildSidebar());
     bodyLayout->addWidget(m_pages, 1);
     layout->addLayout(bodyLayout);
     setCentralWidget(central);
 
-    connect(m_nav, &QListWidget::currentRowChanged, this, &MainWindow::onPageChanged);
-
     buildNavForRole(app::core::Session::instance().currentUser().role);
-    m_nav->setCurrentRow(0);
 
-    m_statusLabel = new QLabel;
-    m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
+    // The bar carries the one action that has to be reachable from anywhere.
+    // The sync and tally readouts that used to sit here were secondary, and a
+    // bar of four counters is a bar nobody reads.
     statusBar()->setContentsMargins(0, 0, 0, 0);
     statusBar()->setFixedHeight(36);
-    statusBar()->addWidget(m_statusLabel);
-
-    m_occasionLabel = new QLabel;
-    m_occasionLabel->setObjectName(QStringLiteral("occasionLabel"));
-    statusBar()->addWidget(m_occasionLabel);
-    // Filled now so a shop that opens mid-occasion says so before the operator
-    // has done anything. Refreshed again on activate/deactivate.
-    refreshOccasionLabel();
-
-    m_userLabel = new QLabel;
-    m_userLabel->setObjectName(QStringLiteral("userLabel"));
-    m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
-    statusBar()->addPermanentWidget(m_userLabel);
 
     auto* switchUserBtn = new QPushButton(tr("تبديل المستخدم"));
     switchUserBtn->setObjectName("primary");
@@ -200,9 +185,6 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     switchUserBtn->setFixedHeight(32);
     connect(switchUserBtn, &QPushButton::clicked, this, &MainWindow::onSwitchUserClicked);
     statusBar()->addPermanentWidget(switchUserBtn);
-
-    connect(&m_controller, &ServerController::statsChanged, this, &MainWindow::onSyncStatusChanged);
-    onSyncStatusChanged();
 
     // The update check runs on a delay so it never competes with opening the
     // database, drawing the first page or whatever the user clicks first: the
@@ -226,48 +208,49 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     connect(m_updateDownloader, &app::core::UpdateDownloader::failed,
             this, &MainWindow::onUpdateDownloadFailed);
 
-    QTimer::singleShot(0, this, [this]() {
-        buildNavForRole(app::core::Session::instance().currentUser().role);
-        m_nav->setCurrentRow(0);
-    });
+    // Opened on the quick sale: the first click an operator makes is almost
+    // always a sale, and the page should be ready before they look for it.
+    onPageChanged(page::QuickSale);
 }
 
 void MainWindow::onPageChanged(int row)
 {
     m_pages->setCurrentIndex(row);
+    // Each page re-reads on entry, so what the operator sees is what is in the
+    // database now rather than what it held when the window opened.
     switch (row) {
-    case 1:
+    case page::Products:
         m_products->refresh();
         break;
-    case 2:
+    case page::Customers:
         m_customers->refresh();
         break;
-    case 3:
+    case page::Suppliers:
         m_suppliers->refresh();
         break;
-    case 4:
+    case page::CashSession:
         m_cashSession->refresh();
         break;
-    case 5:
+    case page::SalesOfDay:
         m_sales->refresh();
         break;
-    case 6:
+    case page::Expenses:
         m_expenses->refresh();
         break;
-    case 7:
+    case page::Reports:
         m_reports->refresh();
         break;
-    case 8:
+    case page::Refunds:
         m_refunds->refresh();
         break;
-    case 9:
+    case page::AuditLog:
         m_auditLog->refresh();
         break;
-    case 10:
-        m_settings->refresh();
-        break;
-    case 11:
+    case page::Users:
         m_usersPage->refresh();
+        break;
+    case page::Settings:
+        m_settings->refresh();
         break;
     default:
         break;
@@ -283,44 +266,305 @@ void MainWindow::onPageChanged(int row)
         m_fade->setEasingCurve(QEasingCurve::OutCubic);
     }
     m_fade->start();
+    // The stacked widget is what actually moved, so the highlight follows it
+    // rather than the click that asked for the change.
+    refreshNavActiveState();
+}
+
+// The strip above everything: the brand on the right, then the shop's global
+// search, then the controls that used to sit in the status bar (who is signed
+// in, which occasion is running) plus the theme toggle.
+QWidget* MainWindow::buildTopBar()
+{
+    m_topBar = new QWidget;
+    m_topBar->setObjectName(QStringLiteral("topBar"));
+    m_topBar->setFixedHeight(56);
+
+    m_brandIcon = new QLabel;
+    m_brandIcon->setObjectName(QStringLiteral("brandIcon"));
+    m_brandIcon->setFixedSize(36, 36);
+    m_brandIcon->setAlignment(Qt::AlignCenter);
+
+    auto* brandTitle = new QLabel(tr("Mahali"));
+    brandTitle->setObjectName(QStringLiteral("appTitle"));
+
+    auto* brandRow = new QHBoxLayout;
+    brandRow->setContentsMargins(0, 0, 0, 0);
+    brandRow->setSpacing(10);
+    brandRow->addWidget(m_brandIcon);
+    brandRow->addWidget(brandTitle);
+
+    m_occasionLabel = new QLabel;
+    m_occasionLabel->setObjectName(QStringLiteral("occasionLabel"));
+    // Filled now so a shop that opens mid-occasion says so before the operator
+    // has done anything. Refreshed again on activate/deactivate.
+    refreshOccasionLabel();
+
+    // Prefix and name in one label: a single string is bidi-correct as a whole,
+    // whereas two labels let the layout put the name on the wrong side of the
+    // colon under a right-to-left direction.
+    m_userLabel = new QLabel;
+    m_userLabel->setObjectName(QStringLiteral("userLabel"));
+    m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
+
+    m_themeToggle = new QPushButton;
+    m_themeToggle->setObjectName(QStringLiteral("iconButton"));
+    m_themeToggle->setFixedSize(36, 36);
+    m_themeToggle->setCursor(Qt::PointingHandCursor);
+    m_themeToggle->setToolTip(tr("تبديل السمة"));
+    connect(m_themeToggle, &QPushButton::clicked, this, &MainWindow::onThemeToggleClicked);
+
+    m_settingsBtn = new QPushButton;
+    m_settingsBtn->setObjectName(QStringLiteral("iconButton"));
+    m_settingsBtn->setFixedSize(36, 36);
+    m_settingsBtn->setCursor(Qt::PointingHandCursor);
+    m_settingsBtn->setToolTip(tr("الإعدادات"));
+    // Characters, not painted pixmaps. The stroked icons were unreadable at this
+    // size, and these three marks were checked against the app's font: each one
+    // lands as a filled shape, not a missing-glyph box.
+    m_settingsBtn->setText(QString::fromUtf8("\xe2\x9a\x99"));
+    connect(m_settingsBtn, &QPushButton::clicked, this,
+            [this]() { onPageChanged(page::Settings); });
+
+    // Drawn once the widgets exist, so the first paint is already the right
+    // colour rather than a flash of the light-theme one.
+    refreshThemeIcons();
+
+    // In RTL the first widget added lands on the right. The brand leads, the
+    // occasion badge sits beside it, and the user and the two icon buttons close
+    // the left end. The stretch takes up what is left, which is what holds the
+    // two groups apart now that the bar carries no search field.
+    auto* layout = new QHBoxLayout(m_topBar);
+    layout->setContentsMargins(16, 8, 16, 8);
+    layout->setSpacing(12);
+    layout->addLayout(brandRow);
+    layout->addSpacing(16);
+    layout->addWidget(m_occasionLabel);
+    layout->addStretch(1);
+    layout->addWidget(m_userLabel);
+    layout->addWidget(m_themeToggle);
+    layout->addWidget(m_settingsBtn);
+    return m_topBar;
+}
+
+// The right-hand rail of pages, split into the groups an operator thinks in:
+// selling, the catalogue, money, then the administrative pages. The brand and
+// the "about" button are gone from here — they belong in the top bar.
+QWidget* MainWindow::buildSidebar()
+{
+    m_sidebar = new QWidget;
+    m_sidebar->setObjectName(QStringLiteral("sidebar"));
+    m_sidebar->setFixedWidth(240);
+
+    auto* layout = new QVBoxLayout(m_sidebar);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    m_sidebarGroupLayout = layout;
+
+    auto* about = new QPushButton(tr("حول محلي…"));
+    about->setObjectName(QStringLiteral("about"));
+    about->setCursor(Qt::PointingHandCursor);
+    connect(about, &QPushButton::clicked, this, [this]() {
+        QMessageBox::about(
+            this, tr("حول محلي"),
+            tr("<h3>محلي — نظام نقاط البيع والمحاسبة</h3>"
+                           "<p>إدارة البيع السريع، الجرد، حسابات العملاء والموردين، "
+                           "جلسات الصندوق، المصاريف، التقارير والاستردادات — "
+                           "بدون اتصال وبثيَمَين فاتح/داكن.</p>"
+                           "<p><b>الإصدار:</b> %1</p>")
+                .arg(qApp->applicationVersion()));
+    });
+
+    // The groups stack from the top; the slack before the footer pushes "about"
+    // to the foot of the rail rather than letting it climb up under the groups.
+    layout->addStretch(1);
+    layout->addWidget(about, 0, Qt::AlignHCenter);
+    return m_sidebar;
+}
+
+void MainWindow::addNavGroup(const QString& title, const std::vector<NavEntry>& entries)
+{
+    auto* group = new QWidget;
+    group->setObjectName(QStringLiteral("navGroup"));
+    auto* groupLayout = new QVBoxLayout(group);
+    groupLayout->setContentsMargins(0, 14, 0, 0);
+    groupLayout->setSpacing(2);
+
+    auto* heading = new QLabel(title);
+    heading->setObjectName(QStringLiteral("navGroupTitle"));
+    groupLayout->addWidget(heading);
+
+    for (const NavEntry& entry : entries) {
+        auto* button = new QPushButton(entry.label);
+        button->setObjectName(QStringLiteral("navItem"));
+        button->setCursor(Qt::PointingHandCursor);
+        // The rail is a fixed 240px and the button fills what the group gives
+        // it. Spelled out rather than left to the default (Minimum, Fixed),
+        // because a minimum-based policy is what lets a layout shrink a label
+        // below the text it is holding.
+        button->setMinimumWidth(0);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        button->setCheckable(true);
+        // The label is Arabic, so it reads right-to-left; the icon then belongs
+        // on the right of it rather than wherever the button puts it.
+        button->setLayoutDirection(Qt::RightToLeft);
+        // The icon is only a placeholder here. The colour is not known for
+        // certain until the button knows whether it is the active one, and the
+        // theme may change while the window is open, so the first real colour
+        // comes from refreshThemeIcons, which is called once the groups are all
+        // built and again on every theme change.
+        button->setProperty("active", false);
+
+        const int pageIndex = entry.pageIndex;
+        connect(button, &QPushButton::clicked, this, [this, pageIndex]() {
+            onPageChanged(pageIndex);
+        });
+
+        m_navButtons.push_back({button, pageIndex});
+        m_navIcons.push_back(entry.icon);
+        groupLayout->addWidget(button);
+    }
+
+    m_sidebarGroupLayout->addWidget(group);
 }
 
 void MainWindow::buildNavForRole(const QString& role)
 {
-    m_nav->clear();
+    // Rebuilt from scratch when the signed-in role changes, so a group that no
+    // longer applies does not leave its buttons behind.
+    m_navButtons.clear();
+    m_navIcons.clear();
+    // Empty the group column first: deleting the group widgets leaves their
+    // layout items behind, and a second call would stack a fresh set of groups
+    // on top of the old ones.
+    while (QLayoutItem* item = m_sidebarGroupLayout->takeAt(0)) {
+        if (QWidget* widget = item->widget()) {
+            delete widget;
+        }
+        delete item;
+    }
 
-    struct NavEntry {
-        Icon icon;
-        QString label;
-        int pageIndex;
+    addNavGroup(tr("نقطة البيع"), {
+                           {Icon::Cart, tr("البيع السريع"), page::QuickSale},
+                           {Icon::Wallet, tr("جلسة الصندوق"), page::CashSession},
+                           {Icon::Receipt, tr("مبيعات اليوم"), page::SalesOfDay},
+                       });
+
+    addNavGroup(tr("الإدارة"), {
+                           {Icon::Box, tr("المنتجات"), page::Products},
+                           {Icon::People, tr("العملاء"), page::Customers},
+                           {Icon::Truck, tr("الموردون"), page::Suppliers},
+                           {Icon::Truck, tr("Achats"), page::Purchases},
+                           {Icon::Sun, tr("المناسبات"), page::Occasions},
+                       });
+
+    addNavGroup(tr("المالية"), {
+                           {Icon::Tag, tr("المصاريف والسحوبات"), page::Expenses},
+                           {Icon::BarChart, tr("التقارير"), page::Reports},
+                           {Icon::Return, tr("الاستردادات"), page::Refunds},
+                       });
+
+    std::vector<NavEntry> system = {
+        {Icon::History, tr("سجل المراجعة"), page::AuditLog},
     };
-
-    std::vector<NavEntry> entries = {
-        {Icon::Cart, tr("البيع السريع"), 0},
-        {Icon::Box, tr("المنتجات"), 1},
-        {Icon::People, tr("العملاء"), 2},
-        {Icon::Truck, tr("الموردون"), 3},
-        {Icon::Wallet, tr("جلسة الصندوق"), 4},
-        {Icon::Receipt, tr("مبيعات اليوم"), 5},
-        {Icon::Tag, tr("المصاريف والسحوبات"), 6},
-        {Icon::BarChart, tr("التقارير"), 7},
-        {Icon::Return, tr("الاستردادات"), 8},
-        {Icon::History, tr("سجل المراجعة"), 9},
-        {Icon::Gear, tr("الإعدادات"), 10},
-    };
-
     if (role == QStringLiteral("admin")) {
-        entries.push_back({Icon::People, tr("إدارة المستخدمين"), 11});
+        // User management leads the group, and it is only here for an admin, so
+        // it is built into the vector rather than appended after the log.
+        system.insert(system.begin(),
+                      NavEntry{Icon::People, tr("إدارة المستخدمين"), page::Users});
+    }
+    addNavGroup(tr("النظام"), system);
+
+    refreshNavActiveState();
+}
+
+void MainWindow::refreshNavActiveState()
+{
+    const int current = m_pages->currentIndex();
+    for (const NavButton& entry : m_navButtons) {
+        const bool active = entry.pageIndex == current;
+        if (entry.button->isChecked() == active) {
+            continue;
+        }
+        // setProperty alone does not restyle the button: the style has to be
+        // unpolished and polished again for the [active] rule to be re-read.
+        entry.button->setChecked(active);
+        entry.button->setProperty("active", active);
+        // A dynamic property only re-reads the stylesheet once the style is
+        // cleared, so unpolish/polish is what actually repaints the button.
+        entry.button->style()->unpolish(entry.button);
+        entry.button->style()->polish(entry.button);
+        entry.button->update();
     }
 
-    for (const NavEntry& entry : entries) {
-        auto* item = new QListWidgetItem(appIcon(entry.icon, QColor(QStringLiteral("#8b5cf6")), 20),
-                                         entry.label);
-        item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        item->setSizeHint(QSize(0, 46));
-        item->setData(Qt::UserRole, entry.pageIndex);
-        m_nav->addItem(item);
+    // The icon colour is tied to the same state, and it is a pixmap the
+    // stylesheet cannot reach, so it is redrawn from here rather than by the
+    // unpolish above.
+    refreshThemeIcons();
+}
+
+// Every icon the shell draws: the top bar's brand, settings and theme controls,
+// and the sidebar's nav buttons. A stylesheet sets a foreground colour rather
+// than recolouring a pixmap, so it cannot reach any of them; they are drawn here
+// instead, and every change of theme — from the toggle or from the settings
+// page's selector — comes back through this one function.
+void MainWindow::refreshThemeIcons()
+{
+    // The theme in use, not the one in the database: this has to match what
+    // applyTheme actually put on screen. Reading the stored setting instead would
+    // leave the icons on the old theme whenever the change has not been saved.
+    const bool dark = activeTheme() == QStringLiteral("dark");
+    const QColor accent(dark ? QStringLiteral("#d4a017") : QStringLiteral("#2563eb"));
+    const QColor text(dark ? QStringLiteral("#fafafa") : QStringLiteral("#0f172a"));
+    const QColor muted(dark ? QStringLiteral("#a3a3a3") : QStringLiteral("#64748b"));
+
+    if (m_brandIcon) {
+        // A letter, not the storefront pictogram: the drawn mark read as loose
+        // strokes at this size, whereas one heavy glyph is unambiguous. The
+        // colour is set here because the accent is a theme value that a
+        // stylesheet cannot reach without being rebuilt on every switch.
+        m_brandIcon->setText(QStringLiteral("M"));
+        m_brandIcon->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 24px; font-weight: 900; }")
+                                       .arg(accent.name()));
     }
+    if (m_settingsBtn) {
+        m_settingsBtn->setText(QString::fromUtf8("\xe2\x9a\x99"));
+    }
+    if (m_themeToggle) {
+        m_themeToggle->setText(dark ? QString::fromUtf8("\xe2\x98\x80")
+                                    : QString::fromUtf8("\xf0\x9f\x8c\x99"));
+    }
+
+    // The nav icons follow the button they sit on: the accent on the filled
+    // active button, the plain text colour everywhere else. The icon size is set
+    // here too, because the buttons are created without one and an unset
+    // setIconSize leaves Qt guessing from the pixmap.
+    const int current = m_pages->currentIndex();
+    for (qsizetype i = 0; i < m_navIcons.size() && i < m_navButtons.size(); ++i) {
+        const NavButton& entry = m_navButtons[static_cast<std::size_t>(i)];
+        if (!entry.button) {
+            continue;
+        }
+        const bool active = entry.pageIndex == current;
+        entry.button->setIconSize(QSize(20, 20));
+        entry.button->setIcon(appIcon(m_navIcons[static_cast<qsizetype>(i)],
+                                      active ? accent : text,
+                                      20));
+    }
+}
+
+void MainWindow::onThemeToggleClicked()
+{
+    const QString next = activeTheme() == QStringLiteral("dark") ? QStringLiteral("light")
+                                                                : QStringLiteral("dark");
+    applyTheme(next, *qApp);
+    // Stored so the choice survives a restart; the settings page's own selector
+    // reads the same key, so the two cannot disagree.
+    data::SettingRepository settings(m_db);
+    settings.set(QStringLiteral("theme"), next);
+    // The stylesheet has already been swapped; this redraws the pixmaps, which
+    // the new stylesheet could not have reached on its own.
+    refreshThemeIcons();
 }
 
 void MainWindow::rebuildNav()
@@ -328,22 +572,6 @@ void MainWindow::rebuildNav()
     buildNavForRole(app::core::Session::instance().currentUser().role);
 }
 
-void MainWindow::onSyncStatusChanged()
-{
-    const ServerController::Stats stats = m_controller.stats();
-    QString text;
-    if (stats.listening) {
-        text = tr("خادم المزامنة: يعمل على المنفذ %1").arg(stats.port);
-    } else {
-        text = tr("خادم المزامنة: متوقف");
-    }
-    text += tr("  |  عمليات منفّذة حتى اليوم: %1").arg(stats.appliedOps);
-    text += tr("  |  أجهزة متصلة: %1").arg(stats.devices);
-    text += tr("  |  مبيعات اليوم: %1 (%2)")
-                .arg(stats.salesToday)
-                .arg(formatMoney(stats.revenueTodayCents));
-    m_statusLabel->setText(text);
-}
 
 // Reads the running occasion and shows its name, or clears the label when there
 // is none. Built on every change rather than tracked by hand, so the bar cannot

@@ -44,6 +44,10 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     // Quick items sit right above the barcode field: pick one with a click, or
     // keep typing barcodes below.
     m_quickItems = new QuickItemsBar(m_db, this);
+    // Hidden until the strip is finished: it is built and exercised by its own
+    // tests, but nothing on this page listens to productClicked yet, so showing
+    // it would advertise cards that do nothing.
+    m_quickItems->setVisible(false);
     root->addWidget(m_quickItems);
 
     m_entry = new QLineEdit;
@@ -94,6 +98,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_itemsLabel->setAlignment(Qt::AlignCenter);
 
     m_save = new QPushButton(tr("حفظ البيع"));
+    m_save->setObjectName(QStringLiteral("primary"));
     m_save->setMinimumHeight(46);
     m_save->setIcon(appIcon(Icon::Check, QColor(QStringLiteral("#ffffff")), 20));
 
@@ -107,6 +112,8 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
     m_notice->setObjectName(QStringLiteral("noticeOk"));
+    // Nothing to report yet, so it starts hidden; setNotice reveals it.
+    m_notice->setVisible(false);
 
     auto* body = new QHBoxLayout;
     body->setSpacing(16);
@@ -295,6 +302,9 @@ void PosPage::setNotice(const QString& text, bool ok)
     m_notice->style()->polish(m_notice);
     m_notice->update();
     m_notice->setText(text);
+    // An empty notice keeps its own height in the layout otherwise, which is
+    // what leaves a coloured bar sitting above the page doing nothing.
+    m_notice->setVisible(!text.isEmpty());
 }
 
 void PosPage::refreshSessionChip()
@@ -382,6 +392,7 @@ bool PosPage::syncFromTable()
 void PosPage::completeSale()
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     if (m_lines.isEmpty()) {
         setNotice(tr("لا يوجد بنود للبيع"), false);
         return;

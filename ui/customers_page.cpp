@@ -1,5 +1,6 @@
 #include "customers_page.h"
 
+#include <QIcon>
 #include <QAbstractButton>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -53,6 +54,12 @@ std::optional<core::Customer> customerDialog(QWidget* parent, bool forNew, const
     form->addRow(QCoreApplication::translate("app::ui::CustomersPage", "الهاتف"), phone);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
+    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
+    okBtn->setText(QStringLiteral("OK"));
+    cancelBtn->setText(QStringLiteral("Annuler"));
+    okBtn->setIcon(QIcon());
+    cancelBtn->setIcon(QIcon());
     for (QAbstractButton* b : buttons->buttons()) {
         if (auto* pb = qobject_cast<QPushButton*>(b)) {
             pb->setAutoDefault(false);
@@ -150,8 +157,14 @@ bool collectDebtItems(QWidget* parent, app::data::Database& db, QVector<core::Sa
     picker->addWidget(addButton);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    buttons->button(QDialogButtonBox::Ok)
-        ->setText(QCoreApplication::translate("app::ui::CustomersPage", "حفظ البيع الآجل"));
+    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
+    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
+    okBtn->setText(QStringLiteral("OK"));
+    cancelBtn->setText(QStringLiteral("Annuler"));
+    okBtn->setIcon(QIcon());
+    cancelBtn->setIcon(QIcon());
+    // This dialog records a sale, not a customer, so its confirm button says so.
+    okBtn->setText(QCoreApplication::translate("app::ui::CustomersPage", "حفظ البيع الآجل"));
     for (QAbstractButton* b : buttons->buttons()) {
         if (auto* pb = qobject_cast<QPushButton*>(b)) {
             pb->setAutoDefault(false);
@@ -249,6 +262,7 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     auto* add = new QPushButton(tr("إضافة عميل"));
+    add->setObjectName(QStringLiteral("primary"));
     add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     m_edit = new QPushButton(tr("تعديل"));
     m_edit->setObjectName(QStringLiteral("secondary"));
@@ -264,6 +278,8 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     m_notice->setWordWrap(true);
     m_notice->setMinimumHeight(42);
     m_notice->setObjectName(QStringLiteral("noticeOk"));
+    m_notice->setText(QString());
+    m_notice->setVisible(false);
 
     m_table = new QTableWidget;
     m_table->setObjectName(QStringLiteral("customerTable"));
@@ -326,6 +342,13 @@ void CustomersPage::refresh()
         m_table->item(row, 0)->setData(Qt::UserRole, customer.id);
     }
     onSelectionChanged();
+
+    // refresh() also runs right after a debt or a payment is recorded, so this
+    // only bites when the notice genuinely has nothing in it. The guard keeps a
+    // bar that was cleared elsewhere from being left showing as an empty strip.
+    if (m_notice->text().isEmpty()) {
+        m_notice->setVisible(false);
+    }
 }
 
 int CustomersPage::rowCount() const
@@ -434,8 +457,10 @@ void CustomersPage::onPaymentClicked()
 void CustomersPage::recordDebt(int customerId, const QVector<core::SaleItem>& items)
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     if (customerId <= 0 || items.isEmpty()) {
         m_notice->setText(tr("لا يوجد بنود للبيع الآجل"));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::SaleService service(m_db);
@@ -443,19 +468,23 @@ void CustomersPage::recordDebt(int customerId, const QVector<core::SaleItem>& it
         service.recordCustomerDebt(customerId, items, QStringLiteral("desktop"), /*allowOversold=*/false);
     if (!result.ok) {
         m_notice->setText(tr("تعذر تسجيل البيع الآجل: %1").arg(result.error));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     m_notice->setText(tr("سُجّل دين: %1").arg(formatMoney(result.totalCents)));
+    m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
 
 void CustomersPage::recordPayment(int customerId, long long amountCents, const QString& note)
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
         m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::PaymentService service(m_db);
@@ -463,9 +492,11 @@ void CustomersPage::recordPayment(int customerId, long long amountCents, const Q
         service.recordCustomerPayment(customerId, amountCents, session->id, note);
     if (!result.ok) {
         m_notice->setText(tr("تعذر تسجيل السداد: %1").arg(result.error));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     m_notice->setText(tr("سُجّل سداد: %1").arg(formatMoney(result.amountCents)));
+    m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
 

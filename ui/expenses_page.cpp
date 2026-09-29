@@ -62,6 +62,7 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     cards->addWidget(m_drawingsCard, 1);
 
     m_expenseButton = new QPushButton(tr("مصروف جديد"));
+    m_expenseButton->setObjectName(QStringLiteral("primary"));
     m_expenseButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     m_drawingButton = new QPushButton(tr("سحب مالك"));
     m_drawingButton->setObjectName(QStringLiteral("secondary"));
@@ -77,12 +78,14 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
 
     m_summary = new QLabel;
     m_summary->setObjectName(QStringLiteral("infoBar"));
+    m_summary->setVisible(false);
     m_summary->setMinimumHeight(46);
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
     m_notice->setMinimumHeight(42);
     m_notice->setObjectName(QStringLiteral("noticeOk"));
+    m_notice->setVisible(false);
 
     m_table = new QTableWidget;
     m_table->setObjectName(QStringLiteral("expenseTable"));
@@ -164,6 +167,7 @@ void ExpensesPage::refresh()
     m_summary->setText(tr("مصاريف اليوم: %1  |  سحوبات اليوم: %2")
                            .arg(formatMoney(expenseTotal))
                            .arg(formatMoney(drawingTotal)));
+    m_summary->setVisible(!m_summary->text().isEmpty());
 }
 
 int ExpensesPage::entryCount() const
@@ -235,44 +239,53 @@ void ExpensesPage::onDrawingClicked()
 void ExpensesPage::recordExpense(const QString& label, long long amountCents)
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
         m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::CashEntryService service(m_db);
     const data::CashEntryResult result = service.recordExpense(label, amountCents, session->id);
     if (!result.ok) {
         m_notice->setText(tr("تعذر تسجيل المصروف: %1").arg(result.error));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     m_notice->setText(tr("سُجّل مصروف: %1 — %2").arg(formatMoney(result.amountCents), label));
+    m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
 
 void ExpensesPage::recordDrawing(const QString& note, long long amountCents)
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     data::CashSessionRepository sessions(m_db);
     const auto session = sessions.findOpen();
     if (!session) {
         m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     data::CashEntryService service(m_db);
     const data::CashEntryResult result = service.recordDrawing(note, amountCents, session->id);
     if (!result.ok) {
         m_notice->setText(tr("تعذر تسجيل السحب: %1").arg(result.error));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     m_notice->setText(tr("سُجّل سحب: %1").arg(formatMoney(result.amountCents)));
+    m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
 
 void ExpensesPage::reverseRow(int row)
 {
     m_notice->clear();
+    m_notice->setVisible(false);
     if (row < 0 || row >= m_table->rowCount()) {
         return;
     }
@@ -287,6 +300,7 @@ void ExpensesPage::reverseRow(int row)
     const auto session = sessions.findOpen();
     if (!session) {
         m_notice->setText(tr("لا توجد جلسة مفتوحة — افتح جلسة الصندوق أولاً"));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
 
@@ -296,6 +310,7 @@ void ExpensesPage::reverseRow(int row)
                                   : service.reverseDrawing(entryId, session->id);
     if (!result.ok) {
         m_notice->setText(tr("تعذر العكس: %1").arg(result.error));
+        m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
     writeAudit(m_db, QStringLiteral("entry_reversal"),
@@ -304,6 +319,7 @@ void ExpensesPage::reverseRow(int row)
                    .arg(entryId)
                    .arg(formatMoney(result.amountCents)));
     m_notice->setText(tr("أُلغي: %1").arg(formatMoney(result.amountCents)));
+    m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
 }
 

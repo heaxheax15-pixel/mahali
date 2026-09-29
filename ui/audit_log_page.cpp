@@ -27,6 +27,7 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
 
     m_summary = new QLabel;
     m_summary->setObjectName(QStringLiteral("faintText"));
+    m_summary->setVisible(false);
     m_summary->setMinimumHeight(38);
 
     m_table = new QTableWidget;
@@ -100,6 +101,7 @@ void AuditLogPage::refresh()
     }
 
     m_summary->setText(tr("عدد الأحداث: %1").arg(entries.size()));
+    m_summary->setVisible(!m_summary->text().isEmpty());
 }
 
 int AuditLogPage::rowCount() const

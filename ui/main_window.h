@@ -4,13 +4,19 @@
 
 #include "data/database.h"
 #include "server_controller.h"
+#include "widgets/app_icon.h"
+
+#include <QVector>
+
+#include <vector>
 
 class QLabel;
-class QListWidget;
 class QFrame;
 class QPropertyAnimation;
 class QPushButton;
 class QStackedWidget;
+class QVBoxLayout;
+class QWidget;
 
 namespace app::core {
 class UpdateChecker;
@@ -32,8 +38,24 @@ class SettingsPage;
 class SuppliersPage;
 class UsersPage;
 
-// The desktop shell: Arabic RTL layout, a sidebar of pages on the right, the
-// active page on the left, and a live sync status line in the status bar.
+// One line of the sidebar: the icon to draw, the label to show, and the page it
+// opens. Collected per group when the sidebar is built.
+struct NavEntry {
+    Icon icon;
+    QString label;
+    int pageIndex;
+};
+
+// A sidebar button paired with the page it opens, kept so the active one can be
+// repainted from the page the stacked widget is actually showing.
+struct NavButton {
+    QPushButton* button = nullptr;
+    int pageIndex = 0;
+};
+
+// The desktop shell: an Arabic RTL window with a top bar spanning the full
+// width, a grouped sidebar of pages on the right, the active page on the left,
+// and a live sync status line in the status bar.
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -58,10 +80,12 @@ public:
     QString occasionLabelText() const;
 
 private slots:
-    void onSyncStatusChanged();
     void onPageChanged(int row);
     void onSwitchUserClicked();
     void rebuildNav();
+    // Flips the theme between light and dark, stores the choice, and re-paints
+    // the toggle so it always offers the theme it would switch to.
+    void onThemeToggleClicked();
 
     // Update signals. Only updateAvailable touches the UI: a check that finds
     // nothing new, or that cannot reach GitHub, is logged and otherwise
@@ -82,11 +106,40 @@ private:
     void refreshOccasionLabel();
     void buildNavForRole(const QString& role);
     void showUpdateBar(const QString& tag);
+    QWidget* buildTopBar();
+    QWidget* buildSidebar();
+    // Repaints the top bar's icons for the theme in use. The icons are pixmaps,
+    // so the stylesheet cannot recolour them: they are drawn here, and every
+    // change of theme comes back through this.
+    void refreshThemeIcons();
+    void addNavGroup(const QString& title, const std::vector<NavEntry>& entries);
+    // Repaints every nav button from the page on screen, so the highlighted one
+    // always agrees with the stacked widget even after a programmatic change.
+    void refreshNavActiveState();
 
     app::data::Database& m_db;
     ServerController& m_controller;
-    QListWidget* m_nav;
+    // The sidebar's buttons, in the order they were added. The stacked widget
+    // is the source of truth for which page is showing; this only holds the
+    // widgets so the active one can be repainted.
+    std::vector<NavButton> m_navButtons;
+    // The icon each nav button was built with, in the same order as
+    // m_navButtons. The buttons are rebuilt from scratch when the role changes,
+    // so this is cleared and refilled alongside them; keeping the icon beside
+    // the button is what lets the sidebar be recoloured without rebuilding it.
+    QVector<Icon> m_navIcons;
+    // The group's layout buttons are added to. Kept so a role change can clear
+    // the sidebar without rebuilding the whole window.
+    QWidget* m_sidebar = nullptr;
+    // The column the nav groups are added to. Held so a role change can empty
+    // it and build the groups again without rebuilding the window.
+    QVBoxLayout* m_sidebarGroupLayout = nullptr;
     QStackedWidget* m_pages;
+    // The strip above the sidebar and the pages. Kept so the icons on it can be
+    // repainted when the theme changes, rather than only at construction.
+    QWidget* m_topBar = nullptr;
+    QPushButton* m_themeToggle = nullptr;
+    QPushButton* m_settingsBtn = nullptr;
     // Created lazily, on the first newer release, so the app opens with no bar
     // at all rather than an empty one.
     QFrame* m_updateBar = nullptr;
@@ -96,12 +149,16 @@ private:
     // button they belong to without hunting for it.
     QPushButton* m_updateDownloadBtn = nullptr;
     QPushButton* m_updateRestartBtn = nullptr;
-    QLabel* m_statusLabel;
+    // The signed-in user, as one string: the prefix and the name together, so
+    // the layout cannot put the name on the wrong side of the colon.
     QLabel* m_userLabel = nullptr;
     // Shows the occasion running right now, and stays empty when there is none.
     // Always present rather than created on demand, so activation and
     // deactivation only have to change its text.
     QLabel* m_occasionLabel = nullptr;
+    // The app's mark. A pixmap, which a stylesheet cannot recolour, so it is
+    // redrawn by refreshThemeIcons along with the buttons rather than styled.
+    QLabel* m_brandIcon = nullptr;
     QPropertyAnimation* m_fade = nullptr;
     PosPage* m_pos = nullptr;
     CashSessionPage* m_cashSession = nullptr;

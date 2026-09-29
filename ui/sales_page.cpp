@@ -72,6 +72,7 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_summary = new QLabel;
     m_summary->setWordWrap(true);
     m_summary->setObjectName(QStringLiteral("infoBar"));
+    m_summary->setVisible(false);
     m_summary->setMinimumHeight(48);
 
     m_table = new QTableWidget;
@@ -157,6 +158,7 @@ void SalesPage::refresh()
                            .arg(ordered.size())
                            .arg(formatMoney(total))
                            .arg(formatMoney(total - cogs)));
+    m_summary->setVisible(!m_summary->text().isEmpty());
 }
 
 int SalesPage::rowCount() const
@@ -212,6 +214,7 @@ void SalesPage::showDetails()
     }
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    buttons->button(QDialogButtonBox::Close)->setText(tr("Fermer"));
     for (QAbstractButton* b : buttons->buttons()) {
         if (auto* pb = qobject_cast<QPushButton*>(b)) {
             pb->setAutoDefault(false);

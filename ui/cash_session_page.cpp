@@ -55,6 +55,7 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     m_openButton = new QPushButton(tr("ابدأ جلسة"));
+    m_openButton->setObjectName(QStringLiteral("primary"));
     m_openButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     m_closeButton = new QPushButton(tr("أغلق الجلسة"));
     m_closeButton->setObjectName(QStringLiteral("danger"));
@@ -84,8 +85,10 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     m_summary->setWordWrap(true);
     m_variance = new QLabel(this);
     m_variance->setWordWrap(true);
-    m_summary->hide();
-    m_variance->hide();
+    // Both bars are filled by refresh(); an empty one would still hold its place
+    // in the layout, so neither starts visible.
+    m_summary->setVisible(false);
+    m_variance->setVisible(false);
 
     m_table = new QTableWidget;
     m_table->setObjectName(QStringLiteral("cashSessionTable"));
@@ -124,6 +127,7 @@ void CashSessionPage::refresh()
 {
     m_table->setRowCount(0);
     m_variance->clear();
+    m_variance->setVisible(false);
     m_sessionId = 0;
     m_expectedCents = 0;
     m_hasOpen = false;
@@ -141,6 +145,7 @@ void CashSessionPage::refresh()
                                       .arg(formatMoney(m_lastVarianceCents)));
         }
         m_summary->setText(tr("لا توجد جلسة مفتوحة حالياً."));
+        m_summary->setVisible(!m_summary->text().isEmpty());
         m_openButton->setEnabled(true);
         m_closeButton->setEnabled(false);
         return;
@@ -164,6 +169,7 @@ void CashSessionPage::refresh()
                            .arg(formatMoney(session->openingFloatCents))
                            .arg(formatMoney(movementSum))
                            .arg(formatMoney(m_expectedCents)));
+    m_summary->setVisible(!m_summary->text().isEmpty());
 
     for (const core::CashMovement& movement : movements.findBySessionId(session->id)) {
         const int row = m_table->rowCount();
@@ -213,10 +219,12 @@ void CashSessionPage::openSession(long long openingFloatCents)
     const int id = sessions.open(openingFloatCents);
     if (id == 0) {
         m_summary->setText(tr("تعذر فتح الجلسة."));
+        m_summary->setVisible(!m_summary->text().isEmpty());
         return;
     }
     m_lastVarianceCents = 0;
     m_variance->clear();
+    m_variance->setVisible(false);
     refresh();
 }
 
@@ -234,6 +242,7 @@ void CashSessionPage::closeSession(long long closingCountedCents)
     const long long variance = core::CashSessionCalculator::varianceCents(closingCountedCents, expected);
     if (!sessions.close(session->id, closingCountedCents, expected, variance)) {
         m_summary->setText(tr("تعذر إغلاق الجلسة."));
+        m_summary->setVisible(!m_summary->text().isEmpty());
         return;
     }
     m_lastVarianceCents = variance;
@@ -242,6 +251,7 @@ void CashSessionPage::closeSession(long long closingCountedCents)
                             .arg(formatMoney(expected))
                             .arg(formatMoney(variance),
                                  variance < 0 ? tr("عجز في الصندوق") : tr("زيادة في الصندوق")));
+    m_variance->setVisible(!m_variance->text().isEmpty());
     refresh();
 }
 

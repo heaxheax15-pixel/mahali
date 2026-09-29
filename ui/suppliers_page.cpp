@@ -1,5 +1,6 @@
 #include "suppliers_page.h"
 
+#include <QIcon>
 #include <QAbstractButton>
 #include <QCoreApplication>
 #include <QDialog>
@@ -38,6 +39,12 @@ std::optional<core::Supplier> supplierDialog(QWidget* parent, bool forNew, const
     form->addRow(QCoreApplication::translate("app::ui::SuppliersPage", "الاسم"), name);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
+    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
+    okBtn->setText(QStringLiteral("OK"));
+    cancelBtn->setText(QStringLiteral("Annuler"));
+    okBtn->setIcon(QIcon());
+    cancelBtn->setIcon(QIcon());
     for (QAbstractButton* b : buttons->buttons()) {
         if (auto* pb = qobject_cast<QPushButton*>(b)) {
             pb->setAutoDefault(false);
@@ -69,6 +76,7 @@ SuppliersPage::SuppliersPage(app::data::Database& db, QWidget* parent)
     , m_db(db)
 {
     auto* add = new QPushButton(tr("إضافة مورد"));
+    add->setObjectName(QStringLiteral("primary"));
     add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* edit = new QPushButton(tr("تعديل"));
     edit->setObjectName(QStringLiteral("secondary"));

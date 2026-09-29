@@ -1,5 +1,6 @@
 #include "products_page.h"
 
+#include <QIcon>
 #include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
@@ -63,6 +64,12 @@ std::optional<core::Product> productDialog(QWidget* parent, bool forNew, const c
     form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "مُفعّل"), active);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
+    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
+    okBtn->setText(QStringLiteral("OK"));
+    cancelBtn->setText(QStringLiteral("Annuler"));
+    okBtn->setIcon(QIcon());
+    cancelBtn->setIcon(QIcon());
     // A barcode scanner appends Enter to every scan, so no button may claim the
     // default action: Enter must walk the form instead of saving and closing.
     for (QAbstractButton* b : buttons->buttons()) {
@@ -127,6 +134,12 @@ std::optional<StockAdjustment> stockDialog(QWidget* parent, const QString& produ
     form->addRow(QCoreApplication::translate("app::ui::ProductsPage", "السبب"), reason);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
+    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
+    okBtn->setText(QStringLiteral("OK"));
+    cancelBtn->setText(QStringLiteral("Annuler"));
+    okBtn->setIcon(QIcon());
+    cancelBtn->setIcon(QIcon());
     for (QAbstractButton* b : buttons->buttons()) {
         if (auto* pb = qobject_cast<QPushButton*>(b)) {
             pb->setAutoDefault(false);
@@ -163,6 +176,7 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     m_search->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
                         QLineEdit::LeadingPosition);
     m_add = new QPushButton(tr("إضافة منتج"));
+    m_add->setObjectName(QStringLiteral("primary"));
     m_add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     m_edit = new QPushButton(tr("تعديل"));
     m_edit->setObjectName(QStringLiteral("secondary"));

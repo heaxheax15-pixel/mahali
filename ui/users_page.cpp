@@ -1,5 +1,6 @@
 #include "users_page.h"
 
+#include <QIcon>
 #include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
@@ -68,6 +69,12 @@ std::optional<core::User> userDialog(QWidget* parent, bool forNew, const core::U
     form->addRow(QCoreApplication::translate("app::ui::UsersPage", "نشط"), active);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
+    QPushButton* cancelBtn = buttons->button(QDialogButtonBox::Cancel);
+    okBtn->setText(QStringLiteral("OK"));
+    cancelBtn->setText(QStringLiteral("Annuler"));
+    okBtn->setIcon(QIcon());
+    cancelBtn->setIcon(QIcon());
     for (QAbstractButton* b : buttons->buttons()) {
         if (auto* pb = qobject_cast<QPushButton*>(b)) {
             pb->setAutoDefault(false);
@@ -114,6 +121,7 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
         tr("إدارة حسابات الكاشيرين وصلاحياتهم"));
 
     m_add = new QPushButton(tr("إضافة كاشير"));
+    m_add->setObjectName(QStringLiteral("primary"));
     m_add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     connect(m_add, &QPushButton::clicked, this, &UsersPage::onAddClicked);
 

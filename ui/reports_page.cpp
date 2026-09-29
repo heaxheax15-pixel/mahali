@@ -75,6 +75,7 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     m_summary = new QLabel;
     m_summary->setWordWrap(true);
     m_summary->setObjectName(QStringLiteral("infoBar"));
+    m_summary->setVisible(false);
     m_summary->setMinimumHeight(50);
 
     m_costs = new QLabel;
@@ -206,6 +207,7 @@ void ReportsPage::rebuild()
                            .arg(formatMoney(m_report.revenueCents))
                            .arg(formatMoney(m_report.grossProfitCents))
                            .arg(formatMoney(m_report.netProfitCents)));
+    m_summary->setVisible(!m_summary->text().isEmpty());
 
     m_costs->setText(tr("تكلفة المبيعات: %1  |  المصاريف: %2  |  السحوبات: %3")
                          .arg(formatMoney(m_report.cogsCents))

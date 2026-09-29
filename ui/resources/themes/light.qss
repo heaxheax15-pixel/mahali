@@ -1,10 +1,10 @@
 /* ============================================================
    mahali — light theme
    Design tokens
-     bg #fafaf9   surface #ffffff   border #e7e5e4
-     text #1c1917 text2 #57534e     muted #a8a29e
-     primary #ea580c  primaryHover #c2410c  primarySoft #ffedd5
-     success #16a34a  danger #dc2626  warning #d97706  hover #f5f5f4
+     bg #f8fafc   surface #ffffff   border #e2e8f0
+     text #0f172a text2 #64748b     muted #94a3b8
+     primary #2563eb  primaryHover #1d4ed8  primarySoft #dbeafe
+     success #16a34a  danger #dc2626  warning #d97706  hover #f1f5f9
      radius: button 8  input 10  card 16  chip 999
      size:   input 44  button 42  navItem 48  tableRow 46
    ============================================================ */
@@ -12,92 +12,127 @@
 /* ---------- 1. عام ---------- */
 * {
     font-size: 15px;
-    color: #1c1917;
+    color: #0f172a;
     outline: 0;
 }
 
 QMainWindow,
 QWidget#content,
 QMessageBox {
-    background: #fafaf9;
+    background: #f8fafc;
 }
 
 QDialog {
-    background: #fafaf9;
+    background: #f8fafc;
+}
+
+/* Buttons inside dialogs get their own scale. They inherit the global button
+   rules otherwise, which are sized for the tall chrome of the shell, and the
+   default one picks up the gold primary that only reads as a call to action on
+   a page. */
+QDialog QPushButton {
+    background-color: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 36px;
+}
+
+QDialog QPushButton:hover {
+    background-color: #f1f5f9;
+}
+
+QDialog QPushButton:default {
+    background-color: #2563eb;
+    color: #ffffff;
+    border: 1px solid #2563eb;
 }
 
 QWidget#loginDialog {
-    background: #fafaf9;
+    background: #f8fafc;
     padding: 32px;
 }
 
 /* ---------- 2. النصوص ---------- */
 QLabel {
-    color: #1c1917;
+    color: #0f172a;
 }
 
+/* The wordmark in the top bar: the app's name is the whole of its identity for
+   now, so it is set a step above the page titles it sits beside. */
 QLabel#appTitle {
-    color: #fafaf9;
-    font-size: 24px;
+    color: #0f172a;
+    font-size: 20px;
     font-weight: bold;
 }
 
 QLabel#appSub {
-    color: #a8a29e;
+    color: #475569;
     font-size: 13px;
     font-weight: 600;
 }
 
 QLabel#pageHeaderTitle {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 24px;
     font-weight: bold;
 }
 
 QLabel#pageHeaderSubtitle {
-    color: #57534e;
+    color: #64748b;
     font-size: 13px;
     font-weight: 600;
 }
 
 QLabel#cardTitle {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 16px;
     font-weight: bold;
 }
 
 QLabel#sectionTitle {
-    color: #57534e;
+    color: #64748b;
     font-size: 13px;
     font-weight: bold;
 }
 
 QLabel#hint,
 QLabel#faintText {
-    color: #57534e;
+    color: #64748b;
     font-size: 13px;
 }
 
 QLabel#userLabel {
-    color: #57534e;
+    color: #64748b;
     font-size: 13px;
     font-weight: 600;
 }
 
+/* The name sits beside its "المستخدم:" prefix, so it carries the weight the
+   prefix does not. */
+QLabel#userNameLabel {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 700;
+}
+
 QLabel#loginHeader {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 24px;
     font-weight: bold;
 }
 
 QLabel#loginSubtitle {
-    color: #57534e;
+    color: #64748b;
     font-size: 13px;
 }
 
 QLabel#pinLabel,
 QLabel#setupTitle {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 16px;
     font-weight: bold;
 }
@@ -110,19 +145,19 @@ QLabel#setupError {
 }
 
 QLabel#heroValue {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 32px;
     font-weight: bold;
 }
 
 QLabel#heroCaption {
-    color: #57534e;
+    color: #64748b;
     font-size: 13px;
     font-weight: 600;
 }
 
 QLabel#statValue {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 26px;
     font-weight: bold;
 }
@@ -136,11 +171,11 @@ QLabel#statValue[deltaState="negative"] {
 }
 
 QLabel#statValue[deltaState="neutral"] {
-    color: #57534e;
+    color: #64748b;
 }
 
 QLabel#statLabel {
-    color: #57534e;
+    color: #64748b;
     font-size: 13px;
     font-weight: 600;
 }
@@ -164,8 +199,8 @@ QLabel#noticeErr {
 }
 
 QLabel#infoBar {
-    background: #ffedd5;
-    color: #c2410c;
+    background: #dbeafe;
+    color: #1d4ed8;
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 13px;
@@ -191,8 +226,8 @@ QLabel[state="danger"] {
 }
 
 QLabel[state="muted"] {
-    background: #f5f5f4;
-    color: #57534e;
+    background: #f1f5f9;
+    color: #64748b;
     border-radius: 999px;
     padding: 4px 12px;
     font-size: 13px;
@@ -200,8 +235,8 @@ QLabel[state="muted"] {
 }
 
 QLabel[state="info"] {
-    background: #ffedd5;
-    color: #c2410c;
+    background: #dbeafe;
+    color: #1d4ed8;
     border-radius: 999px;
     padding: 4px 12px;
     font-size: 13px;
@@ -210,9 +245,9 @@ QLabel[state="info"] {
 
 /* ---------- 3. الأزرار ---------- */
 QPushButton {
-    background: #ea580c;
+    background: #2563eb;
     color: #ffffff;
-    border: 1px solid #ea580c;
+    border: 1px solid #2563eb;
     border-radius: 8px;
     min-height: 42px;
     padding: 8px 18px;
@@ -221,47 +256,73 @@ QPushButton {
 }
 
 QPushButton:hover {
-    background: #c2410c;
-    border-color: #c2410c;
+    background: #1d4ed8;
+    border-color: #1d4ed8;
 }
 
 QPushButton:pressed {
-    background: #c2410c;
-    border-color: #c2410c;
+    background: #1d4ed8;
+    border-color: #1d4ed8;
 }
 
 QPushButton:disabled {
-    background: #f5f5f4;
-    color: #a8a29e;
-    border-color: #e7e5e4;
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
 }
 
 QPushButton#primary {
-    background: #ea580c;
+    background-color: #2563eb;
     color: #ffffff;
-    border-color: #ea580c;
+    border: 1px solid #1d4ed8;
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    min-height: 40px;
 }
 
 QPushButton#primary:hover {
-    background: #c2410c;
-    border-color: #c2410c;
+    background-color: #1d4ed8;
+    border: 1px solid #1e40af;
 }
 
 QPushButton#secondary {
     background: #ffffff;
-    color: #1c1917;
-    border-color: #e7e5e4;
+    color: #0f172a;
+    border-color: #e2e8f0;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 8px 16px;
 }
 
 QPushButton#secondary:hover {
-    background: #f5f5f4;
-    border-color: #e7e5e4;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+/* "Vérifier les mises à jour" is a low-emphasis action, not a command the
+   operator has to notice. It keeps the base button's height and hit area but
+   drops the fill, so it does not compete with the primary button above it. */
+QPushButton#linkButton {
+    background: transparent;
+    border: none;
+    color: #2563eb;
+    text-decoration: underline;
+    padding: 4px 8px;
+}
+
+QPushButton#linkButton:hover {
+    color: #1d4ed8;
 }
 
 QPushButton#danger {
     background: #dc2626;
     color: #ffffff;
     border-color: #dc2626;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 8px 16px;
 }
 
 QPushButton#danger:hover {
@@ -271,8 +332,8 @@ QPushButton#danger:hover {
 
 QPushButton#userButton {
     background: #ffffff;
-    color: #1c1917;
-    border: 1px solid #e7e5e4;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
     min-height: 42px;
     padding: 8px 12px;
@@ -282,14 +343,14 @@ QPushButton#userButton {
 }
 
 QPushButton#userButton:hover {
-    background: #f5f5f4;
-    border-color: #ea580c;
+    background: #f1f5f9;
+    border-color: #2563eb;
 }
 
 QToolButton {
     background: #ffffff;
-    color: #1c1917;
-    border: 1px solid #e7e5e4;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
     min-height: 42px;
     padding: 8px 12px;
@@ -298,13 +359,13 @@ QToolButton {
 }
 
 QToolButton:hover {
-    background: #f5f5f4;
-    border-color: #e7e5e4;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
 }
 
 QCheckBox {
     spacing: 8px;
-    color: #1c1917;
+    color: #0f172a;
     font-size: 15px;
 }
 
@@ -312,17 +373,17 @@ QCheckBox::indicator {
     width: 18px;
     height: 18px;
     border-radius: 8px;
-    border: 1px solid #e7e5e4;
+    border: 1px solid #e2e8f0;
     background: #ffffff;
 }
 
 QCheckBox::indicator:hover {
-    border-color: #ea580c;
+    border-color: #2563eb;
 }
 
 QCheckBox::indicator:checked {
-    background: #ea580c;
-    border-color: #ea580c;
+    background: #2563eb;
+    border-color: #2563eb;
 }
 
 /* ---------- 4. الحقول ---------- */
@@ -336,13 +397,13 @@ QDateTimeEdit,
 QPlainTextEdit,
 QTextEdit {
     background: #ffffff;
-    color: #1c1917;
-    border: 1px solid #e7e5e4;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
     border-radius: 10px;
     min-height: 44px;
     padding: 8px 12px;
     font-size: 15px;
-    selection-background-color: #ea580c;
+    selection-background-color: #2563eb;
     selection-color: #ffffff;
 }
 
@@ -354,16 +415,16 @@ QDateEdit:focus,
 QTimeEdit:focus,
 QPlainTextEdit:focus,
 QTextEdit:focus {
-    border: 2px solid #ea580c;
+    border: 2px solid #2563eb;
     padding: 7px 11px;
 }
 
 QLineEdit:disabled,
 QSpinBox:disabled,
 QComboBox:disabled {
-    background: #f5f5f4;
-    color: #a8a29e;
-    border-color: #e7e5e4;
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
 }
 
 QLineEdit#searchField {
@@ -379,8 +440,8 @@ QLineEdit#setupNameInput,
 QLineEdit#setupRecoveryInput,
 QLineEdit#setupConfirmInput {
     background: #ffffff;
-    color: #1c1917;
-    border: 1px solid #e7e5e4;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
     border-radius: 10px;
     min-height: 44px;
     padding: 8px 12px;
@@ -393,15 +454,15 @@ QLineEdit#setupPinInput:focus,
 QLineEdit#setupNameInput:focus,
 QLineEdit#setupRecoveryInput:focus,
 QLineEdit#setupConfirmInput:focus {
-    border: 2px solid #ea580c;
+    border: 2px solid #2563eb;
     padding: 7px 11px;
 }
 
 QComboBox#languageCombo,
 QComboBox#languageCombo:focus {
     background: #ffffff;
-    color: #1c1917;
-    border: 1px solid #e7e5e4;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
     border-radius: 10px;
     min-height: 44px;
     padding: 8px 12px;
@@ -418,22 +479,33 @@ QComboBox::down-arrow {
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 6px solid #57534e;
+    border-top: 6px solid #64748b;
     margin-right: 8px;
 }
 
 QComboBox QAbstractItemView {
-    background: #ffffff;
-    color: #1c1917;
-    border: 1px solid #e7e5e4;
-    border-radius: 10px;
-    selection-background-color: #ffedd5;
-    selection-color: #1c1917;
+    background-color: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 4px;
+    selection-background-color: #dbeafe;
+    selection-color: #2563eb;
     outline: 0;
+    min-height: 32px;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 6px 10px;
+    min-height: 32px;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    background-color: #dbeafe;
 }
 
 QCalendarWidget QWidget {
-    alternate-background-color: #f5f5f4;
+    alternate-background-color: #f1f5f9;
 }
 
 /* ---------- 5. الجداول ---------- */
@@ -441,24 +513,43 @@ QTableView,
 QTableWidget,
 QListWidget {
     background: #ffffff;
-    color: #1c1917;
-    border: 1px solid #e7e5e4;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
     border-radius: 16px;
-    gridline-color: #f5f5f4;
-    alternate-background-color: #fafaf9;
-    selection-background-color: #ffedd5;
-    selection-color: #1c1917;
+    gridline-color: #f1f5f9;
+    alternate-background-color: #f8fafc;
+    selection-background-color: #dbeafe;
+    selection-color: #0f172a;
     outline: 0;
 }
 
 QHeaderView::section {
-    background: #fafaf9;
-    color: #57534e;
+    background: #f8fafc;
+    color: #64748b;
     border: none;
-    border-bottom: 1px solid #e7e5e4;
+    border-bottom: 1px solid #e2e8f0;
     padding: 10px 10px;
     font-size: 13px;
     font-weight: bold;
+}
+
+/* The corner square where the vertical and horizontal headers meet. With no
+   rule of its own it falls through to the system palette, which is near-black
+   on a dark desktop — a black block in the corner of every table. The colour
+   is the header's own so the two read as one strip. */
+QTableCornerButton::section {
+    background: #f8fafc;
+    border: none;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* The same rule, scoped to the table. Qt has resolved the corner button's
+   subcontrol inconsistently between versions, and a selector that does not
+   match is dropped silently, so the descendant form is kept alongside it. */
+QTableWidget QTableCornerButton::section {
+    background: #f8fafc;
+    border: none;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 QTableWidget::item {
@@ -473,22 +564,16 @@ QListWidget::item {
 
 /* ---------- 6. القائمة الجانبية ---------- */
 QWidget#sidebar {
-    background: #1c1917;
+    background: #f1f5f9;
     border: none;
-    border-left: 1px solid #292524;
+    border-left: 1px solid #e2e8f0;
     padding: 12px 0 8px 0;
 }
 
-QLabel#brandIcon {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 10px;
-}
-
 QPushButton#about {
-    background: #292524;
-    color: #f5f5f4;
-    border: 1px solid #44403c;
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #cbd5e1;
     border-radius: 8px;
     min-height: 42px;
     padding: 8px 16px;
@@ -497,35 +582,92 @@ QPushButton#about {
 }
 
 QPushButton#about:hover {
-    background: #44403c;
-    color: #fafaf9;
+    background: #e2e8f0;
+    color: #0f172a;
 }
 
-QListWidget#nav {
+/* The top bar sits above the sidebar, so it carries its own surface and the
+   hairline that separates it from the rail underneath. */
+QWidget#topBar {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* The brand moved out of the rail into the top bar, so it reads as a header
+   rather than as a page. The mark itself is a pixmap drawn by the window, which
+   a stylesheet cannot recolour, so the label only supplies the ground it sits
+   on. */
+
+/* The rail's buttons are grouped under small headings. The title sits in the
+   muted text colour rather than the faintest one: at 12px it is the only thing
+   telling the operator where one group ends and the next begins. */
+QLabel#navGroupTitle {
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 20px 20px 4px 12px;
     background: transparent;
-    border: none;
-    padding: 10px 8px 6px 8px;
 }
 
-QListWidget#nav::item {
-    color: #a8a29e;
-    height: 48px;
-    border-radius: 8px;
-    margin: 4px 8px;
+QPushButton#navItem {
+    background: transparent;
+    color: #475569;
+    border: none;
+    border-radius: 10px;
+    min-height: 44px;
     padding: 0 12px;
     font-size: 15px;
     font-weight: 600;
+    text-align: right;
 }
 
-QListWidget#nav::item:hover {
-    background: #292524;
-    color: #fafaf9;
+QPushButton#navItem:hover {
+    background: #e2e8f0;
+    color: #0f172a;
 }
 
-QListWidget#nav::item:selected {
-    background: #ea580c;
-    color: #ffffff;
+/* The active page is marked with a tinted ground and a rule on the list's
+   leading edge, so it reads as "where you are" instead of a second button.
+   border-right is the leading edge under RTL, which is where the marker goes. */
+QPushButton#navItem[active="true"] {
+    background-color: rgba(37, 99, 235, 0.12);
+    color: #2563eb;
+    border-right: 3px solid #2563eb;
     font-weight: bold;
+}
+
+/* The search in the top bar is the widest single control, so it gets the input
+   height and a soft fill to separate it from the bar around it. */
+
+
+QLabel#occasionLabel {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Square icon buttons (theme, settings) in the top bar. The border is always
+   there rather than only on hover: it gives the button a hit area the operator
+   can see, which a transparent rule does not. */
+/* The two controls in the top bar that carry a character instead of a pixmap.
+   Without an explicit size the glyphs fall back to the app's 9pt and read as
+   specks next to the wordmark. */
+QPushButton#iconButton {
+    background: transparent;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    min-height: 0px;
+    padding: 4px;
+    color: #0f172a;
+    font-size: 18px;
+}
+
+QPushButton#iconButton:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
 }
 
 /* ---------- 7. البطاقات ---------- */
@@ -533,59 +675,67 @@ QFrame#card,
 QWidget#pageHeader,
 QFrame#statCard {
     background: #ffffff;
-    border: 1px solid #e7e5e4;
+    border: 1px solid #e2e8f0;
     border-radius: 16px;
+}
+
+/* The icon well inside a stat card. Without a rule the label is a bare
+   pixmap on the card, which reads as a smudge rather than as a mark. */
+QFrame#statCard QLabel#statIcon {
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 8px;
+    padding: 4px;
 }
 
 QFrame#heroPanel {
     background: #ffffff;
-    border: 1px solid #e7e5e4;
+    border: 1px solid #e2e8f0;
     border-radius: 16px;
 }
 
 /* شريط المنتجات السريعة: بطاقات 140x100 داخل شريط أفقي */
 QWidget#quickItemsBar {
     background: #ffffff;
-    border: 1px solid #e7e5e4;
+    border: 1px solid #e2e8f0;
     border-radius: 16px;
 }
 
 QWidget#quickItemsBar QFrame#quickCard {
-    background: #f5f5f4;
-    border: 1px solid #e7e5e4;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
     border-radius: 10px;
 }
 
 QWidget#quickItemsBar QFrame#quickCard:hover {
-    background: #ffedd5;
-    border: 1px solid #ea580c;
+    background: #dbeafe;
+    border: 1px solid #2563eb;
 }
 
 QWidget#quickItemsBar QLabel#quickName {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 13px;
 }
 
 QWidget#quickItemsBar QLabel#quickPrice {
-    color: #1c1917;
+    color: #0f172a;
     font-size: 15px;
     font-weight: bold;
 }
 
 QWidget#quickItemsBar QLabel#quickEmpty {
-    color: #a8a29e;
+    color: #94a3b8;
     font-size: 14px;
 }
 
 QLabel#statIcon {
-    background: #ffedd5;
-    border: 1px solid #ffedd5;
+    background: #dbeafe;
+    border: 1px solid #dbeafe;
     border-radius: 10px;
 }
 
 QGroupBox {
     background: #ffffff;
-    border: 1px solid #e7e5e4;
+    border: 1px solid #e2e8f0;
     border-radius: 16px;
     margin-top: 16px;
     padding: 16px 18px;
@@ -595,14 +745,14 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     padding: 0 8px;
-    color: #57534e;
+    color: #64748b;
 }
 
 /* ---------- 8. الشرائط ---------- */
 QStatusBar {
     background: #ffffff;
-    color: #57534e;
-    border-top: 1px solid #e7e5e4;
+    color: #64748b;
+    border-top: 1px solid #e2e8f0;
 }
 
 QStatusBar::item {
@@ -611,21 +761,23 @@ QStatusBar::item {
 
 /* the status bar is 36px tall, so its buttons ignore the global button min-height */
 QStatusBar QPushButton {
-    min-height: 0px;
+    background-color: transparent;
+    color: #2563eb;
+    border: 1px solid #2563eb;
+    border-radius: 6px;
     padding: 4px 12px;
-    font-size: 13px;
-}
-
-QStatusBar QLabel#statusLabel {
-    color: #57534e;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
+    min-height: 0px;
 }
 
+QStatusBar QPushButton:hover {
+    background-color: #dbeafe;
+}
 QToolTip {
-    background: #1c1917;
-    color: #fafaf9;
-    border: 1px solid #44403c;
+    background: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
     border-radius: 8px;
     padding: 6px 8px;
     font-size: 13px;
@@ -638,13 +790,13 @@ QScrollBar:vertical {
 }
 
 QScrollBar::handle:vertical {
-    background: #a8a29e;
+    background: #94a3b8;
     border-radius: 8px;
     min-height: 24px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #57534e;
+    background: #64748b;
 }
 
 QScrollBar:horizontal {
@@ -654,13 +806,30 @@ QScrollBar:horizontal {
 }
 
 QScrollBar::handle:horizontal {
-    background: #a8a29e;
+    background: #94a3b8;
     border-radius: 8px;
     min-width: 24px;
 }
 
 QScrollBar::handle:horizontal:hover {
-    background: #57534e;
+    background: #64748b;
+}
+
+/* The gaps a scrollbar leaves around its handle, and the arrow buttons. Neither
+   has a rule, so both fall through to the system palette, which is near-black
+   on a dark desktop: a dark stripe down the side of every table. The arrows are
+   sized away entirely, so the handle is the whole control. */
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
+
+QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical,
+QScrollBar::left-arrow:horizontal, QScrollBar::right-arrow:horizontal {
+    background: transparent;
+    border: none;
+    width: 0px;
+    height: 0px;
 }
 
 QScrollBar::add-line,
@@ -674,13 +843,13 @@ QScrollBar::sub-line {
    above the sidebar. It carries its own colours so it reads as a notice
    rather than as part of the page behind it. */
 QFrame#updateBar {
-    background: #ffedd5;
+    background: #dbeafe;
     border-radius: 10px;
     padding: 10px;
 }
 
 QFrame#updateBar QLabel {
-    color: #ea580c;
+    color: #2563eb;
     font-weight: 700;
 }
 
@@ -688,11 +857,11 @@ QFrame#updateBar QLabel {
    the primary "تنزيل" next to it. */
 QPushButton#ghost {
     background: #ffffff;
-    color: #1c1917;
-    border-color: #e7e5e4;
+    color: #0f172a;
+    border-color: #e2e8f0;
 }
 
 QPushButton#ghost:hover {
-    background: #f5f5f4;
-    border-color: #e7e5e4;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
 }

@@ -55,6 +55,7 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
     m_notice->setObjectName(QStringLiteral("noticeOk"));
+    m_notice->setVisible(false);
 
     auto* form = new QFormLayout;
     form->setSpacing(10);
@@ -66,7 +67,7 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     form->addRow(tr("مفتاح المزامنة (يتطلب إعادة تشغيل):"), m_syncKey);
 
     m_checkUpdates = new QPushButton(tr("Vérifier les mises à jour"));
-    m_checkUpdates->setObjectName(QStringLiteral("secondary"));
+    m_checkUpdates->setObjectName(QStringLiteral("linkButton"));
     m_checkUpdates->setCursor(Qt::PointingHandCursor);
 
     auto* card = makeCard();
@@ -94,7 +95,11 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     connect(m_theme, &QComboBox::currentIndexChanged, this,
             [this]() {
                 applyTheme(m_theme->currentData().toString(), *qApp);
+                // Announced before the notice, so the shell's icons are already
+                // the new colour by the time the page says the theme changed.
+                emit themeChanged();
                 m_notice->setText(tr("طُبّقت السمة الجديدة — احفظ للإبقاء عليها"));
+                m_notice->setVisible(!m_notice->text().isEmpty());
             });
 
     // Phase A1: the choice is stored and the catalogue is swapped in, but the
@@ -160,8 +165,12 @@ void SettingsPage::refresh()
     m_shopName->setText(settings.value(QStringLiteral("shop_name")).value_or(QString()));
     m_currency->setText(settings.value(QStringLiteral("currency_symbol")).value_or(QString()));
     m_syncKey->setText(settings.value(QStringLiteral("sync_hmac_key")).value_or(QStringLiteral("mahali-local-key")));
+    // Blocked for the same reason as the language below: restoring the stored
+    // value is not a change the operator made, and letting the handler run would
+    // re-apply the theme and re-announce it every time the page is opened.
     const QString theme = settings.value(QStringLiteral("theme")).value_or(QStringLiteral("light"));
     const int idx = m_theme->findData(theme);
+    const QSignalBlocker themeBlocker(m_theme);
     m_theme->setCurrentIndex(idx >= 0 ? idx : m_theme->findData(QStringLiteral("light")));
 
     // Blocked so restoring the stored value does not fire the change handler
@@ -178,6 +187,7 @@ void SettingsPage::refresh()
     m_zakat->setChecked(!enabledRow.has_value() || enabledRow->value == QLatin1String("1"));
 
     m_notice->clear();
+    m_notice->setVisible(false);
     m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));
 }
 
@@ -241,6 +251,7 @@ void SettingsPage::save()
     app::ui::setCurrencySymbol(currencySymbol());
     m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));
     m_notice->setText(tr("حُفظت الإعدادات"));
+    m_notice->setVisible(!m_notice->text().isEmpty());
 }
 
 } // namespace app::ui

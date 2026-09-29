@@ -25,6 +25,13 @@ class SettingsPage : public QWidget {
 public:
     explicit SettingsPage(app::data::Database& db, QWidget* parent = nullptr);
 
+signals:
+    // Emitted when the theme selector applies a new theme, whether or not it has
+    // been saved. The shell's icons are pixmaps that a stylesheet cannot
+    // recolour, so whoever owns them has to redraw them when this fires.
+    void themeChanged();
+
+public:
     void refresh();
 
     QString shopName() const;
