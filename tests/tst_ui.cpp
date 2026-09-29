@@ -636,7 +636,10 @@ void UiTest::barcode_dialog_does_not_close()
 
     QPushButton* addBtn = nullptr;
     for (QPushButton* b : page.findChildren<QPushButton*>()) {
-        if (b->text() == QStringLiteral("إضافة منتج")) {
+        // Matched on the object name, not the label: the button is identified by
+        // the #primary role the stylesheet keys on, so a translation of the
+        // visible text cannot silently break this lookup.
+        if (b->objectName() == QStringLiteral("primary")) {
             addBtn = b;
             break;
         }

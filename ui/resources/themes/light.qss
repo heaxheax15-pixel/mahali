@@ -865,3 +865,39 @@ QPushButton#ghost:hover {
     background: #f1f5f9;
     border-color: #e2e8f0;
 }
+
+/* ---------- شرائح تصفية المنتجات ---------- */
+QPushButton#filterChip {
+    background: transparent;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: #64748b;
+}
+QPushButton#filterChip:hover {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+}
+QPushButton#filterChipActive {
+    background: #dbeafe;
+    color: #2563eb;
+    border: 1px solid #2563eb;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* المحرر الذي يستبدله Qt عند تحرير خلية سعر أو كمية. القاعدة العامة للـ
+   QLineEdit مضبوطة لمقاس حقل نموذج (44px) فضخّ على صف ارتفاعه 42px، ولذلك
+   Gets مقاسات مضغوطة وحدود بلون أساسي تُظهر الخلية المفتوحة. */
+QTableWidget#productTable QLineEdit {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #2563eb;
+    border-radius: 4px;
+    min-height: 0;
+    padding: 4px;
+    font-size: 15px;
+}

@@ -1102,132 +1102,127 @@
 <context>
     <name>app::ui::ProductsPage</name>
     <message>
-        <location filename="../ui/products_page.cpp" line="+117"/>
-        <source>الباركود</source>
+        <location filename="../ui/products_page.cpp" line="+54"/>
+        <source>Produits</source>
+        <translation>Produits</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Gérez les articles, les prix et le stock</source>
+        <translation>Gérez les articles, les prix et le stock</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Rechercher un nom, un code-barres...</source>
+        <translation>Rechercher un nom, un code-barres...</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Tous</source>
+        <translation>Tous</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Actifs</source>
+        <translation>Actifs</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Stock bas</source>
+        <translation>Stock bas</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Stock négatif</source>
+        <translation>Stock négatif</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Ajouter</source>
+        <translation>Ajouter</translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Code-barres</source>
         <translation>Code-barres</translation>
     </message>
     <message>
         <location line="+0"/>
-        <source>الاسم</source>
+        <source>Nom</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>سعر التكلفة</source>
-        <translation>Prix de revient</translation>
+        <location line="+0"/>
+        <source>Prix rev.</source>
+        <translation>Prix rev.</translation>
     </message>
     <message>
-        <location line="+0"/>
-        <source>سعر البيع</source>
+        <location line="+1"/>
+        <source>Prix vente</source>
         <translation>Prix de vente</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>الوحدة</source>
+        <location line="+0"/>
+        <source>Qté</source>
+        <translation>Qté</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Unité</source>
         <translation>Unité</translation>
     </message>
     <message>
-        <location line="-76"/>
-        <source>تعديل المخزون — %1</source>
-        <translation>Ajustement du stock — %1</translation>
-    </message>
-    <message>
-        <location line="+7"/>
-        <source>توريد جديد</source>
-        <translation>Nouveau réapprovisionnement</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>تعديل يدوي</source>
-        <translation>Ajustement manuel</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>تالف / منتهي</source>
-        <translation>Abîmé / périmé</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>الكمية (+توريد / -خسارة)</source>
-        <translation>Quantité (+réappro / -perte)</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>السبب</source>
-        <translation>Motif</translation>
-    </message>
-    <message>
-        <location line="+40"/>
-        <source>بحث بالباركود أو الاسم...</source>
-        <translation>Rechercher par code-barres ou nom...</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>إضافة منتج</source>
-        <translation>Ajouter un produit</translation>
-    </message>
-    <message>
-        <location line="+3"/>
-        <source>تعديل</source>
-        <translation>Modifier</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>تعديل المخزون</source>
-        <translation>Ajuster le stock</translation>
-    </message>
-    <message>
-        <location line="+11"/>
-        <source>الكمية</source>
-        <translation>Quantité</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>الحالة</source>
+        <location line="+0"/>
+        <source>État</source>
         <translation>État</translation>
     </message>
     <message>
-        <location line="+19"/>
-        <location line="+6"/>
-        <source>المنتجات</source>
-        <translation>Produits</translation>
+        <location line="+13"/>
+        <source>Catalogue</source>
+        <translation>Catalogue</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>إدارة الأصناف، الأسعار والمخزون</source>
-        <translation>Gérer les articles, les prix et le stock</translation>
-    </message>
-    <message>
-        <location line="+35"/>
-        <source>مُفعل</source>
+        <location line="+80"/>
+        <source>Actif</source>
         <translation>Actif</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>موقوف</source>
-        <translation>Désactivé</translation>
+        <location line="+0"/>
+        <source>Inactif</source>
+        <translation>Inactif</translation>
     </message>
     <message>
-        <location line="+42"/>
-        <location line="+24"/>
-        <location line="+23"/>
-        <source>خطأ</source>
+        <location line="+8"/>
+        <source>Total : %1 produits · %2 actifs · %3 stock bas</source>
+        <translation>Total : %1 produits · %2 actifs · %3 stock bas</translation>
+    </message>
+    <message>
+        <location line="+62"/>
+        <location line="+28"/>
+        <location line="+100"/>
+        <location line="+8"/>
+        <source>Erreur</source>
         <translation>Erreur</translation>
     </message>
     <message>
-        <location line="-46"/>
-        <source>تعذر حفظ المنتج — الباركود مستخدم مسبقاً أو بيانات ناقصة</source>
+        <location line="-135"/>
+        <source>Impossible d&apos;enregistrer le produit — code-barres déjà utilisé ou données incomplètes</source>
         <translation>Impossible d&apos;enregistrer le produit — code-barres déjà utilisé ou données incomplètes</translation>
     </message>
     <message>
-        <location line="+24"/>
-        <source>تعذر حفظ التعديل — الباركود مستخدم مسبقاً</source>
+        <location line="+28"/>
+        <source>Impossible d&apos;enregistrer la modification — code-barres déjà utilisé</source>
         <translation>Impossible d&apos;enregistrer la modification — code-barres déjà utilisé</translation>
     </message>
     <message>
-        <location line="+23"/>
-        <source>الكمية السالبة أكبر من المتوفر (الكثافة %1)</source>
-        <translation>La quantité négative dépasse le stock disponible (densité %1)</translation>
+        <location line="+99"/>
+        <source>Quantité invalide — l&apos;ancien stock a été restauré.</source>
+        <translation>Quantité invalide — l&apos;ancien stock a été restauré.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Prix invalide — l&apos;ancienne valeur a été restaurée.</source>
+        <translation>Prix invalide — l&apos;ancienne valeur a été restaurée.</translation>
     </message>
 </context>
 <context>
