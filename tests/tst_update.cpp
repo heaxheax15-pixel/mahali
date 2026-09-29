@@ -95,9 +95,29 @@ void UpdateTest::update_script_contains_checks()
     // restart and no update.
     QVERIFY2(script.contains(QStringLiteral("if not exist")),
              "a failed extraction is not detected");
-    QVERIFY2(script.contains(QStringLiteral("if errorlevel 1")),
-             "a failed copy is not detected");
     QVERIFY(script.contains(QStringLiteral("exit /b 1")));
+
+    // The app is killed before anything is unpacked, twice: an installation that
+    // lingers in its shutdown keeps the exe and the Qt DLLs locked, which is
+    // what made the copy fail where a manual copy succeeded.
+    const QString taskkill = QStringLiteral("taskkill /F /IM mahali-desktop.exe >nul 2>&1");
+    QCOMPARE(script.count(taskkill), 2);
+
+    // robocopy, not xcopy: it retries a locked file instead of giving up on the
+    // first one, which is the whole difference between a shop that updates and a
+    // shop that does not. 0-7 are success for robocopy, so "errorlevel 1" would
+    // have called every clean copy a failure; only 8 and above is a real one.
+    QVERIFY2(script.contains(QStringLiteral("robocopy")), "the copy still uses xcopy");
+    QVERIFY2(!script.contains(QStringLiteral("xcopy")), "xcopy is still in the script");
+    QVERIFY2(script.contains(QStringLiteral("/R:5")), "a locked file is not retried");
+    QVERIFY2(script.contains(QStringLiteral("if %ERRORLEVEL% GEQ 8")),
+             "a failed copy is not detected");
+
+    // A copy that reports success but leaves the executable behind would end in a
+    // restart that starts nothing, so the file itself is checked after the copy.
+    QVERIFY2(script.contains(QStringLiteral("if not exist \"") + QDir::toNativeSeparators(appDir)
+                             + QStringLiteral("\\mahali-desktop.exe\"")),
+             "the installed executable is not verified after the copy");
 
     // Paths come from the downloader, not from the environment. %TEMP% on one
     // side and QDir::tempPath() on the other is how a script ends up unpacking

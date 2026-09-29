@@ -5,7 +5,14 @@
 namespace app::core {
 
 // Builds the batch script that unpacks a downloaded archive over a running
-// installation, once that installation has quit.
+// installation.
+//
+// The script is the only thing left holding the installation open once the app
+// quits, so it does not wait to be told: it kills the executable itself before
+// touching anything, twice, with a pause between. An app that lingers in its
+// shutdown, or a stray second instance, would otherwise keep the exe and the Qt
+// DLLs locked and the copy would fail on files that a manual copy overwrites
+// without trouble.
 //
 // This is a pure string builder with no Qt networking, no widgets and no
 // Windows-only headers, so it compiles and is tested on every platform — the

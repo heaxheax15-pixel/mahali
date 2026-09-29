@@ -42,15 +42,24 @@ QString buildWindowsInstallBatch(const QString& appDir,
 
     return QStringLiteral(R"BAT(@echo off
 timeout /t 3 /nobreak >nul
+taskkill /F /IM <EXE> >nul 2>&1
+timeout /t 3 /nobreak >nul
+taskkill /F /IM <EXE> >nul 2>&1
+timeout /t 2 /nobreak >nul
 powershell -NoProfile -Command "Expand-Archive -Path '<ARCHIVE>' -DestinationPath '<WORK>' -Force"
 if not exist "<WORK>\<EXE>" (
     echo Échec de l'extraction. > "<ERROR>"
     start "" notepad.exe "<ERROR>"
     exit /b 1
 )
-xcopy /E /I /H /K /Y "<WORK>\*" "<APP>\" >nul
-if errorlevel 1 (
-    echo Échec de la copie. > "<ERROR>"
+robocopy "<WORK>" "<APP>" /E /R:5 /W:2 /NFL /NDL /NJH /NJS >nul
+if %ERRORLEVEL% GEQ 8 (
+    echo Échec de la copie. Code: %ERRORLEVEL% > "<ERROR>"
+    start "" notepad.exe "<ERROR>"
+    exit /b 1
+)
+if not exist "<APP>\<EXE>" (
+    echo Fichier principal manquant après copie. > "<ERROR>"
     start "" notepad.exe "<ERROR>"
     exit /b 1
 )
