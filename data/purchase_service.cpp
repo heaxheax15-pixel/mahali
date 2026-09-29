@@ -56,24 +56,41 @@ PurchaseResult PurchaseService::recordPurchase(const core::Purchase& purchase,
         result.error = QStringLiteral("purchase items are empty");
         return result;
     }
+    // The lines are the truth for the sub-total: a header whose sub-total
+    // disagrees with them is a typo, and storing the typo is what makes the
+    // supplier balance wrong. It is added up here, in the same pass as the
+    // quantity check, so the total is known before anything is written.
+    long long subtotalCents = 0;
     for (const core::PurchaseItem& item : items) {
         if (item.quantity <= 0) {
             result.error = QStringLiteral("quantity must be positive");
             return result;
         }
+        subtotalCents += item.totalCents;
+    }
+    // The VAT is the caller's, not the lines': it is charged on the invoice as a
+    // whole rather than on any one line, so it cannot be worked out here and is
+    // taken as it was given.
+    const long long vatCents = purchase.vatCents;
+    const long long totalCents = subtotalCents + vatCents;
+    // Paying more than the invoice is worth would leave the supplier in credit
+    // for money nobody owes them, and the balance would carry that credit as a
+    // debt the operator cannot explain.
+    if (purchase.paidCents > totalCents) {
+        result.error = QStringLiteral("paid amount %1 exceeds the invoice total %2")
+                           .arg(purchase.paidCents)
+                           .arg(totalCents);
+        return result;
     }
 
-    // The lines are the truth: a header whose total disagrees with them is a
-    // typo, and storing the typo is what makes the supplier balance wrong.
-    long long totalCents = 0;
-    for (const core::PurchaseItem& item : items) {
-        totalCents += item.totalCents;
-    }
-
+    // The three amounts are written from what was worked out above rather than
+    // from whatever the caller sent, so they always add up in the database: an
+    // invoice recorded with VAT is stored with it, and the supplier balance read
+    // from total_cents is what is genuinely owed.
     core::Purchase header = purchase;
-    if (totalCents != header.totalCents) {
-        header.totalCents = totalCents;
-    }
+    header.subtotalCents = subtotalCents;
+    header.vatCents = vatCents;
+    header.totalCents = totalCents;
     if (header.purchasedAt.isEmpty()) {
         header.purchasedAt = nowIso();
     }

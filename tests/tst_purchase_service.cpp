@@ -73,12 +73,16 @@ core::PurchaseItem makeLine(std::optional<int> productId, long long quantity, lo
     return line;
 }
 
-core::Purchase makePurchase(int supplierId, long long totalCents, long long paidCents, bool addToStock)
+core::Purchase makePurchase(int supplierId, long long totalCents, long long paidCents, bool addToStock,
+                            long long vatCents = 0)
 {
     core::Purchase purchase;
     purchase.supplierId = supplierId;
     purchase.totalCents = totalCents;
-    purchase.subtotalCents = totalCents;
+    // The header is filled in the way the dialog fills it: the total is what is
+    // owed, and the sub-total is what is left once the VAT is taken out.
+    purchase.subtotalCents = totalCents - vatCents;
+    purchase.vatCents = vatCents;
     purchase.paidCents = paidCents;
     purchase.addToStock = addToStock;
     return purchase;
@@ -105,6 +109,8 @@ private slots:
     void cash_purchase_simple();
     void credit_purchase();
     void partial_payment();
+    void purchase_with_vat();
+    void payment_above_total_fails();
     void no_stock_purchase();
     void pmp_calculation();
     void empty_items_fails();
@@ -208,6 +214,69 @@ void PurchaseServiceTest::partial_payment()
     QVERIFY(payments[0].purchaseId.has_value());
     QCOMPARE(*payments[0].purchaseId, result.purchaseId);
     QCOMPARE(f.supplierPayments.findBySupplierId(supplierId).size(), std::size_t(1));
+}
+
+void PurchaseServiceTest::purchase_with_vat()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("purchase_with_vat.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد مائل"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("ماء"), 0);
+    QVERIFY(productId > 0);
+
+    // 100 units at 10.00 is 1000.00, and the invoice carries 19% of that on top.
+    const core::Purchase purchase = makePurchase(supplierId, 119000, 119000, true, 19000);
+    const QVector<core::PurchaseItem> lines = {makeLine(productId, 100, 1000)};
+
+    const data::PurchaseResult result = f.service.recordPurchase(purchase, lines);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    // The VAT is stored beside the sub-total, not folded into it and not dropped
+    // on the way in: the three columns have to say what the invoice says.
+    const auto stored = f.purchases.findById(result.purchaseId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->subtotalCents, 100000LL);
+    QCOMPARE(stored->vatCents, 19000LL);
+    QCOMPARE(stored->totalCents, 119000LL);
+
+    // Paid in full against a total that now carries the VAT, so nothing is left
+    // owed. While the total was the sub-total alone this same payment left a
+    // residue exactly the size of the VAT, and the balance called it a debt.
+    const auto payments = f.supplierPayments.findByPurchaseId(result.purchaseId);
+    QCOMPARE(payments.size(), std::size_t(1));
+    QCOMPARE(payments[0].amountCents, 119000LL);
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+
+    // The sub-total is what the stock was bought for, so the average cost must
+    // not pick up the VAT the operator paid on the invoice.
+    const auto product = f.products.findById(productId);
+    QVERIFY(product.has_value());
+    QCOMPARE(product->costPriceCents, 1000LL);
+}
+
+void PurchaseServiceTest::payment_above_total_fails()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("payment_above_total_fails.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد دفعة زائدة"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("عسل"), 0);
+    QVERIFY(productId > 0);
+
+    // 100.00 of goods, 19.00 of VAT, and 120.00 handed over. The 1.00 over is
+    // not a debt: it is money the supplier does not owe, and accepting it here
+    // would leave the balance carrying a credit nobody asked for.
+    const core::Purchase purchase = makePurchase(supplierId, 119000, 120000, true, 19000);
+    const QVector<core::PurchaseItem> lines = {makeLine(productId, 100, 1000)};
+
+    const data::PurchaseResult result = f.service.recordPurchase(purchase, lines);
+
+    QVERIFY(!result.ok);
+    QCOMPARE(result.error, QStringLiteral("paid amount 120000 exceeds the invoice total 119000"));
+    // Refused before anything was written, so neither the invoice nor the
+    // payment it would have carried is left behind.
+    QCOMPARE(countRows(f.db, QStringLiteral("purchases")), 0);
+    QCOMPARE(countRows(f.db, QStringLiteral("supplier_payments")), 0);
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
 }
 
 void PurchaseServiceTest::no_stock_purchase()
