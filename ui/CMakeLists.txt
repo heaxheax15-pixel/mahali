@@ -30,6 +30,8 @@ target_sources(mahali-ui PRIVATE
     dialogs/customer_dialog.h
     dialogs/supplier_dialog.cpp
     dialogs/supplier_dialog.h
+    dialogs/purchase_dialog.cpp
+    dialogs/purchase_dialog.h
     quick_items_bar.cpp
     quick_items_bar.h
     cash_session_page.cpp

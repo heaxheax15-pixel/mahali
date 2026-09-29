@@ -908,3 +908,35 @@ QTableWidget#productTable QLineEdit {
     padding: 4px;
     font-size: 15px;
 }
+
+/* ---------- التبويبات ---------- */
+/* The tab strip sits on the dialog's own background while the pane below it
+   takes the card surface, so the selected tab reads as part of the pane it
+   opens: its bottom border is the pane colour, which closes the seam. */
+QTabWidget::pane {
+    border: 1px solid #2d2d2d;
+    border-radius: 8px;
+    background: #1a1a1a;
+    top: -1px;
+}
+QTabBar::tab {
+    background: transparent;
+    color: #a3a3a3;
+    padding: 8px 16px;
+    margin-right: 2px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 14px;
+}
+QTabBar::tab:hover {
+    background: #262626;
+    color: #fafafa;
+}
+QTabBar::tab:selected {
+    background: #1a1a1a;
+    color: #d4a017;
+    border: 1px solid #2d2d2d;
+    border-bottom-color: #1a1a1a;
+    font-weight: 700;
+}

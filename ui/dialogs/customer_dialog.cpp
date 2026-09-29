@@ -4,7 +4,6 @@
 
 #include <QAbstractButton>
 #include <QCheckBox>
-#include <QColor>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
@@ -37,11 +36,15 @@
 #include "data/sale_service.h"
 #include "format_utils.h"
 #include "scan_safe_dialog.h"
-#include "widgets/app_icon.h"
 
 namespace app::ui {
 
 namespace {
+
+// The information form keeps to 360px whatever the card is wide, and the rest of
+// its row is left empty: a name or a phone number has nothing to fill 760px
+// with, and a field stretched that far is mostly box.
+constexpr int kInfoFormWidth = 360;
 
 // A scanner presses Return wherever it is standing, so every dialog here drops
 // the auto-default the button box installs. Otherwise Return inside a field
@@ -413,6 +416,16 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
     auto* info = new QWidget;
     auto* infoLayout = new QVBoxLayout(info);
     auto* infoForm = new QFormLayout;
+    // Without this the form stretches every field to the card's full width, and a
+    // line edit sized for "Marie Dupont" is a lot of empty box to look at. A
+    // layout cannot be sized, so the form sits in a box that can be.
+    infoForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    auto* infoFormBox = new QWidget;
+    infoFormBox->setLayout(infoForm);
+    infoFormBox->setMaximumWidth(kInfoFormWidth);
+    auto* infoFields = new QHBoxLayout;
+    infoFields->addStretch(1);
+    infoFields->addWidget(infoFormBox);
     auto* nameValue = new QLabel(customer.name);
     auto* phoneValue = new QLabel(customer.phone);
     auto* balanceValue = new QLabel;
@@ -423,7 +436,7 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
     infoForm->addRow(QCoreApplication::translate("CustomerDialog", "Solde actuel"), balanceValue);
     infoForm->addRow(QCoreApplication::translate("CustomerDialog", "Solde d'ouverture"), openingValue);
     infoForm->addRow(QCoreApplication::translate("CustomerDialog", "Statut"), activeValue);
-    infoLayout->addLayout(infoForm);
+    infoLayout->addLayout(infoFields);
     infoLayout->addStretch(1);
 
     auto* editButton = new QPushButton(QCoreApplication::translate("CustomerDialog", "Modifier"));
@@ -431,7 +444,16 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
     auto* deleteButton =
         new QPushButton(QCoreApplication::translate("CustomerDialog", "Supprimer le client"));
     deleteButton->setObjectName(QStringLiteral("danger"));
+    // The card closes from this row rather than from a button box of its own: a
+    // "Fermer" below the tabs said nothing about what the other two buttons do,
+    // and left the eye travelling between two toolbars to close one window.
+    auto* cancelButton = new QPushButton(QCoreApplication::translate("CustomerDialog", "Annuler"));
+    cancelButton->setObjectName(QStringLiteral("secondary"));
+    cancelButton->setAutoDefault(false);
+    cancelButton->setDefault(false);
+    QObject::connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
     auto* infoButtons = new QHBoxLayout;
+    infoButtons->addWidget(cancelButton);
     infoButtons->addStretch(1);
     infoButtons->addWidget(editButton);
     infoButtons->addWidget(deleteButton);
@@ -443,7 +465,6 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
     auto* newDebtButton =
         new QPushButton(QCoreApplication::translate("CustomerDialog", "Nouvelle vente à crédit"));
     newDebtButton->setObjectName(QStringLiteral("primary"));
-    newDebtButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* salesTable = makeLedgerTable({QCoreApplication::translate("CustomerDialog", "Date"),
                                         QCoreApplication::translate("CustomerDialog", "Produits"),
                                         QCoreApplication::translate("CustomerDialog", "Total"),
@@ -457,7 +478,6 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
     auto* settleButton =
         new QPushButton(QCoreApplication::translate("CustomerDialog", "Nouveau remboursement"));
     settleButton->setObjectName(QStringLiteral("primary"));
-    settleButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* payTable = makeLedgerTable({QCoreApplication::translate("CustomerDialog", "Date"),
                                       QCoreApplication::translate("CustomerDialog", "Montant"),
                                       QCoreApplication::translate("CustomerDialog", "Note")});
@@ -480,17 +500,8 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
     tabs->addTab(payTab, QCoreApplication::translate("CustomerDialog", "Remboursements"));
     tabs->addTab(historyTab, QCoreApplication::translate("CustomerDialog", "Historique"));
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
-    QPushButton* closeBtn = buttons->button(QDialogButtonBox::Close);
-    closeBtn->setText(QCoreApplication::translate("CustomerDialog", "Fermer"));
-    closeBtn->setIcon(QIcon());
-    closeBtn->setObjectName(QStringLiteral("secondary"));
-    disarmDefaults(buttons);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
     QVBoxLayout* layout = new QVBoxLayout(&dialog);
     layout->addWidget(tabs, 1);
-    layout->addWidget(buttons);
 
     bool changed = false;
     bool deleted = false;

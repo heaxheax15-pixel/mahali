@@ -6,7 +6,6 @@
 
 #include <QAbstractButton>
 #include <QCheckBox>
-#include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDialogButtonBox>
@@ -38,12 +37,17 @@
 #include "data/supplier_repository.h"
 #include "data/supplier_return_repository.h"
 #include "format_utils.h"
+#include "purchase_dialog.h"
 #include "scan_safe_dialog.h"
-#include "widgets/app_icon.h"
 
 namespace app::ui {
 
 namespace {
+
+// The information form keeps to 360px whatever the card is wide, and the rest of
+// its row is left empty: a name or a phone number has nothing to fill 800px
+// with, and a line edit stretched that far is mostly box.
+constexpr int kInfoFormWidth = 360;
 
 // A scanner presses Return wherever it is standing, so every dialog here drops
 // the auto-default the button box installs. Otherwise Return inside a field
@@ -228,6 +232,16 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
     auto* info = new QWidget;
     auto* infoLayout = new QVBoxLayout(info);
     auto* infoForm = new QFormLayout;
+    // Without this the form stretches every field to the card's full width, and a
+    // line edit sized for "Algeria Nord" is a lot of empty box to look at. A
+    // layout cannot be sized, so the form sits in a box that can be.
+    infoForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    auto* infoFormBox = new QWidget;
+    infoFormBox->setLayout(infoForm);
+    infoFormBox->setMaximumWidth(kInfoFormWidth);
+    auto* infoFields = new QHBoxLayout;
+    infoFields->addStretch(1);
+    infoFields->addWidget(infoFormBox);
     auto* nameField = new QLineEdit(supplier->name);
     auto* phoneField = new QLineEdit(supplier->phone);
     auto* addressField = new QLineEdit(supplier->address);
@@ -257,8 +271,7 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
 
     auto* saveButton = new QPushButton(tr("Enregistrer"));
     saveButton->setObjectName(QStringLiteral("primary"));
-    saveButton->setIcon(appIcon(Icon::Check, QColor(QStringLiteral("#ffffff")), 18));
-    infoLayout->addLayout(infoForm);
+    infoLayout->addLayout(infoFields);
     infoLayout->addStretch(1);
 
     // ---- tab 2: factures d'achat ----
@@ -266,7 +279,6 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
     auto* invoicesLayout = new QVBoxLayout(invoicesTab);
     auto* newInvoiceButton = new QPushButton(tr("Nouvelle facture"));
     newInvoiceButton->setObjectName(QStringLiteral("primary"));
-    newInvoiceButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* invoiceTable = makeLedgerTable({tr("Date"), tr("N° Facture"), tr("Total"), tr("Payé"),
                                           tr("Reste")});
     auto* invoiceTotal = new QLabel;
@@ -280,7 +292,6 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
     auto* paymentsLayout = new QVBoxLayout(paymentsTab);
     auto* newPaymentButton = new QPushButton(tr("Nouveau paiement"));
     newPaymentButton->setObjectName(QStringLiteral("primary"));
-    newPaymentButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* paymentTable = makeLedgerTable(
         {tr("Date"), tr("Montant"), tr("Facture liée"), tr("Note")});
     paymentsLayout->addWidget(newPaymentButton);
@@ -291,7 +302,6 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
     auto* returnsLayout = new QVBoxLayout(returnsTab);
     auto* newReturnButton = new QPushButton(tr("Nouveau retour"));
     newReturnButton->setObjectName(QStringLiteral("primary"));
-    newReturnButton->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
     auto* returnTable =
         makeLedgerTable({tr("Date"), tr("Montant"), tr("Facture liée")});
     returnsLayout->addWidget(newReturnButton);
@@ -311,29 +321,29 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
     tabs->addTab(returnsTab, tr("Retours"));
     tabs->addTab(historyTab, tr("Historique"));
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
-    QPushButton* closeBtn = buttons->button(QDialogButtonBox::Close);
-    closeBtn->setText(tr("Fermer"));
-    closeBtn->setIcon(QIcon());
-    closeBtn->setObjectName(QStringLiteral("secondary"));
-    disarmDefaults(buttons);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
     QVBoxLayout* layout = new QVBoxLayout(&dialog);
     layout->addWidget(tabs, 1);
-    layout->addWidget(buttons);
 
     // A supplier with money behind them is history, not a typo: deleting one
     // would take its invoices, payments and returns with it, so the button only
     // appears while the supplier has none of the three.
     auto* deleteButton = new QPushButton(tr("Supprimer"));
     deleteButton->setObjectName(QStringLiteral("danger"));
-    deleteButton->setIcon(appIcon(Icon::Trash, QColor(QStringLiteral("#ffffff")), 18));
     deleteButton->setVisible(false);
+    // The card closes from this row rather than from a button box of its own: a
+    // "Fermer" below the tabs said nothing about what the other two buttons do,
+    // and left the eye travelling between two toolbars to close one window.
+    auto* cancelButton = new QPushButton(tr("Annuler"));
+    cancelButton->setObjectName(QStringLiteral("secondary"));
+    cancelButton->setAutoDefault(false);
+    cancelButton->setDefault(false);
+    QObject::connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+
     auto* infoButtons = new QHBoxLayout;
+    infoButtons->addWidget(cancelButton);
     infoButtons->addStretch(1);
-    infoButtons->addWidget(saveButton);
     infoButtons->addWidget(deleteButton);
+    infoButtons->addWidget(saveButton);
     infoLayout->addLayout(infoButtons);
 
     data::PurchaseRepository purchases(db);
@@ -445,7 +455,12 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
     reload();
 
     QObject::connect(newInvoiceButton, &QPushButton::clicked, &dialog, [&]() {
-        announceComing(&dialog);
+        // Recording from inside the supplier's own card is the common case: the
+        // supplier is already known, so the dialog opens on it and only the
+        // invoice itself is left to type.
+        if (showPurchaseDialog(&dialog, db, supplierId).saved) {
+            reload();
+        }
     });
     QObject::connect(newPaymentButton, &QPushButton::clicked, &dialog, [&]() {
         announceComing(&dialog);
