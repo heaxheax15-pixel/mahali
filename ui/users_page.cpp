@@ -133,7 +133,7 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->setObjectName(QStringLiteral("usersTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
-    m_table->setShowGrid(false);
+    m_table->setShowGrid(true);
     m_table->setColumnCount(5);
     m_table->setHorizontalHeaderLabels(
         {tr("الاسم"), tr("الدور"), tr("PIN"), tr("نشط"), tr("إجراءات")});
@@ -147,6 +147,7 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     m_table->verticalHeader()->setDefaultSectionSize(42);
+    m_table->verticalHeader()->hide();
 
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(24, 16, 24, 24);

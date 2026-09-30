@@ -163,7 +163,7 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
     itemsTable->setObjectName(QStringLiteral("productTable"));
     itemsTable->setAlternatingRowColors(true);
     itemsTable->setFrameShape(QFrame::NoFrame);
-    itemsTable->setShowGrid(false);
+    itemsTable->setShowGrid(true);
     itemsTable->setColumnCount(6);
     itemsTable->setHorizontalHeaderLabels({tr("Produit"), tr("Qté"), tr("Unité"), tr("Prix unitaire"),
                                            tr("Total"), QString()});
@@ -174,6 +174,7 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
     itemsTable->horizontalHeader()->setSectionResizeMode(kColRemove, QHeaderView::Fixed);
     itemsTable->setColumnWidth(kColRemove, 64);
     itemsTable->verticalHeader()->setDefaultSectionSize(46);
+    itemsTable->verticalHeader()->hide();
 
     auto* addLineButton = new QPushButton(tr("+"));
     addLineButton->setObjectName(QStringLiteral("secondary"));

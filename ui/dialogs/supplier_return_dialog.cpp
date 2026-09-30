@@ -119,7 +119,7 @@ SupplierReturnDialogResult showSupplierReturnDialog(QWidget* parent, app::data::
     itemsTable->setObjectName(QStringLiteral("productTable"));
     itemsTable->setAlternatingRowColors(true);
     itemsTable->setFrameShape(QFrame::NoFrame);
-    itemsTable->setShowGrid(false);
+    itemsTable->setShowGrid(true);
     itemsTable->setColumnCount(4);
     itemsTable->setHorizontalHeaderLabels(
         {tr("Produit"), tr("Qté achetée"), tr("Prix unitaire"), tr("Qté retournée")});
@@ -128,6 +128,7 @@ SupplierReturnDialogResult showSupplierReturnDialog(QWidget* parent, app::data::
     itemsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     itemsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     itemsTable->verticalHeader()->setDefaultSectionSize(46);
+    itemsTable->verticalHeader()->hide();
 
     auto* linkedBox = new QFrame;
     linkedBox->setObjectName(QStringLiteral("card"));

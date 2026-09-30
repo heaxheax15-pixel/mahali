@@ -79,7 +79,7 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_table->setObjectName(QStringLiteral("salesTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
-    m_table->setShowGrid(false);
+    m_table->setShowGrid(true);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
         {tr("الوقت"), tr("المصدر"), tr("الإجمالي"), tr("الحالة")});
@@ -89,6 +89,7 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->verticalHeader()->setDefaultSectionSize(42);
+    m_table->verticalHeader()->hide();
     m_table->setColumnWidth(0, 90);
     m_table->setColumnWidth(2, 130);
 

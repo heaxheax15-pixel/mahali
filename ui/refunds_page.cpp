@@ -54,7 +54,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_salesTable->setObjectName(QStringLiteral("refundSalesTable"));
     m_salesTable->setAlternatingRowColors(true);
     m_salesTable->setFrameShape(QFrame::NoFrame);
-    m_salesTable->setShowGrid(false);
+    m_salesTable->setShowGrid(true);
     m_salesTable->setColumnCount(4);
     m_salesTable->setHorizontalHeaderLabels(
         {tr("الوقت"), tr("المصدر"), tr("الإجمالي"), tr("الحالة")});
@@ -63,6 +63,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_salesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_salesTable->horizontalHeader()->setStretchLastSection(true);
     m_salesTable->verticalHeader()->setDefaultSectionSize(42);
+    m_salesTable->verticalHeader()->hide();
 
     m_refundSale = new QPushButton(tr("استرداد المبيع"));
     m_refundSale->setObjectName(QStringLiteral("danger"));
@@ -89,7 +90,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_paymentsTable->setObjectName(QStringLiteral("refundPaymentsTable"));
     m_paymentsTable->setAlternatingRowColors(true);
     m_paymentsTable->setFrameShape(QFrame::NoFrame);
-    m_paymentsTable->setShowGrid(false);
+    m_paymentsTable->setShowGrid(true);
     m_paymentsTable->setColumnCount(3);
     m_paymentsTable->setHorizontalHeaderLabels({tr("الوقت"), tr("العميل"), tr("المبلغ")});
     m_paymentsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -97,6 +98,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_paymentsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_paymentsTable->horizontalHeader()->setStretchLastSection(true);
     m_paymentsTable->verticalHeader()->setDefaultSectionSize(42);
+    m_paymentsTable->verticalHeader()->hide();
 
     m_refundPayment = new QPushButton(tr("استرداد السداد"));
     m_refundPayment->setObjectName(QStringLiteral("danger"));

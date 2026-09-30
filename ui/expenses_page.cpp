@@ -91,7 +91,7 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     m_table->setObjectName(QStringLiteral("expenseTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
-    m_table->setShowGrid(false);
+    m_table->setShowGrid(true);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
         {tr("الوقت"), tr("النوع"), tr("المبلغ"), tr("بيان")});
@@ -99,6 +99,7 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->verticalHeader()->setDefaultSectionSize(42);
+    m_table->verticalHeader()->hide();
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);

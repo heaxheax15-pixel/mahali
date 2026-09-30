@@ -65,7 +65,7 @@ QTableWidget* makeLedgerTable(const QStringList& headers)
     table->setObjectName(QStringLiteral("customerTable"));
     table->setAlternatingRowColors(true);
     table->setFrameShape(QFrame::NoFrame);
-    table->setShowGrid(false);
+    table->setShowGrid(true);
     table->setColumnCount(headers.size());
     table->setHorizontalHeaderLabels(headers);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -73,6 +73,7 @@ QTableWidget* makeLedgerTable(const QStringList& headers)
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->horizontalHeader()->setStretchLastSection(true);
     table->verticalHeader()->setDefaultSectionSize(42);
+    table->verticalHeader()->hide();
     return table;
 }
 

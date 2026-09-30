@@ -89,13 +89,14 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     m_cashTable->setObjectName(QStringLiteral("reportTable"));
     m_cashTable->setAlternatingRowColors(true);
     m_cashTable->setFrameShape(QFrame::NoFrame);
-    m_cashTable->setShowGrid(false);
+    m_cashTable->setShowGrid(true);
     m_cashTable->setColumnCount(3);
     m_cashTable->setHorizontalHeaderLabels(
         {tr("العملية"), tr("العدد"), tr("المجموع")});
     m_cashTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_cashTable->horizontalHeader()->setStretchLastSection(true);
     m_cashTable->verticalHeader()->setDefaultSectionSize(42);
+    m_cashTable->verticalHeader()->hide();
 
     auto* quick = new QHBoxLayout;
     quick->setSpacing(10);

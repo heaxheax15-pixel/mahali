@@ -553,28 +553,50 @@ QCalendarWidget QWidget {
 }
 
 /* ---------- 5. الجداول ---------- */
+/* What draws the rules between rows and columns is the grid, not a border on
+   the item: Qt's parser accepts `QTableWidget::item { border-bottom }` and then
+   paints nothing at all, so the separators have to come from gridline-color,
+   which means every table calls setShowGrid(true).
+   The line colour is <border> and not the fainter <border-light> because a
+   gridline falls on both row colours: #f1f5f9 measures 1.05:1 on the striped
+   row, which is invisible, while #e2e8f0 keeps 1.18:1 on both. */
 QTableView,
-QTableWidget,
+QTableWidget {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    gridline-color: #e2e8f0;
+    alternate-background-color: #f8fafc;
+    selection-background-color: #dbeafe;
+    selection-color: #1d4ed8;
+    outline: 0;
+}
+
 QListWidget {
     background: #ffffff;
     color: #0f172a;
     border: 1px solid #e2e8f0;
     border-radius: 21px;
-    gridline-color: #f1f5f9;
-    alternate-background-color: #f8fafc;
-    selection-background-color: #dbeafe;
-    selection-color: #0f172a;
     outline: 0;
 }
 
+/* The header is the table's ruler: centred, and cut off from the body by a
+   full-weight rule, with a rule between columns so a wide table can also be
+   read downwards.
+   No :last rule here on purpose. Qt drops that pseudo-state on
+   QHeaderView::section, so a rule there would be silently dead and the last
+   section would keep its right border and read as the table's own edge. */
 QHeaderView::section {
     background: #f8fafc;
     color: #64748b;
     border: none;
     border-bottom: 1px solid #e2e8f0;
-    padding: 14px 14px;
+    border-right: 1px solid #e2e8f0;
+    padding: 10px 14px;
     font-size: 13px;
-    font-weight: bold;
+    font-weight: 700;
+    text-align: center;
 }
 
 /* The corner square where the vertical and horizontal headers meet. With no
@@ -585,6 +607,7 @@ QTableCornerButton::section {
     background: #f8fafc;
     border: none;
     border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
 }
 
 /* The same rule, scoped to the table. Qt has resolved the corner button's
@@ -594,11 +617,20 @@ QTableWidget QTableCornerButton::section {
     background: #f8fafc;
     border: none;
     border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
 }
 
 QTableWidget::item {
-    padding: 14px;
+    padding: 10px 14px;
     font-size: 15px;
+}
+
+/* A selected row is tinted, not re-coloured. #2563eb on #dbeafe is 4.24:1 and
+   the row text is 15px, so the one step darker #1d4ed8 — already the primary's
+   own border colour — is used here to clear WCAG AA at 5.49:1. */
+QTableWidget::item:selected {
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 QListWidget::item {

@@ -34,7 +34,7 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
     m_table->setObjectName(QStringLiteral("auditTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
-    m_table->setShowGrid(false);
+    m_table->setShowGrid(true);
     m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
         {tr("الوقت"), tr("المسؤول"), tr("العملية"), tr("التفاصيل")});
@@ -43,6 +43,7 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->verticalHeader()->setVisible(false);
     m_table->verticalHeader()->setDefaultSectionSize(42);
+    m_table->verticalHeader()->hide();
 
     auto* top = new QHBoxLayout;
     top->setSpacing(10);
