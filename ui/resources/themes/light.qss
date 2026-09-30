@@ -423,8 +423,7 @@ QTimeEdit:focus,
 QDateTimeEdit:focus,
 QPlainTextEdit:focus,
 QTextEdit:focus {
-    border: 2px solid #2563eb;
-    padding: 7px 14px;
+    border: 1px solid #2563eb;
 }
 
 QLineEdit:disabled,
@@ -462,8 +461,7 @@ QLineEdit#setupPinInput:focus,
 QLineEdit#setupNameInput:focus,
 QLineEdit#setupRecoveryInput:focus,
 QLineEdit#setupConfirmInput:focus {
-    border: 2px solid #2563eb;
-    padding: 7px 14px;
+    border: 1px solid #2563eb;
 }
 
 QComboBox#languageCombo,

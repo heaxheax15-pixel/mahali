@@ -738,6 +738,27 @@
         <source>كلمة الاستعادة غير صحيحة</source>
         <translation>Mot de récupération incorrect</translation>
     </message>
+    <message>
+        <location filename="../ui/login_dialog.cpp" line="345"/>
+        <source>لا يوجد مستخدم</source>
+        <translation>Aucun utilisateur</translation>
+    </message>
+    <message>
+        <source>إعداد المدير</source>
+        <translation>Configuration — Mahali</translation>
+    </message>
+    <message>
+        <source>استرجاع كلمة المرور</source>
+        <translation>Récupération — Mahali</translation>
+    </message>
+    <message>
+        <source>تحقق</source>
+        <translation>Valider</translation>
+    </message>
+    <message>
+        <source>إلغاء</source>
+        <translation>Annuler</translation>
+    </message>
 </context>
 <context>
     <name>app::ui::MainWindow</name>
