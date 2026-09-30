@@ -47,6 +47,14 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
+    void changeEvent(QEvent* event) override;
+
+private:
+    // The glyph is a pixmap, and a pixmap keeps the colour it was drawn with, so
+    // the accent has to be pushed again whenever the theme is swapped.
+    void refreshGlyph();
+
+    QLabel* m_glyph = nullptr;
 };
 
 // A horizontal strip of quick items (active products with no barcode) for the

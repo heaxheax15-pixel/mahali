@@ -508,28 +508,35 @@ QDateTimeEdit {
     min-width: 140px;
 }
 
-/* No subcontrol-position here on purpose: left/right is resolved against the
-   layout direction, so the drop-down lands on the trailing edge either way --
-   left in the Arabic UI, right in the French one. */
-QDateEdit::drop-down,
-QTimeEdit::drop-down,
-QDateTimeEdit::drop-down {
-    subcontrol-origin: padding;
-    width: 28px;
+/* Same collapse as the light theme: ::up-button and ::down-button are the
+   controls a QDateEdit actually draws, and a ::drop-down rule matched nothing.
+   The field paints the single triangle itself, in the theme's own muted
+   colour, so both themes stay in step from one code path. */
+QDateEdit::up-button,
+QTimeEdit::up-button,
+QDateTimeEdit::up-button,
+QDateEdit::down-button,
+QTimeEdit::down-button,
+QDateTimeEdit::down-button {
+    subcontrol-origin: border;
+    width: 0px;
     border: none;
     background: transparent;
 }
 
+/* Collapsing the button is not enough on its own: the arrow primitive is drawn
+   from the platform's own image and ignores the zero width, so it stayed put and
+   came back as a second triangle beside the painted one. Blanking the image is
+   what actually takes it off the field. */
+QDateEdit::up-arrow,
+QTimeEdit::up-arrow,
+QDateTimeEdit::up-arrow,
 QDateEdit::down-arrow,
 QTimeEdit::down-arrow,
 QDateTimeEdit::down-arrow {
     image: none;
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #a3a3a3;
-    margin-right: 14px;
+    width: 0px;
+    height: 0px;
 }
 
 QComboBox QAbstractItemView {
@@ -646,24 +653,39 @@ QListWidget::item {
 QWidget#sidebar {
     background: #111111;
     border: none;
-    border-left: 1px solid #1a1a1a;
     padding: 14px 0 7px 0;
 }
 
+/* The rule that separates the rail from the page goes on the rail's inner edge,
+   and the inner edge is the left one only when the rail is on the right, which
+   is what an RTL layout does. French puts the rail on the left, so the rule moves
+   to the right. The stylesheet cannot ask which way the window reads, so the
+   window states it as the "direction" property and this matches on it. */
+QWidget#sidebar[direction="rtl"] {
+    border-left: 1px solid #2d2d2d;
+}
+QWidget#sidebar[direction="ltr"] {
+    border-left: none;
+    border-right: 1px solid #2d2d2d;
+}
+
+/* The dark counterpart of the rail's about line: flat text on the panel, not a
+   card, so it sits under the nav instead of competing with it. */
 QPushButton#about {
-    background: #1a1a1a;
-    color: #fafafa;
-    border: 1px solid #2d2d2d;
+    background: transparent;
+    min-height: 0px;
+    color: #a3a3a3;
+    border: none;
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
-    font-size: 15px;
-    font-weight: 600;
+    padding: 8px 21px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
 }
 
 QPushButton#about:hover {
     background: #262626;
-    color: #fafafa;
+    color: #d4a017;
 }
 
 /* The top bar sits above the sidebar, so it carries its own surface and the
@@ -682,23 +704,50 @@ QWidget#topBar {
    muted text colour rather than the faintest one: at 12px it is the only thing
    telling the operator where one group ends and the next begins. */
 QLabel#navGroupTitle {
-    color: #c0c0c0;
-    font-size: 13px;
+    color: #a3a3a3;
+    font-size: 12px;
     font-weight: 800;
-    padding: 21px 21px 7px 14px;
+    letter-spacing: 1.5px;
+    padding: 21px 14px 7px 14px;
     background: transparent;
 }
 
+/* The scroll area and its content carry no surface of their own, so the rail's
+   own background is what shows through above and below the groups. */
+QScrollArea#navScroll,
+QWidget#navScrollContent,
+QWidget#navScrollViewport {
+    background: transparent;
+    border: none;
+}
+
+/* The 3px rule and the padding that clears it both sit on the leading edge, so
+   the RTL values are stated here and the LTR ones override them below. Keeping
+   the RTL pair as the fallback matters: a nav item built before this change, or
+   one that somehow never got the token, still gets a rule and a matching inset
+   instead of losing both. */
 QPushButton#navItem {
     background: transparent;
-    color: #a3a3a3;
+    color: #d4d4d4;
     border: none;
-    border-radius: 7px;
-    min-height: 42px;
-    padding: 0 14px;
-    font-size: 15px;
-    font-weight: 600;
+    border-right: 3px solid transparent;
+    border-radius: 0;
     text-align: left;
+    padding: 0 21px 0 14px;
+    font-size: 15px;
+    font-weight: 500;
+    min-height: 42px;
+}
+
+/* The 3px rule and the 21px of padding that clears it both sit on the leading
+   edge, so the pair above is the RTL one and the pair below is its mirror. The
+   right-hand rule is explicitly cleared rather than merely overwritten, or a
+   left-to-right item would still reserve those 3px and come out 3px wider than
+   its neighbour. */
+QPushButton#navItem[direction="ltr"] {
+    border-left: 3px solid transparent;
+    border-right: none;
+    padding: 0 14px 0 21px;
 }
 
 QPushButton#navItem:hover {
@@ -707,14 +756,23 @@ QPushButton#navItem:hover {
 }
 
 /* The active page is marked with a tinted ground and a rule on the list's
-   leading edge, rather than a solid fill: the sidebar's own ground is dark, so
-   a solid block read as a button and the rule alone was too easy to miss.
-   border-right is the leading edge under RTL, which is where the marker goes. */
-QPushButton#navItem[active="true"] {
-    background-color: rgba(212, 160, 23, 0.15);
+   leading edge, rather than a solid fill: the sidebar's own ground is dark, so a
+   solid block read as a button and the rule alone was too easy to miss. The
+   leading edge is the right under RTL and the left under LTR, so the LTR rule
+   both draws its bar on the left and clears the right-hand one the fallback
+   above put there, otherwise the item would be marked on both sides. */
+QPushButton#navItem[active="true"][direction="rtl"] {
+    background: #2d1f04;
     color: #d4a017;
     border-right: 3px solid #d4a017;
-    font-weight: bold;
+    font-weight: 700;
+}
+QPushButton#navItem[active="true"][direction="ltr"] {
+    background: #2d1f04;
+    color: #d4a017;
+    border-left: 3px solid #d4a017;
+    border-right: none;
+    font-weight: 700;
 }
 
 /* The search in the top bar is the widest single control, so it gets the input
@@ -781,6 +839,19 @@ QWidget#quickItemsBar QFrame#quickCard {
 QWidget#quickItemsBar QFrame#quickCard:hover {
     background: #2d1f04;
     border: 1px solid #d4a017;
+}
+
+/* Outlined and unfilled, the way the light theme draws it: the add tile is not
+   a product, and the accent dashed edge is the only hint that says so. */
+QWidget#quickItemsBar QFrame#quickAddCard {
+    background: transparent;
+    border: 1px dashed #525252;
+    border-radius: 14px;
+}
+
+QWidget#quickItemsBar QFrame#quickAddCard:hover {
+    background: #2d1f04;
+    border: 1px dashed #d4a017;
 }
 
 QWidget#quickItemsBar QLabel#quickName {

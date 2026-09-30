@@ -37,7 +37,10 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("mahali"));
     app.setApplicationDisplayName(QCoreApplication::translate("main", "محلي"));
-    app.setLayoutDirection(Qt::RightToLeft);
+    // No direction is forced here. This tool loads no translator, so the text is
+    // the source Arabic and Qt's own default for that is right-to-left; the
+    // screenshots come out the same as before. The real application calls
+    // core::applyLanguage() and inherits its direction from the stored language.
 
     const QString dbPath = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QStringLiteral(":memory:");
     const QString outDir = argc > 2 ? QString::fromLocal8Bit(argv[2]) : QStringLiteral("shots");

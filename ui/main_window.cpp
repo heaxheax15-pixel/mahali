@@ -17,6 +17,7 @@
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScreen>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyle>
@@ -24,6 +25,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <functional>
 #include <memory>
 
 #include "core/session.h"
@@ -96,6 +98,46 @@ QWidget* makeStubPage(const QString& title, const QString& body)
     return page;
 }
 
+// Qt's stylesheet has no pseudo-state for reading direction, so the direction
+// has to reach the stylesheet as an ordinary property it can match on. The
+// token is the direction the application is in right now, which core's
+// applyLanguage() has already pinned by the time any of this is built.
+QString directionToken()
+{
+    return QApplication::layoutDirection() == Qt::RightToLeft ? QStringLiteral("rtl")
+                                                              : QStringLiteral("ltr");
+}
+
+// Watches the window for a translator being installed. When the language
+// changes, the reading direction changes with it, and a property only written at
+// construction would leave the stylesheet matching a token that is no longer
+// true: the sidebar rule and the active nav marker would keep drawing on the
+// edge that used to be the leading one.
+//
+// This lives here rather than as an event() override on the window because that
+// would mean editing the header, and installing a filter on self is the same
+// thing as far as the stylesheet is concerned. The watcher holds no state of its
+// own and declares no signals or slots, so it needs no moc entry.
+class DirectionWatcher : public QObject {
+public:
+    explicit DirectionWatcher(std::function<void()> onLanguageChange)
+        : m_callback(std::move(onLanguageChange))
+    {
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() == QEvent::LanguageChange && m_callback) {
+            m_callback();
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void()> m_callback;
+};
+
 } // namespace
 
 MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QWidget* parent)
@@ -104,7 +146,13 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     , m_controller(controller)
 {
     setWindowTitle(tr("محلي — نظام نقاط البيع والمحاسبة"));
-    setLayoutDirection(Qt::RightToLeft);
+
+    // The reading direction is not set here on purpose. core::applyLanguage()
+    // pins it on the QGuiApplication, once, from the stored language, and this
+    // window inherits it. Pinning it here would outrank that: Qt resolves
+    // direction down the widget tree, and this widget is a descendant of the
+    // application, so a direction set here silently overrode the language for
+    // every page below it no matter what the user had chosen.
 
     setMinimumSize(900, 600);
 
@@ -431,12 +479,86 @@ QWidget* MainWindow::buildSidebar()
 {
     m_sidebar = new QWidget;
     m_sidebar->setObjectName(QStringLiteral("sidebar"));
+    // Qt does not draw a stylesheet background or border on a plain QWidget: it
+    // leaves the widget with whatever the palette gives it, which is the window
+    // colour. The rail was therefore showing #efefef in both themes instead of
+    // the #f1f5f9 and #111111 the theme asks for, and the rule separating it
+    // from the page was not drawn at all. Asking to be styled is what makes the
+    // sidebar rules below apply; without it the direction rules are inert too.
+    m_sidebar->setAttribute(Qt::WA_StyledBackground, true);
+    // The rail carries a rule on its inner edge to separate it from the page, and
+    // which edge that is depends on the reading direction: the rail sits on the
+    // right in Arabic and on the left in French, so the rule has to follow it.
+    // The stylesheet matches this token, because it has no direction of its own to
+    // ask.
+    m_sidebar->setProperty("direction", directionToken());
     m_sidebar->setFixedWidth(240);
 
     auto* layout = new QVBoxLayout(m_sidebar);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    m_sidebarGroupLayout = layout;
+
+    // The groups live in a scroll area, not directly in the rail. The thirteen
+    // items and five headings need about 920px, which is more than the window's
+    // 600px minimum height, so without this the last groups are simply cut off
+    // and the "about" button is pushed out of sight. The content is laid out
+    // resizably in the rail's own fixed width and scrolls on the vertical axis
+    // only: a horizontal bar here would shrink the items and squeeze the
+    // longest label.
+    auto* scroll = new QScrollArea;
+    scroll->setObjectName(QStringLiteral("navScroll"));
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    // The viewport is a plain child widget, so it needs naming of its own: left
+    // to the default it would paint the window's own background over the rail's.
+    scroll->viewport()->setObjectName(QStringLiteral("navScrollViewport"));
+
+    // Only the groups go in here. The group column used to be the rail's own
+    // layout, which meant emptying it for a role change also destroyed the
+    // "about" button and the stretch above it, taking "حول محلي…" off the rail
+    // for good. Keeping the groups in their own widget makes the clear in
+    // buildNavForRole reach the groups and nothing else.
+    auto* content = new QWidget;
+    content->setObjectName(QStringLiteral("navScrollContent"));
+    m_sidebarGroupLayout = new QVBoxLayout(content);
+    m_sidebarGroupLayout->setContentsMargins(0, 0, 0, 0);
+    m_sidebarGroupLayout->setSpacing(0);
+    scroll->setWidget(content);
+    layout->addWidget(scroll, 1);
+
+    // The direction token on the rail and the nav buttons is written when they
+    // are built, which is after applyLanguage() has run, so it is right from the
+    // first paint. A language picked later in the session is a different story:
+    // applyLanguage() installs a translator, Qt answers that with a
+    // LanguageChange event, and this is where the token is rewritten. The lambda
+    // stands in for a member function so the header, which is outside this
+    // change's scope, does not have to grow a declaration for it.
+    //
+    // Only widgets whose token actually changed are re-polished. A widget is
+    // skipped when the token comes back the same, which is the case whenever the
+    // language moved within one direction -- French to English, say -- and
+    // unpolishing the whole rail to redraw an identical stylesheet is wasted
+    // work. The property has to be set before the polish, since the stylesheet
+    // reads it while it is matching.
+    auto* watcher = new DirectionWatcher([this]() {
+        const QString token = directionToken();
+        const auto retag = [token](QWidget* widget) {
+            if (!widget || widget->property("direction").toString() == token) {
+                return;
+            }
+            widget->setProperty("direction", token);
+            widget->style()->unpolish(widget);
+            widget->style()->polish(widget);
+        };
+        retag(m_sidebar);
+        for (const NavButton& nav : m_navButtons) {
+            retag(nav.button);
+        }
+    });
+    watcher->installEventFilter(this);
+    watcher->setParent(this);
 
     auto* about = new QPushButton(tr("حول محلي…"));
     about->setObjectName(QStringLiteral("about"));
@@ -452,9 +574,8 @@ QWidget* MainWindow::buildSidebar()
                 .arg(qApp->applicationVersion()));
     });
 
-    // The groups stack from the top; the slack before the footer pushes "about"
-    // to the foot of the rail rather than letting it climb up under the groups.
-    layout->addStretch(1);
+    // The scroll area carries the slack, so "about" sits at the foot of the
+    // rail on its own rather than climbing up under the groups.
     layout->addWidget(about, 0, Qt::AlignHCenter);
     return m_sidebar;
 }
@@ -464,7 +585,14 @@ void MainWindow::addNavGroup(const QString& title, const std::vector<NavEntry>& 
     auto* group = new QWidget;
     group->setObjectName(QStringLiteral("navGroup"));
     auto* groupLayout = new QVBoxLayout(group);
-    groupLayout->setContentsMargins(0, 14, 0, 0);
+    // The 21px that opens a group is the heading's own top padding, so it sits
+    // in the same place for the first group as for the rest — one number, in
+    // one theme rule, instead of a margin here that drifts from the stylesheet.
+    // The 2px between items is a layout fact, so it is set here rather than in
+    // the stylesheet; QSS margin on a child widget does not add to a layout's
+    // spacing, and putting it in the stylesheet only gave a number that looked
+    // like it controlled the gap but did not.
+    groupLayout->setContentsMargins(0, 0, 0, 0);
     groupLayout->setSpacing(2);
 
     auto* heading = new QLabel(title);
@@ -482,9 +610,15 @@ void MainWindow::addNavGroup(const QString& title, const std::vector<NavEntry>& 
         button->setMinimumWidth(0);
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         button->setCheckable(true);
-        // The label is Arabic, so it reads right-to-left; the icon then belongs
-        // on the right of it rather than wherever the button puts it.
-        button->setLayoutDirection(Qt::RightToLeft);
+        // The active item is marked with a rule on the leading edge, and the
+        // leading edge is the right in Arabic and the left in French. The token
+        // is what lets the stylesheet put the rule, and the padding that clears
+        // it, on the right side of the button for each.
+        button->setProperty("direction", directionToken());
+        // No setLayoutDirection here either: the button takes the direction from
+        // the window, which takes it from the language. Forcing RTL on the
+        // button alone was what put the icon on the right of the label in the
+        // Arabic UI, and would have kept doing so in a French one.
         // The icon is only a placeholder here. The colour is not known for
         // certain until the button knows whether it is the active one, and the
         // theme may change while the window is open, so the first real colour

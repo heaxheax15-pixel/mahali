@@ -91,9 +91,10 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
 {
     setObjectName(QStringLiteral("loginDialog"));
     setModal(true);
-    // The interface is French, so the login gate stays left-to-right whatever
-    // the active application language asks for.
-    setLayoutDirection(Qt::LeftToRight);
+    // No direction is pinned here. The login gate is reached before anything has
+    // set a language of its own, so it inherits the application direction that
+    // core::applyLanguage() pinned from the stored language at startup, and a
+    // French install gets a left-to-right gate without this having to know.
     // The stylesheet pads the dialog itself, so the root layout adds no margins.
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);

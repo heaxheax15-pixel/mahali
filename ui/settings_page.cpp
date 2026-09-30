@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
@@ -23,6 +24,30 @@
 #include "widgets/ui_helpers.h"
 
 namespace app::ui {
+
+namespace {
+
+// The settings column, and with it every field inside it. A settings form is a
+// fixed set of known fields, so its width is a design decision rather than
+// something to derive from the window: left to grow it became 960px wide and
+// pushed the field away from its own label.
+constexpr int kFormWidth = 500;
+
+// The labels are captions now, sitting above the field they name, and a caption
+// does not end in a colon. It is taken off the translated text rather than off
+// the source string because the source is the key the French catalogue is
+// matched on: editing it would leave the French labels falling back to Arabic
+// until the catalogue was rebuilt.
+QString caption(const QString& text)
+{
+    QString out = text.trimmed();
+    if (out.endsWith(QLatin1Char(':'))) {
+        out.chop(1);
+    }
+    return out.trimmed();
+}
+
+} // namespace
 
 SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
@@ -45,6 +70,14 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     m_language->addItem(tr("Français"), QStringLiteral("fr"));
     m_language->addItem(tr("English"), QStringLiteral("en"));
 
+    // A combo box asks for Preferred, so under an expanding field policy it kept
+    // its size hint — 129px next to 466px line edits, which is the ragged column
+    // this form is meant to replace. Both are marked Expanding so the two
+    // dropdowns measure the same as every other field.
+    for (QComboBox* combo : {m_theme, m_language}) {
+        combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+
     m_preview = new QLabel;
     m_preview->setWordWrap(true);
     m_preview->setObjectName(QStringLiteral("faintText"));
@@ -57,25 +90,52 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     m_notice->setObjectName(QStringLiteral("noticeOk"));
     m_notice->setVisible(false);
 
+    // The same shape the login dialog uses: WrapAllRows puts each label on its
+    // own line above its field. Side by side they fought each other — an Arabic
+    // label is short and a French one long, so a shared label column left a gap
+    // in the middle of the card that neither language could use, and the zakat
+    // checkbox had no label of its own to sit under, which left it adrift in
+    // the field column.
     auto* form = new QFormLayout;
-    form->setSpacing(10);
-    form->addRow(tr("اسم المتجر:"), m_shopName);
-    form->addRow(tr("رمز العملة:"), m_currency);
-    form->addRow(QString(), m_zakat);
-    form->addRow(tr("السمة:"), m_theme);
-    form->addRow(tr("اللغة:"), m_language);
-    form->addRow(tr("مفتاح المزامنة (يتطلب إعادة تشغيل):"), m_syncKey);
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setHorizontalSpacing(10);
+    form->setVerticalSpacing(14);
+    form->setLabelAlignment(Qt::AlignLeft);
+    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    form->setRowWrapPolicy(QFormLayout::WrapAllRows);
+    form->addRow(caption(tr("اسم المتجر:")), m_shopName);
+    form->addRow(caption(tr("رمز العملة:")), m_currency);
+    // The checkbox carries its own text and spans the row, so it reads as a
+    // sentence in its own right rather than as a box with a gap beside it.
+    form->addRow(m_zakat);
+    form->addRow(caption(tr("السمة:")), m_theme);
+    form->addRow(caption(tr("اللغة:")), m_language);
+    form->addRow(caption(tr("مفتاح المزامنة (يتطلب إعادة تشغيل):")), m_syncKey);
+
+    // The fields are bounded by the card; the wrapper is the cap on the form
+    // itself, so the fields cannot outgrow the column if the card is ever
+    // resized to something wider.
+    auto* formBox = new QWidget;
+    formBox->setMaximumWidth(kFormWidth);
+    auto* formBoxLayout = new QVBoxLayout(formBox);
+    formBoxLayout->setContentsMargins(0, 0, 0, 0);
+    formBoxLayout->addLayout(form);
 
     m_checkUpdates = new QPushButton(tr("Vérifier les mises à jour"));
     m_checkUpdates->setObjectName(QStringLiteral("linkButton"));
     m_checkUpdates->setCursor(Qt::PointingHandCursor);
 
     auto* card = makeCard();
+    // Fixed rather than merely capped: a maximum alone leaves the card at its
+    // size hint, which measured 140px in Arabic and 291px in French for the same
+    // screen — two different columns depending on the language.
+    card->setFixedWidth(kFormWidth);
     auto* cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(16, 14, 16, 16);
     cardLayout->setSpacing(12);
-    cardLayout->addLayout(form);
+    cardLayout->addWidget(formBox);
     cardLayout->addWidget(m_preview);
+    cardLayout->addSpacing(21);
     cardLayout->addWidget(m_save);
     cardLayout->addWidget(m_checkUpdates);
     cardLayout->addWidget(m_notice);
@@ -84,8 +144,29 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     padPageLayout(root);
     root->addWidget(new PageHeader(tr("الإعدادات"),
                                    tr("اسم المتجر، العملة، السمة ومفتاح المزامنة")));
-    root->addWidget(card);
-    root->addStretch(1);
+
+    // Six stacked rows do not fit a short page: the card measures 863px against
+    // the 748px the window gives it, and the save button and the update link sit
+    // at the bottom of it, so left alone they were simply off the page. The card
+    // scrolls instead. At a window tall enough to hold the form there is nothing
+    // to scroll and no scrollbar appears.
+    auto* scroll = new QScrollArea;
+    scroll->setObjectName(QStringLiteral("settingsScroll"));
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    // A scroll area centres a widget narrower than its viewport, and AlignLeft
+    // is mirrored by the layout direction, so it lands on the reading-start
+    // edge: the right in the Arabic UI, the left in the French one.
+    scroll->setAlignment(Qt::AlignLeft);
+    // The theme hands the sidebar's scroll area a transparent surface by name
+    // and this one is not in that rule, so without a background of its own it
+    // would paint the window colour over the page.
+    scroll->setStyleSheet(QStringLiteral("QScrollArea, QScrollArea > QWidget > QWidget"
+                                         " { background: transparent; border: none; }"));
+    scroll->setWidget(card);
+    root->addWidget(scroll, 1);
 
     connect(m_currency, &QLineEdit::textChanged, m_preview,
             [this](const QString& symbol) {

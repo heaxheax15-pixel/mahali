@@ -115,6 +115,13 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
     root->addWidget(m_header);
+    // The two lines used to be plain children of the page with no layout owning
+    // them, so they kept the 100px placeholder geometry and the summary lost two
+    // thirds of its text to the edge. Given a row of their own they take the full
+    // content width; the one that wraps to two lines is the message, not the
+    // heading, so word wrap stays on.
+    root->addWidget(m_summary);
+    root->addWidget(m_variance);
     root->addLayout(cards);
     root->addWidget(movementsCard, 1);
 

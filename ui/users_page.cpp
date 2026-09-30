@@ -33,7 +33,8 @@ std::optional<core::User> userDialog(QWidget* parent, bool forNew, const core::U
     ScanSafeDialog dialog(parent);
     dialog.setWindowTitle(forNew ? QCoreApplication::translate("app::ui::UsersPage", "إضافة كاشير") : QCoreApplication::translate("app::ui::UsersPage", "تعديل المستخدم"));
     dialog.setModal(true);
-    dialog.setLayoutDirection(Qt::RightToLeft);
+    // The dialog inherits the direction from the application, so it follows the
+    // stored language instead of being pinned to Arabic.
 
     auto* name = new QLineEdit(initial.name);
     name->setPlaceholderText(QCoreApplication::translate("app::ui::UsersPage", "الاسم"));
@@ -140,7 +141,11 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_table->horizontalHeader()->setStretchLastSection(true);
+    // The actions column is sized to its own buttons in rebuildTable() rather
+    // than left to share whatever the window has left over, so stretchLastSection
+    // stays off: with it on the last section is stretched and the header ignores
+    // the width set for it.
+    m_table->horizontalHeader()->setStretchLastSection(false);
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -230,9 +235,61 @@ void UsersPage::rebuildTable()
         actionsLayout->addWidget(editBtn);
         actionsLayout->addWidget(removeBtn);
         actionsLayout->addStretch(1);
+        // A stylesheet button's size hint is the text, but a cell widget is not
+        // what ResizeToContents measures -- it measures the item delegate. So the
+        // column can land narrower than the buttons and the labels elide instead
+        // of the cell growing. Holding the buttons at their own size hint makes
+        // that impossible for any translation, not just the two shipped.
+        for (QPushButton* b : {editBtn, removeBtn}) {
+            b->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        }
 
         m_table->setCellWidget(row, 4, actionsWidget);
     }
+
+    // Size the actions section to what the buttons need, and to nothing else.
+    //
+    // It used to be the last section with stretchLastSection on, which meant its
+    // width came from the window rather than from its contents: the header
+    // measures the item delegate for a ResizeToContents section, and a cell
+    // widget is not the delegate, so sizeHintForColumn(4) was 0 and the column
+    // was in effect stretched. At the window's 900px minimum the section came out
+    // 196px against the 217px the two buttons need, the cell widget could not grow
+    // past it, and the row clipped the buttons to 77px -- "Modifier" and
+    // "Supprimer" rendered as half a word. Measuring the buttons is also what
+    // makes this survive a translation longer than the two shipped, which a
+    // hardcoded width would not.
+    //
+    // 120px is the floor for a table with no rows yet, where there are no buttons
+    // to measure; below that the header text itself starts to elide.
+    //
+    // The themes' QTableWidget::item rule carries 10px 14px of padding for the
+    // text columns, and QTableView insets a cell widget's rect by that same
+    // horizontal padding -- 28px of the section is gone before the layout inside
+    // the cell ever sees it. Measured: a 217px section handed the cell widget
+    // 188px. The padding cannot be waived for cell widgets from the stylesheet,
+    // so it is added back to the width here instead, and the number is the
+    // stylesheet's rather than a figure of its own.
+    constexpr int kItemPaddingX = 14;
+    // The section is one pixel wider than the rect the view hands the cell: the
+    // grid draws its line on the section's trailing edge, so of a 245px section
+    // the cell rect is 244px and the cell widget gets 216 of it.
+    constexpr int kGridLine = 1;
+    int actionsWidth = 0;
+    for (int row = 0; row < m_table->rowCount(); ++row) {
+        if (auto* cell = m_table->cellWidget(row, 4)) {
+            int buttons = 0;
+            for (const auto* b : cell->findChildren<QPushButton*>()) {
+                buttons += b->sizeHint().width();
+            }
+            // +6 for the spacing between the two buttons, +8 for the layout's 4px
+            // margins either side of them.
+            actionsWidth = qMax(actionsWidth, buttons + 6 + 8);
+        }
+    }
+    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    m_table->horizontalHeader()->resizeSection(
+        4, qMax(actionsWidth + 2 * kItemPaddingX + kGridLine, 120));
 }
 
 void UsersPage::onAddClicked()

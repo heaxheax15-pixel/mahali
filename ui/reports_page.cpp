@@ -3,9 +3,12 @@
 #include <QCoreApplication>
 #include <QDate>
 #include <QDateEdit>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QPainter>
+#include <QPolygonF>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -15,6 +18,7 @@
 
 #include "data/report_service.h"
 #include "format_utils.h"
+#include "theme.h"
 
 namespace app::ui {
 
@@ -40,6 +44,43 @@ QString cashTypeLabel(const QString& type)
     return type;
 }
 
+/* A QDateEdit with a calendar popup is a spin box, and the two controls it
+   actually draws are the up and down buttons, not the drop-down arrow a
+   stylesheet rule for a combo box would reach. Left alone they keep the
+   platform's own frame and glyph, which is what read as a dash at the trailing
+   edge of the field. The stylesheet now collapses both to nothing, and the
+   single triangle that replaces them is painted here: a stylesheet can put an
+   image into a subcontrol but cannot assemble a shape out of borders, so the
+   glyph has to come from a painter. Deriving from QDateEdit keeps the members
+   in the header untouched. */
+class DateField : public QDateEdit
+{
+public:
+    using QDateEdit::QDateEdit;
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QDateEdit::paintEvent(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(activeTheme() == QStringLiteral("dark")
+                             ? QColor(QStringLiteral("#a3a3a3"))
+                             : QColor(QStringLiteral("#64748b")));
+
+        // The trailing edge, clear of the text: the field's own horizontal
+        // padding is 21px, so this sits inside it and follows the layout
+        // direction without a second rule for the mirrored case.
+        const QPointF tip(width() - 21.0, height() / 2.0);
+        QPolygonF triangle;
+        triangle << QPointF(tip.x() - 5.0, tip.y() - 3.0) << QPointF(tip.x() + 5.0, tip.y() - 3.0)
+                 << QPointF(tip.x(), tip.y() + 4.0);
+        painter.drawPolygon(triangle);
+    }
+};
+
 QDateTime startOfDay(const QDate& date)
 {
     return QDateTime(date, QTime(0, 0, 0));
@@ -56,10 +97,10 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
 {
-    m_fromEdit = new QDateEdit;
+    m_fromEdit = new DateField;
     m_fromEdit->setCalendarPopup(true);
     m_fromEdit->setMinimumHeight(42);
-    m_toEdit = new QDateEdit;
+    m_toEdit = new DateField;
     m_toEdit->setCalendarPopup(true);
     m_toEdit->setMinimumHeight(42);
 

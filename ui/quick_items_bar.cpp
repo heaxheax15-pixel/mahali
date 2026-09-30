@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 
 #include "data/product_repository.h"
+#include "theme.h"
 #include "widgets/app_icon.h"
 #include "format_utils.h"
 #include "widgets/ui_helpers.h"
@@ -64,17 +65,44 @@ void QuickItemCard::mousePressEvent(QMouseEvent* event)
 QuickAddCard::QuickAddCard(QWidget* parent)
     : QFrame(parent)
 {
-    setObjectName(QStringLiteral("quickCard"));
+    // Not "quickCard": that name is the product tile, and sharing it made the add
+    // card inherit the tile's fill, hover and border, so the one control that is
+    // not a product looked like a product. Its own name lets the stylesheet draw
+    // it as the outlined "add" target it is.
+    setObjectName(QStringLiteral("quickAddCard"));
     setFixedSize(kCardWidth, kCardHeight);
     setCursor(Qt::PointingHandCursor);
     setToolTip(tr("Ajouter un produit"));
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 10, 10, 10);
-    auto* glyph = new QLabel(this);
-    glyph->setPixmap(appIcon(Icon::Plus, QColor(QStringLiteral("#66757a")), 28).pixmap(28, 28));
-    glyph->setAlignment(Qt::AlignCenter);
-    layout->addWidget(glyph, 1);
+    m_glyph = new QLabel(this);
+    m_glyph->setAlignment(Qt::AlignCenter);
+    layout->addWidget(m_glyph, 1);
+    refreshGlyph();
+}
+
+void QuickAddCard::refreshGlyph()
+{
+    if (!m_glyph) {
+        return;
+    }
+    const bool dark = activeTheme() == QStringLiteral("dark");
+    const QColor accent(dark ? QStringLiteral("#d4a017") : QStringLiteral("#2563eb"));
+    m_glyph->setPixmap(appIcon(Icon::Plus, accent, 24).pixmap(24, 24));
+}
+
+void QuickAddCard::changeEvent(QEvent* event)
+{
+    QFrame::changeEvent(event);
+    // The application stylesheet is replaced on a theme switch, which is a style
+    // change to every widget in the tree. This is the only signal the card gets,
+    // and reading the live theme rather than the stored setting keeps the glyph
+    // in step with what is actually on screen.
+    if (event->type() == QEvent::StyleChange || event->type() == QEvent::ThemeChange
+        || event->type() == QEvent::PaletteChange) {
+        refreshGlyph();
+    }
 }
 
 void QuickAddCard::mousePressEvent(QMouseEvent* event)
