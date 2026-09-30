@@ -8,6 +8,7 @@
 
 #include <QVector>
 
+#include <functional>
 #include <vector>
 
 class QLabel;
@@ -53,6 +54,21 @@ struct NavButton {
     int pageIndex = 0;
 };
 
+// One page of the shell, held as how to make it rather than as the page itself.
+// Every page constructor reads the database and fills a table, so building all
+// fourteen up front cost half a second and nearly six thousand rows of table for
+// a window that shows one page at a time. The factory table is in the same order
+// as the page indices the sidebar uses; an entry is filled in the first time its
+// page is opened and the instance kept from then on, so opening a page twice
+// re-reads the same widget rather than building a second one.
+struct PageFactory {
+    std::function<QWidget*()> create;
+    // Asks the built page to re-read. Null where the original page had no
+    // refresh on entry, so a page is not given behaviour it never had.
+    std::function<void(QWidget*)> refresh;
+    QWidget* instance = nullptr;
+};
+
 // The desktop shell: an Arabic RTL window with a top bar spanning the full
 // width, a grouped sidebar of pages on the right, the active page on the left,
 // and a live sync status line in the status bar.
@@ -63,15 +79,18 @@ public:
     explicit MainWindow(app::data::Database& db, ServerController& controller,
                         QWidget* parent = nullptr);
 
-    PosPage* posPage() const { return m_pos; }
-    CashSessionPage* cashSessionPage() const { return m_cashSession; }
-    SalesPage* salesPage() const { return m_sales; }
-    ExpensesPage* expensesPage() const { return m_expenses; }
-    ReportsPage* reportsPage() const { return m_reports; }
-    SettingsPage* settingsPage() const { return m_settings; }
-    RefundsPage* refundsPage() const { return m_refunds; }
-    AuditLogPage* auditLogPage() const { return m_auditLog; }
-    UsersPage* usersPage() const { return m_usersPage; }
+    // Each builds its page on first ask, so a caller gets a live page whichever
+    // order the window and the caller reach it in. The window opens on the quick
+    // sale, so posPage() is already built by the time anything else runs.
+    PosPage* posPage();
+    CashSessionPage* cashSessionPage();
+    SalesPage* salesPage();
+    ExpensesPage* expensesPage();
+    ReportsPage* reportsPage();
+    SettingsPage* settingsPage();
+    RefundsPage* refundsPage();
+    AuditLogPage* auditLogPage();
+    UsersPage* usersPage();
 
     // Switching the running occasion, for the page that will own the control.
     // Each call re-reads the bar, so the label cannot drift from the setting.
@@ -116,6 +135,14 @@ private:
     // Repaints every nav button from the page on screen, so the highlighted one
     // always agrees with the stacked widget even after a programmatic change.
     void refreshNavActiveState();
+    // Builds the page at this index if it is still a placeholder, and returns it.
+    // The stacked widget holds a cheap empty widget per index until then, so
+    // this swaps the real page into the same slot and the index every other part
+    // of the window uses keeps pointing at the same page.
+    QWidget* ensurePage(int row);
+    // Asks the page at this index to re-read, doing nothing if it has not been
+    // opened yet: a page nobody has looked at has nothing stale to correct.
+    void refreshPage(int row);
 
     app::data::Database& m_db;
     ServerController& m_controller;
@@ -160,18 +187,10 @@ private:
     // redrawn by refreshThemeIcons along with the buttons rather than styled.
     QLabel* m_brandIcon = nullptr;
     QPropertyAnimation* m_fade = nullptr;
-    PosPage* m_pos = nullptr;
-    CashSessionPage* m_cashSession = nullptr;
-    ProductsPage* m_products = nullptr;
-    CustomersPage* m_customers = nullptr;
-    SuppliersPage* m_suppliers = nullptr;
-    SalesPage* m_sales = nullptr;
-    ExpensesPage* m_expenses = nullptr;
-    ReportsPage* m_reports = nullptr;
-    SettingsPage* m_settings = nullptr;
-    RefundsPage* m_refunds = nullptr;
-    AuditLogPage* m_auditLog = nullptr;
-    UsersPage* m_usersPage = nullptr;
+    // The pages, in page-index order, held as factories until each is opened.
+    // The typed pointers this replaced are not needed: the entry knows its own
+    // type through create() and refresh(), and the accessors cast on the way out.
+    QVector<PageFactory> m_pageFactories;
 };
 
 } // namespace app::ui

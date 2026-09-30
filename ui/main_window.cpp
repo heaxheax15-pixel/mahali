@@ -112,47 +112,70 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
 
     m_pages = new QStackedWidget;
     m_pages->setObjectName(QStringLiteral("content"));
-    // The order here defines the page indices the sidebar refers to. It follows
-    // the page:: constants above rather than the order the buttons appear in,
-    // because a button can sit anywhere in the sidebar and still open a given
-    // page.
-    m_pos = new PosPage(db);
-    m_pages->addWidget(m_pos);
-    m_products = new ProductsPage(db);
-    m_pages->addWidget(m_products);
-    m_customers = new CustomersPage(db);
-    m_pages->addWidget(m_customers);
-    m_suppliers = new SuppliersPage(db);
-    m_pages->addWidget(m_suppliers);
-    m_cashSession = new CashSessionPage(db);
-    m_pages->addWidget(m_cashSession);
-    m_sales = new SalesPage(db);
-    m_pages->addWidget(m_sales);
-    m_expenses = new ExpensesPage(db);
-    m_pages->addWidget(m_expenses);
-    m_reports = new ReportsPage(db);
-    m_pages->addWidget(m_reports);
-    m_refunds = new RefundsPage(db);
-    m_pages->addWidget(m_refunds);
-    m_auditLog = new AuditLogPage(db);
-    m_pages->addWidget(m_auditLog);
-    m_usersPage = new UsersPage(db);
-    m_pages->addWidget(m_usersPage);
-    // Two placeholders so the navigation has somewhere to land for the pages
-    // that do not exist yet. They are real pages in the stack, so clicking the
-    // entry shows an honest "not built yet" instead of doing nothing.
-    m_pages->addWidget(makeStubPage(tr("Achats"), tr("Page en construction.")));
-    m_pages->addWidget(makeStubPage(tr("Occasions"), tr("Page en construction.")));
-    m_settings = new SettingsPage(db);
-    m_pages->addWidget(m_settings);
-    // The settings page can change the theme without going through the toggle,
-    // so the icons have to be told about that route too.
-    connect(m_settings, &SettingsPage::themeChanged, this, &MainWindow::refreshThemeIcons);
+    // The pages are described here, not built. Each entry knows how to make its
+    // page and how to ask it to re-read; ensurePage() runs the first one the
+    // moment its index is opened, which for the quick sale is here, at the end
+    // of this constructor. The order is the page indices the sidebar refers to,
+    // and follows the page:: constants above rather than the order the buttons
+    // appear in, because a button can sit anywhere in the sidebar and still open
+    // a given page.
+    m_pageFactories = {
+        {[this] { return static_cast<QWidget*>(new PosPage(m_db)); },
+         // The quick sale never re-read on entry before this change either: it
+         // keeps its own totals current as things are sold. Left as it was.
+         nullptr},
+        {[this] { return static_cast<QWidget*>(new ProductsPage(m_db)); },
+         [](QWidget* w) { qobject_cast<ProductsPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new CustomersPage(m_db)); },
+         [](QWidget* w) { qobject_cast<CustomersPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new SuppliersPage(m_db)); },
+         [](QWidget* w) { qobject_cast<SuppliersPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new CashSessionPage(m_db)); },
+         [](QWidget* w) { qobject_cast<CashSessionPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new SalesPage(m_db)); },
+         [](QWidget* w) { qobject_cast<SalesPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new ExpensesPage(m_db)); },
+         [](QWidget* w) { qobject_cast<ExpensesPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new ReportsPage(m_db)); },
+         [](QWidget* w) { qobject_cast<ReportsPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new RefundsPage(m_db)); },
+         [](QWidget* w) { qobject_cast<RefundsPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new AuditLogPage(m_db)); },
+         [](QWidget* w) { qobject_cast<AuditLogPage*>(w)->refresh(); }},
+        {[this] { return static_cast<QWidget*>(new UsersPage(m_db)); },
+         [](QWidget* w) { qobject_cast<UsersPage*>(w)->refresh(); }},
+        // Two placeholders so the navigation has somewhere to land for the pages
+        // that do not exist yet. They are real pages in the stack, so clicking the
+        // entry shows an honest "not built yet" instead of doing nothing. Both are
+        // four widgets, so they are built like the rest rather than kept eager.
+        {[this] { return makeStubPage(tr("Achats"), tr("Page en construction.")); },
+         nullptr},
+        {[this] { return makeStubPage(tr("Occasions"), tr("Page en construction.")); },
+         nullptr},
+        {[this] {
+             auto* page = new SettingsPage(m_db);
+             // The settings page can change the theme without going through the
+             // toggle, so the icons have to be told about that route too. Wired
+             // here rather than in the constructor because the page does not
+             // exist until it is opened.
+             connect(page, &SettingsPage::themeChanged, this, &MainWindow::refreshThemeIcons);
+             return static_cast<QWidget*>(page);
+         },
+         [](QWidget* w) { qobject_cast<SettingsPage*>(w)->refresh(); }},
+    };
+
+    // An empty widget per index until the page is opened. The stack keeps the
+    // count and the order from here on, so every index the sidebar, the fade and
+    // the nav highlight use is already correct before the first page exists.
+    for (int i = 0; i < m_pageFactories.size(); ++i) {
+        m_pages->addWidget(new QWidget);
+    }
 
     // Index guards rather than trust: the stack and the page:: constants above
     // are written side by side, and a mismatch should fail loudly here rather
     // than show the wrong page to someone trying to take money.
     Q_ASSERT(m_pages->count() == page::Settings + 1);
+    Q_ASSERT(m_pageFactories.size() == page::Settings + 1);
 
     auto* central = new QWidget;
     // The root is vertical: the top bar spans the full width, the update bar
@@ -213,48 +236,102 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     onPageChanged(page::QuickSale);
 }
 
+// Builds the page at this index the first time it is asked for, and puts it in
+// the slot the placeholder was sitting in, so the index keeps meaning the same
+// page to the sidebar, the nav highlight and the fade.
+QWidget* MainWindow::ensurePage(int row)
+{
+    if (row < 0 || row >= m_pageFactories.size()) {
+        return nullptr;
+    }
+    PageFactory& factory = m_pageFactories[row];
+    if (factory.instance != nullptr) {
+        return factory.instance;
+    }
+
+    QWidget* page = factory.create();
+    if (page == nullptr) {
+        return nullptr;
+    }
+    // The placeholder is ours and holds nothing, so it goes now rather than at
+    // the end of the window's life: leaving fourteen of them behind would keep
+    // the widget count climbing with every page opened.
+    QWidget* placeholder = m_pages->widget(row);
+    m_pages->removeWidget(placeholder);
+    delete placeholder;
+    m_pages->insertWidget(row, page);
+    factory.instance = page;
+    return page;
+}
+
+void MainWindow::refreshPage(int row)
+{
+    if (row < 0 || row >= m_pageFactories.size()) {
+        return;
+    }
+    const PageFactory& factory = m_pageFactories[row];
+    // Nothing to correct on a page nobody has opened, and no entry for the ones
+    // that never re-read on entry.
+    if (factory.instance == nullptr || !factory.refresh) {
+        return;
+    }
+    factory.refresh(factory.instance);
+}
+
+PosPage* MainWindow::posPage()
+{
+    return qobject_cast<PosPage*>(ensurePage(page::QuickSale));
+}
+
+CashSessionPage* MainWindow::cashSessionPage()
+{
+    return qobject_cast<CashSessionPage*>(ensurePage(page::CashSession));
+}
+
+SalesPage* MainWindow::salesPage()
+{
+    return qobject_cast<SalesPage*>(ensurePage(page::SalesOfDay));
+}
+
+ExpensesPage* MainWindow::expensesPage()
+{
+    return qobject_cast<ExpensesPage*>(ensurePage(page::Expenses));
+}
+
+ReportsPage* MainWindow::reportsPage()
+{
+    return qobject_cast<ReportsPage*>(ensurePage(page::Reports));
+}
+
+SettingsPage* MainWindow::settingsPage()
+{
+    return qobject_cast<SettingsPage*>(ensurePage(page::Settings));
+}
+
+RefundsPage* MainWindow::refundsPage()
+{
+    return qobject_cast<RefundsPage*>(ensurePage(page::Refunds));
+}
+
+AuditLogPage* MainWindow::auditLogPage()
+{
+    return qobject_cast<AuditLogPage*>(ensurePage(page::AuditLog));
+}
+
+UsersPage* MainWindow::usersPage()
+{
+    return qobject_cast<UsersPage*>(ensurePage(page::Users));
+}
+
 void MainWindow::onPageChanged(int row)
 {
+    // The page is built before it is shown, so the operator never sees a
+    // placeholder, and the re-read below lands on the widget now in the stack.
+    ensurePage(row);
     m_pages->setCurrentIndex(row);
     // Each page re-reads on entry, so what the operator sees is what is in the
     // database now rather than what it held when the window opened.
-    switch (row) {
-    case page::Products:
-        m_products->refresh();
-        break;
-    case page::Customers:
-        m_customers->refresh();
-        break;
-    case page::Suppliers:
-        m_suppliers->refresh();
-        break;
-    case page::CashSession:
-        m_cashSession->refresh();
-        break;
-    case page::SalesOfDay:
-        m_sales->refresh();
-        break;
-    case page::Expenses:
-        m_expenses->refresh();
-        break;
-    case page::Reports:
-        m_reports->refresh();
-        break;
-    case page::Refunds:
-        m_refunds->refresh();
-        break;
-    case page::AuditLog:
-        m_auditLog->refresh();
-        break;
-    case page::Users:
-        m_usersPage->refresh();
-        break;
-    case page::Settings:
-        m_settings->refresh();
-        break;
-    default:
-        break;
-    }
+    refreshPage(row);
 
     if (m_fade) {
         m_fade->stop();
@@ -630,17 +707,12 @@ void MainWindow::onSwitchUserClicked()
     hide();
     app::ui::LoginDialog login(m_db);
     if (login.exec() == QDialog::Accepted) {
-        m_products->refresh();
-        m_customers->refresh();
-        m_suppliers->refresh();
-        m_cashSession->refresh();
-        m_sales->refresh();
-        m_expenses->refresh();
-        m_reports->refresh();
-        m_refunds->refresh();
-        m_auditLog->refresh();
-        m_settings->refresh();
-        m_usersPage->refresh();
+        // Only the pages that have been opened: a page behind a placeholder has
+        // never drawn anything, and building all fourteen to re-read them is the
+        // wait this change exists to remove. It reads on the way in anyway.
+        for (int row = 0; row < m_pageFactories.size(); ++row) {
+            refreshPage(row);
+        }
         if (m_userLabel) {
             m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
         }
