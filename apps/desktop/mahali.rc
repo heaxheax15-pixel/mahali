@@ -1,8 +1,8 @@
 IDI_ICON1 ICON "mahali-orange.ico"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1,0,1,0
-PRODUCTVERSION 1,0,1,0
+FILEVERSION 1,0,2,0
+PRODUCTVERSION 1,0,2,0
 FILEOS 0x40004L
 FILETYPE 0x1L
 BEGIN
@@ -12,12 +12,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Mahali"
             VALUE "FileDescription", "Mahali - Point de vente et comptabilité"
-            VALUE "FileVersion", "1.0.1.0"
+            VALUE "FileVersion", "1.0.2.0"
             VALUE "InternalName", "mahali-desktop"
             VALUE "LegalCopyright", "Mahali"
             VALUE "OriginalFilename", "mahali-desktop.exe"
             VALUE "ProductName", "Mahali"
-            VALUE "ProductVersion", "1.0.1.0"
+            VALUE "ProductVersion", "1.0.2.0"
         END
     END
     BLOCK "VarFileInfo"
