@@ -36,14 +36,15 @@ QColor textColor()
                                                    : QColor(QStringLiteral("#0f172a"));
 }
 
-// QFormLayout has no "label above the field" role, so the label takes its own
-// row and the field spans both columns of the row below it.
+// The frame is fixed, so the fields get a width of their own rather than being
+// stretched across all of it.
+constexpr int kFieldMaxWidth = 360;
+
 void addLabeledField(QFormLayout* form, const QString& text, QWidget* field)
 {
     auto* label = new QLabel(text);
     label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    form->addRow(label);
-    form->addRow(field);
+    form->addRow(label, field);
 }
 
 QFormLayout* makeForm()
@@ -54,6 +55,8 @@ QFormLayout* makeForm()
     form->setVerticalSpacing(8);
     form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    // Wrapping every row puts the label above its field instead of beside it.
+    form->setRowWrapPolicy(QFormLayout::WrapAllRows);
     return form;
 }
 
@@ -73,6 +76,7 @@ QLineEdit* makePasswordField(const QString& objectName, int maxLength)
     auto* field = new QLineEdit;
     field->setObjectName(objectName);
     field->setEchoMode(QLineEdit::Password);
+    field->setMaximumWidth(kFieldMaxWidth);
     if (maxLength > 0) {
         field->setMaxLength(maxLength);
     }
@@ -106,8 +110,9 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     m_stack->addWidget(buildConfigurationPage());
     m_stack->addWidget(buildRecuperationPage());
 
-    setMinimumSize(500, 460);
-    resize(520, 560);
+    // All three screens are known, so the frame is fixed: a wider dialog would
+    // only spread the content over empty space.
+    setFixedSize(520, 620);
 
     // No profile yet means the first administrator still has to be created.
     data::UserRepository repo(m_db);
@@ -202,6 +207,7 @@ QWidget* LoginDialog::buildConfigurationPage()
     auto* nameInput = new QLineEdit;
     nameInput->setObjectName(QStringLiteral("setupNameInput"));
     nameInput->setPlaceholderText(tr("مثال: المدير"));
+    nameInput->setMaximumWidth(kFieldMaxWidth);
     addLabeledField(form, tr("الاسم"), nameInput);
     m_setupNameInput = nameInput;
 

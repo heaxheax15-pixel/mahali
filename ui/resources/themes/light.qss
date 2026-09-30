@@ -449,7 +449,7 @@ QLineEdit#setupConfirmInput {
     background: #ffffff;
     color: #0f172a;
     border: 1px solid #e2e8f0;
-    border-radius: 14px;
+    border-radius: 7px;
     min-height: 42px;
     padding: 14px 21px;
     font-size: 15px;
