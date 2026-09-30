@@ -1636,7 +1636,10 @@ void DataLayerTest::language_setting_persists()
 {
     data::SettingRepository settings(*m_db);
 
-    // First launch has no value yet, so i18n reports the Arabic default.
+    // First launch has no value yet, so i18n reports its default. Asserted
+    // against defaultLanguage() rather than a literal on purpose: pinning the
+    // code here would make the test fail every time the default is retargeted,
+    // which is a change of policy rather than a regression in this code.
     QCOMPARE(core::currentLanguage(*m_db), core::defaultLanguage());
 
     settings.set(QStringLiteral("language"), QStringLiteral("fr"));

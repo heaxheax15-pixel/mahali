@@ -425,6 +425,7 @@ QDoubleSpinBox:focus,
 QComboBox:focus,
 QDateEdit:focus,
 QTimeEdit:focus,
+QDateTimeEdit:focus,
 QPlainTextEdit:focus,
 QTextEdit:focus {
     border: 2px solid #d4a017;
@@ -487,6 +488,44 @@ QComboBox::drop-down {
 }
 
 QComboBox::down-arrow {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #a3a3a3;
+    margin-right: 14px;
+}
+
+/* ---------- حقول التاريخ والوقت ---------- */
+/* Reports puts two date edits on one line with an "إلى:" label between them.
+   The field rule above already gives them a ground and a border, but the
+   calendar opens from a drop-down subcontrol rather than the spin box arrows,
+   and subcontrols are styled apart from the widget: with no rule of their own
+   they kept the platform's own frame and glyph, which drew a second box inside
+   the field and left it reading as two half-controls. The floor keeps a date
+   from collapsing to a bare fragment when the window is narrow. */
+QDateEdit,
+QTimeEdit,
+QDateTimeEdit {
+    min-width: 140px;
+}
+
+/* No subcontrol-position here on purpose: left/right is resolved against the
+   layout direction, so the drop-down lands on the trailing edge either way --
+   left in the Arabic UI, right in the French one. */
+QDateEdit::drop-down,
+QTimeEdit::drop-down,
+QDateTimeEdit::drop-down {
+    subcontrol-origin: padding;
+    width: 28px;
+    border: none;
+    background: transparent;
+}
+
+QDateEdit::down-arrow,
+QTimeEdit::down-arrow,
+QDateTimeEdit::down-arrow {
+    image: none;
     width: 0;
     height: 0;
     border-left: 5px solid transparent;
@@ -907,6 +946,16 @@ QTableWidget#productTable QLineEdit {
     min-height: 0;
     padding: 7px;
     font-size: 15px;
+}
+
+/* A button inside a row suffers the same overflow as the editor above it, and
+   for the same reason: the general rule gives a button 42px of content plus
+   14px of padding above and below, which is 72px in all, while the row is 42px,
+   so the button hung past the row and its label was clipped. The padding drops
+   to 7px inside a table cell, which is what lets both action buttons fit. */
+QTableWidget#usersTable QPushButton {
+    min-height: 21px;
+    padding: 7px 14px;
 }
 
 /* ---------- التبويبات ---------- */

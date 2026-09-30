@@ -204,9 +204,16 @@ void UsersPage::rebuildTable()
         actionsLayout->setContentsMargins(4, 2, 4, 2);
         actionsLayout->setSpacing(6);
 
+        // No width is set on either button, and that is the fix rather than an
+        // omission: the themes pad a button by 21px a side, so "تعديل" needs
+        // 87px of button to show its 42px of text and "حذف" needs 81. The 70
+        // that was here left 26px for the label, which Qt elided to nothing --
+        // the red button had no readable text. Sizing to the label lets the
+        // ResizeToContents section be as wide as the buttons actually are, and
+        // the themes scale the padding down inside this table (see the
+        // #usersTable rules) so both fit a 42px row.
         auto* editBtn = new QPushButton(tr("تعديل"));
         editBtn->setObjectName(QStringLiteral("secondary"));
-        editBtn->setFixedWidth(70);
         editBtn->setProperty("userId", user.id);
         connect(editBtn, &QPushButton::clicked, this, [this, row]() {
             onEditClicked(row);
@@ -214,7 +221,6 @@ void UsersPage::rebuildTable()
 
         auto* removeBtn = new QPushButton(tr("حذف"));
         removeBtn->setObjectName(QStringLiteral("danger"));
-        removeBtn->setFixedWidth(70);
         removeBtn->setProperty("userId", user.id);
         connect(removeBtn, &QPushButton::clicked, this, [this, row]() {
             onRemoveClicked(row);

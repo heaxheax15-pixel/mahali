@@ -46,7 +46,11 @@ QStringList supportedLanguages()
 
 QString defaultLanguage()
 {
-    return QStringLiteral("ar");
+    // French, not the source language. The source strings are Arabic, but
+    // mahali_ar.ts and mahali_en.ts carry no finished translations, so a fresh
+    // install defaulting to "ar" shows the raw source strings in every field.
+    // fr is the one catalogue that is actually maintained.
+    return QStringLiteral("fr");
 }
 
 bool applyLanguage(const QString& code)
