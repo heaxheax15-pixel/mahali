@@ -12,6 +12,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSet>
+#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QStyle>
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <functional>
 
+#include "core/barcode_utils.h"
 #include "core/session.h"
 #include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
@@ -155,6 +157,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     root->addWidget(m_notice);
 
     connect(m_entry, &QLineEdit::returnPressed, this, &PosPage::addEntry);
+    connect(m_entry, &QLineEdit::textChanged, this, &PosPage::onBarcodeTextChanged);
     connect(m_save, &QPushButton::clicked, this, &PosPage::completeSale);
     connect(clearButton, &QPushButton::clicked, this, &PosPage::onClearCart);
     connect(removeButton, &QPushButton::clicked, this, &PosPage::onRemoveLine);
@@ -170,6 +173,18 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     refreshSessionChip();
     m_quickItems->refresh();
     m_entry->setFocus();
+}
+
+void PosPage::onBarcodeTextChanged(const QString& text)
+{
+    const QString normalized = core::normalizeScannedBarcode(text);
+    if (normalized == text) {
+        return;
+    }
+    // setText emits textChanged again; without the blocker this recurses.
+    QSignalBlocker blocker(m_entry);
+    m_entry->setText(normalized);
+    m_entry->setCursorPosition(normalized.length());
 }
 
 bool PosPage::eventFilter(QObject* watched, QEvent* event)

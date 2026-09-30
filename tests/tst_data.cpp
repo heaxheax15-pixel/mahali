@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QSqlQuery>
 
+#include "barcode_utils.h"
 #include "database.h"
 #include "applied_op_repository.h"
 #include "product_repository.h"
@@ -61,6 +62,7 @@ private slots:
     void quick_items_roundtrip();
     void two_products_without_barcode();
     void barcode_with_value_still_unique();
+    void normalize_barcode_azerty();
     void read_null_barcode_returns_empty();
     void sold_by_weight_persists();
     void legacy_products_migration();
@@ -264,6 +266,40 @@ void DataLayerTest::two_products_without_barcode()
     QVERIFY(third.barcode.isEmpty());
     third.name = QStringLiteral("منتج بحقل باركود فارغ");
     QVERIFY2(repo.save(third) > 0, qPrintable(m_db->lastError()));
+}
+
+void DataLayerTest::normalize_barcode_azerty()
+{
+    // Digits that arrive untouched stay untouched.
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("610300661059")),
+             QStringLiteral("610300661059"));
+    QCOMPARE(core::normalizeScannedBarcode(QString()), QString());
+
+    // A name is not a scan: the AZERTY number row shares letters with
+    // everyday French, so those must never be rewritten.
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("ABC")), QStringLiteral("ABC"));
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("Crème")), QStringLiteral("Crème"));
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("Café")), QStringLiteral("Café"));
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("Pâté")), QStringLiteral("Pâté"));
+
+    // 610300661059 as an AZERTY scanner really sends it: 6->-, 1->&, 0->à,
+    // 3->", 5->(, 9->ç.
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("-&à\"àà--&à(ç")),
+             QStringLiteral("610300661059"));
+
+    // The whole row, one symbol per key, mapped position by position.
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("&é\"'(-è_çà")),
+             QStringLiteral("1234567890"));
+    QCOMPARE(core::normalizeScannedBarcode(QStringLiteral("-&\"à\"\"\"-àà(-àç")),
+             QStringLiteral("61303336005609"));
+
+    // Each of the ten keys, digit by digit.
+    const QString azertyRow = QStringLiteral("&é\"'(-è_çà");
+    for (int key = 0; key < 10; ++key) {
+        const QChar symbol = azertyRow.at(key);
+        const QChar digit = QLatin1Char('0' + (key + 1) % 10);
+        QCOMPARE(core::normalizeScannedBarcode(QString(symbol)), QString(digit));
+    }
 }
 
 void DataLayerTest::barcode_with_value_still_unique()

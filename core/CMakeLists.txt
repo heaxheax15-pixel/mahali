@@ -24,6 +24,8 @@ target_compile_definitions(mahali-core
 target_sources(mahali-core PRIVATE
     applied_op.h
     audit_log_entry.h
+    barcode_utils.cpp
+    barcode_utils.h
     cash_movement.h
     cash_session.h
     cash_session_calculator.cpp

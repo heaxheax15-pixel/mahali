@@ -58,6 +58,7 @@ public slots:
     void completeSale();
 
 private slots:
+    void onBarcodeTextChanged(const QString& text);
     void onRemoveLine();
     void onClearCart();
     void onCellChanged(int row, int column);

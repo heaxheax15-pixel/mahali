@@ -19,6 +19,7 @@
 #include <QMessageBox>
 #include <QPoint>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTextEdit>
@@ -26,6 +27,7 @@
 
 #include <vector>
 
+#include "core/barcode_utils.h"
 #include "core/product.h"
 #include "data/date_utils.h"
 #include "data/purchase_item_repository.h"
@@ -461,6 +463,16 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
         field->setFocus();
     };
 
+    QObject::connect(searchField, &QLineEdit::textChanged, &dialog, [searchField](const QString& text) {
+        // An AZERTY scanner types the number row as symbols; put the digits back.
+        const QString normalized = core::normalizeScannedBarcode(text);
+        if (normalized == text) {
+            return;
+        }
+        const QSignalBlocker blocker(searchField);
+        searchField->setText(normalized);
+        searchField->setCursorPosition(normalized.length());
+    });
     QObject::connect(searchField, &QLineEdit::returnPressed, &dialog,
                      [&, searchField]() { lookupTyped(searchField); });
     // A click on the product column is a request to search from that line, so the

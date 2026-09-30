@@ -10,9 +10,11 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+#include "core/barcode_utils.h"
 #include "data/product_repository.h"
 #include "format_utils.h"
 #include "scan_safe_dialog.h"
@@ -64,6 +66,16 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
         }
     }
     // The scanner's Enter walks the form: barcode -> name, it must not submit.
+    QObject::connect(barcode, &QLineEdit::textChanged, &dialog, [barcode](const QString& text) {
+        // An AZERTY scanner types the number row as symbols; put the digits back.
+        const QString normalized = core::normalizeScannedBarcode(text);
+        if (normalized == text) {
+            return;
+        }
+        const QSignalBlocker blocker(barcode);
+        barcode->setText(normalized);
+        barcode->setCursorPosition(normalized.length());
+    });
     QObject::connect(barcode, &QLineEdit::returnPressed, &dialog, [name]() {
         name->setFocus();
     });
