@@ -1,10 +1,10 @@
 /* ============================================================
    mahali — light theme
    Design tokens
-     bg #f8fafc   surface #ffffff   border #e2e8f0
-     text #0f172a text2 #64748b     muted #94a3b8
+     bg #eef2f7   surface #ffffff   border #cbd5e1
+     text #0f172a text2 #475569     muted #64748b
      primary #2563eb  primaryHover #1d4ed8  primarySoft #dbeafe
-     success #16a34a  danger #dc2626  warning #d97706  hover #f1f5f9
+     success #16a34a  danger #dc2626  warning #d97706  hover #e2e8f0
      radius: button 8  input 10  card 16  chip 999
      size:   input 44  button 42  navItem 48  tableRow 46
    ============================================================ */
@@ -18,19 +18,19 @@
 
 QMainWindow,
 QMessageBox {
-    background: #f8fafc;
+    background: #eef2f7;
 }
 
 /* The page stack. Its own colour, not the window's: the pages leave a gutter of
    their padding uncovered, and in the window's off-white that gutter read as a
-   band down the edge of every page. The sidebar's surface, so the frame around
-   a page is one colour. */
+   band down the edge of every page. The window's own surface, so the frame
+   around a page is one colour with the gutter and cannot show a seam. */
 QWidget#content {
-    background: #f1f5f9;
+    background: #eef2f7;
 }
 
 QDialog {
-    background: #f8fafc;
+    background: #eef2f7;
 }
 
 /* Buttons inside dialogs get their own scale. They inherit the global button
@@ -40,7 +40,7 @@ QDialog {
 QDialog QPushButton {
     background-color: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     padding: 14px 21px;
     font-size: 15px;
@@ -49,7 +49,7 @@ QDialog QPushButton {
 }
 
 QDialog QPushButton:hover {
-    background-color: #f1f5f9;
+    background-color: #e2e8f0;
 }
 
 QDialog QPushButton:default {
@@ -59,7 +59,7 @@ QDialog QPushButton:default {
 }
 
 QWidget#loginDialog {
-    background: #f8fafc;
+    background: #eef2f7;
     padding: 28px;
 }
 
@@ -89,7 +89,7 @@ QLabel#pageHeaderTitle {
 }
 
 QLabel#pageHeaderSubtitle {
-    color: #64748b;
+    color: #475569;
     font-size: 13px;
     font-weight: 600;
 }
@@ -101,19 +101,19 @@ QLabel#cardTitle {
 }
 
 QLabel#sectionTitle {
-    color: #64748b;
+    color: #475569;
     font-size: 13px;
     font-weight: bold;
 }
 
 QLabel#hint,
 QLabel#faintText {
-    color: #64748b;
+    color: #475569;
     font-size: 13px;
 }
 
 QLabel#userLabel {
-    color: #64748b;
+    color: #475569;
     font-size: 13px;
     font-weight: 600;
 }
@@ -133,7 +133,7 @@ QLabel#loginHeader {
 }
 
 QLabel#loginSubtitle {
-    color: #64748b;
+    color: #475569;
     font-size: 13px;
 }
 
@@ -158,7 +158,7 @@ QLabel#heroValue {
 }
 
 QLabel#heroCaption {
-    color: #64748b;
+    color: #475569;
     font-size: 13px;
     font-weight: 600;
 }
@@ -178,11 +178,11 @@ QLabel#statValue[deltaState="negative"] {
 }
 
 QLabel#statValue[deltaState="neutral"] {
-    color: #64748b;
+    color: #475569;
 }
 
 QLabel#statLabel {
-    color: #64748b;
+    color: #475569;
     font-size: 13px;
     font-weight: 600;
 }
@@ -233,8 +233,8 @@ QLabel[state="danger"] {
 }
 
 QLabel[state="muted"] {
-    background: #f1f5f9;
-    color: #64748b;
+    background: #e2e8f0;
+    color: #475569;
     border-radius: 999px;
     padding: 7px 14px;
     font-size: 13px;
@@ -273,9 +273,9 @@ QPushButton:pressed {
 }
 
 QPushButton:disabled {
-    background: #f1f5f9;
-    color: #94a3b8;
-    border-color: #e2e8f0;
+    background: #e2e8f0;
+    color: #64748b;
+    border-color: #cbd5e1;
 }
 
 QPushButton#primary {
@@ -297,15 +297,32 @@ QPushButton#primary:hover {
 QPushButton#secondary {
     background: #ffffff;
     color: #0f172a;
-    border-color: #e2e8f0;
+    border-color: #cbd5e1;
     font-size: 15px;
     font-weight: 600;
     padding: 14px 21px;
 }
 
 QPushButton#secondary:hover {
-    background: #f1f5f9;
-    border-color: #e2e8f0;
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+}
+
+/* The per-row reverse on the refunds lists. Outlined and danger-tinted rather
+   than filled: a row of filled red buttons reads as "every row is a mistake",
+   and the border is what makes the button findable inside a striped table. */
+QPushButton#rowRefundButton {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    color: #dc2626;
+    font-size: 16px;
+    padding: 0;
+}
+QPushButton#rowRefundButton:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    border-color: #dc2626;
 }
 
 /* "Vérifier les mises à jour" is a low-emphasis action, not a command the
@@ -340,7 +357,7 @@ QPushButton#danger:hover {
 QPushButton#userButton {
     background: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     min-height: 42px;
     padding: 14px 21px;
@@ -350,14 +367,14 @@ QPushButton#userButton {
 }
 
 QPushButton#userButton:hover {
-    background: #f1f5f9;
+    background: #e2e8f0;
     border-color: #2563eb;
 }
 
 QToolButton {
     background: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     min-height: 42px;
     padding: 14px 21px;
@@ -366,8 +383,8 @@ QToolButton {
 }
 
 QToolButton:hover {
-    background: #f1f5f9;
-    border-color: #e2e8f0;
+    background: #e2e8f0;
+    border-color: #cbd5e1;
 }
 
 QCheckBox {
@@ -380,7 +397,7 @@ QCheckBox::indicator {
     width: 21px;
     height: 21px;
     border-radius: 14px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     background: #ffffff;
 }
 
@@ -405,7 +422,7 @@ QPlainTextEdit,
 QTextEdit {
     background: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     min-height: 42px;
     padding: 14px 21px;
@@ -429,9 +446,9 @@ QTextEdit:focus {
 QLineEdit:disabled,
 QSpinBox:disabled,
 QComboBox:disabled {
-    background: #f1f5f9;
-    color: #94a3b8;
-    border-color: #e2e8f0;
+    background: #e2e8f0;
+    color: #64748b;
+    border-color: #cbd5e1;
 }
 
 QLineEdit#searchField {
@@ -448,7 +465,7 @@ QLineEdit#setupRecoveryInput,
 QLineEdit#setupConfirmInput {
     background: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     min-height: 42px;
     padding: 14px 21px;
@@ -468,7 +485,7 @@ QComboBox#languageCombo,
 QComboBox#languageCombo:focus {
     background: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     min-height: 42px;
     padding: 14px 21px;
@@ -485,7 +502,7 @@ QComboBox::down-arrow {
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 6px solid #64748b;
+    border-top: 6px solid #475569;
     margin-right: 14px;
 }
 
@@ -540,7 +557,7 @@ QDateTimeEdit::down-arrow {
 QComboBox QAbstractItemView {
     background-color: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     padding: 7px;
     selection-background-color: #dbeafe;
@@ -559,7 +576,7 @@ QComboBox QAbstractItemView::item:selected {
 }
 
 QCalendarWidget QWidget {
-    alternate-background-color: #f1f5f9;
+    alternate-background-color: #e2e8f0;
 }
 
 /* ---------- 5. الجداول ---------- */
@@ -567,16 +584,17 @@ QCalendarWidget QWidget {
    the item: Qt's parser accepts `QTableWidget::item { border-bottom }` and then
    paints nothing at all, so the separators have to come from gridline-color,
    which means every table calls setShowGrid(true).
-   The line colour is <border> and not the fainter <border-light> because a
-   gridline falls on both row colours: #f1f5f9 measures 1.05:1 on the striped
-   row, which is invisible, while #e2e8f0 keeps 1.18:1 on both. */
+   The line colour is <border> and not a fainter one because a gridline falls on
+   both row colours: it has to hold against the white row and against the
+   #f8fafc zebra row, which is why the zebra stays the lighter of the two and
+   the line is not. */
 QTableView,
 QTableWidget {
     background: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
-    gridline-color: #e2e8f0;
+    gridline-color: #cbd5e1;
     alternate-background-color: #f8fafc;
     selection-background-color: #dbeafe;
     selection-color: #1d4ed8;
@@ -586,7 +604,7 @@ QTableWidget {
 QListWidget {
     background: #ffffff;
     color: #0f172a;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 21px;
     outline: 0;
 }
@@ -597,12 +615,23 @@ QListWidget {
    No :last rule here on purpose. Qt drops that pseudo-state on
    QHeaderView::section, so a rule there would be silently dead and the last
    section would keep its right border and read as the table's own edge. */
+QHeaderView {
+    /* The strip past the last section. Interactive sections keep the width they
+       were given, so a table narrower than its header leaves a gap there, and
+       QHeaderView::section covers sections only -- the remainder is painted by
+       the header widget itself and falls through to the palette (#efefef),
+       which reads as a grey block in the top corner of every such table.
+       Measured: setting the header's own background fixes it; the descendant
+       form QHeaderView > QWidget does not, because the header paints this
+       itself rather than delegating to its viewport. */
+    background: #ffffff;
+}
 QHeaderView::section {
     background: #f8fafc;
-    color: #64748b;
+    color: #475569;
     border: none;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
+    border-right: 1px solid #cbd5e1;
     padding: 10px 14px;
     font-size: 13px;
     font-weight: 700;
@@ -616,8 +645,8 @@ QHeaderView::section {
 QTableCornerButton::section {
     background: #f8fafc;
     border: none;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
+    border-right: 1px solid #cbd5e1;
 }
 
 /* The same rule, scoped to the table. Qt has resolved the corner button's
@@ -626,8 +655,8 @@ QTableCornerButton::section {
 QTableWidget QTableCornerButton::section {
     background: #f8fafc;
     border: none;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
+    border-right: 1px solid #cbd5e1;
 }
 
 QTableWidget::item {
@@ -649,8 +678,11 @@ QListWidget::item {
 }
 
 /* ---------- 6. القائمة الجانبية ---------- */
+/* White, where it used to be the same off-white the page stack is: a rail a
+   shade off its own page reads as a panel floating over it rather than as part
+   of the window, and the 1px rule below was carrying the whole separation. */
 QWidget#sidebar {
-    background: #f1f5f9;
+    background: #ffffff;
     border: none;
     padding: 14px 0 7px 0;
 }
@@ -661,11 +693,11 @@ QWidget#sidebar {
    to the right. The stylesheet cannot ask which way the window reads, so the
    window states it as the "direction" property and this matches on it. */
 QWidget#sidebar[direction="rtl"] {
-    border-left: 1px solid #e2e8f0;
+    border-left: 1px solid #cbd5e1;
 }
 QWidget#sidebar[direction="ltr"] {
     border-left: none;
-    border-right: 1px solid #e2e8f0;
+    border-right: 1px solid #cbd5e1;
 }
 
 /* Not a button that happens to sit at the bottom of the rail, but a line of
@@ -675,7 +707,7 @@ QWidget#sidebar[direction="ltr"] {
 QPushButton#about {
     background: transparent;
     min-height: 0px;
-    color: #64748b;
+    color: #475569;
     border: none;
     border-radius: 7px;
     padding: 8px 21px;
@@ -685,7 +717,7 @@ QPushButton#about {
 }
 
 QPushButton#about:hover {
-    background: #f1f5f9;
+    background: #e2e8f0;
     color: #2563eb;
 }
 
@@ -693,7 +725,7 @@ QPushButton#about:hover {
    hairline that separates it from the rail underneath. */
 QWidget#topBar {
     background: #ffffff;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
 }
 
 /* The brand moved out of the rail into the top bar, so it reads as a header
@@ -708,7 +740,7 @@ QWidget#topBar {
    is what makes a 12px run of Arabic read as a label instead of a word: it
    opens the glyphs apart the way small caps do. */
 QLabel#navGroupTitle {
-    color: #64748b;
+    color: #475569;
     font-size: 12px;
     font-weight: 800;
     letter-spacing: 1.5px;
@@ -752,7 +784,7 @@ QPushButton#navItem[direction="ltr"] {
 }
 
 QPushButton#navItem:hover {
-    background: #f1f5f9;
+    background: #e2e8f0;
     color: #0f172a;
 }
 
@@ -796,7 +828,7 @@ QLabel#occasionLabel {
    specks next to the wordmark. */
 QPushButton#iconButton {
     background: transparent;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
     min-height: 0;
     padding: 7px;
@@ -805,7 +837,7 @@ QPushButton#iconButton {
 }
 
 QPushButton#iconButton:hover {
-    background: #f1f5f9;
+    background: #e2e8f0;
     border-color: #cbd5e1;
 }
 
@@ -814,7 +846,7 @@ QFrame#card,
 QWidget#pageHeader,
 QFrame#statCard {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 21px;
 }
 
@@ -826,7 +858,7 @@ QFrame#statCard {
 QFrame#invoiceBar {
     background: #ffffff;
     border: none;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid #cbd5e1;
     border-radius: 0;
     padding: 14px 21px;
     min-height: 70px;
@@ -843,26 +875,40 @@ QFrame#statCard QLabel#statIcon {
 
 QFrame#heroPanel {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 21px;
 }
 
 /* شريط المنتجات السريعة: بطاقات 140x100 داخل شريط أفقي */
 QWidget#quickItemsBar {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: none;
     border-radius: 21px;
 }
 
+QScrollArea#quickItemsScroll {
+    background: #ffffff;
+    border: none;
+}
+
+QScrollArea#quickItemsScroll > QWidget > QWidget {
+    background: #ffffff;
+}
+
+QWidget#quickCardsRow {
+    background: #ffffff;
+}
+
 QWidget#quickItemsBar QFrame#quickCard {
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
 }
 
 QWidget#quickItemsBar QFrame#quickCard:hover {
     background: #dbeafe;
     border: 1px solid #2563eb;
+    border-radius: 7px;
 }
 
 /* The add tile is the one card in the strip that is not a product, so it is
@@ -870,13 +916,14 @@ QWidget#quickItemsBar QFrame#quickCard:hover {
    with a plus in it read as a product with no name. */
 QWidget#quickItemsBar QFrame#quickAddCard {
     background: transparent;
-    border: 1px dashed #94a3b8;
-    border-radius: 14px;
+    border: 1px dashed #64748b;
+    border-radius: 7px;
 }
 
 QWidget#quickItemsBar QFrame#quickAddCard:hover {
     background: #dbeafe;
     border: 1px dashed #2563eb;
+    border-radius: 7px;
 }
 
 QWidget#quickItemsBar QLabel#quickName {
@@ -891,7 +938,7 @@ QWidget#quickItemsBar QLabel#quickPrice {
 }
 
 QWidget#quickItemsBar QLabel#quickEmpty {
-    color: #94a3b8;
+    color: #64748b;
     font-size: 15px;
 }
 
@@ -903,7 +950,7 @@ QLabel#statIcon {
 
 QGroupBox {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 21px;
     margin-top: 14px;
     padding: 21px 21px;
@@ -913,14 +960,14 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     padding: 0 7px;
-    color: #64748b;
+    color: #475569;
 }
 
 /* ---------- 8. الشرائط ---------- */
 QStatusBar {
     background: #ffffff;
-    color: #64748b;
-    border-top: 1px solid #e2e8f0;
+    color: #475569;
+    border-top: 1px solid #cbd5e1;
 }
 
 QStatusBar::item {
@@ -958,13 +1005,13 @@ QScrollBar:vertical {
 }
 
 QScrollBar::handle:vertical {
-    background: #94a3b8;
+    background: #64748b;
     border-radius: 14px;
     min-height: 28px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #64748b;
+    background: #475569;
 }
 
 QScrollBar:horizontal {
@@ -974,13 +1021,13 @@ QScrollBar:horizontal {
 }
 
 QScrollBar::handle:horizontal {
-    background: #94a3b8;
+    background: #64748b;
     border-radius: 14px;
     min-width: 28px;
 }
 
 QScrollBar::handle:horizontal:hover {
-    background: #64748b;
+    background: #475569;
 }
 
 /* The gaps a scrollbar leaves around its handle, and the arrow buttons. Neither
@@ -1070,9 +1117,9 @@ QWidget#quickNav {
 
 QPushButton#quickNavLetter {
     background: transparent;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
-    color: #64748b;
+    color: #475569;
     font-size: 18px;
     font-weight: 800;
     min-width: 40px;
@@ -1082,7 +1129,7 @@ QPushButton#quickNavLetter {
 }
 
 QPushButton#quickNavLetter:hover {
-    background: #f1f5f9;
+    background: #e2e8f0;
     border-color: #cbd5e1;
     color: #0f172a;
 }
@@ -1102,9 +1149,9 @@ QPushButton#quickNavLetter[active="true"] {
    keep a visible edge on hover -- it has no label to fall back on. */
 QPushButton#sidebarToggle {
     background: transparent;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 7px;
-    color: #64748b;
+    color: #475569;
     font-size: 18px;
     min-width: 40px;
     max-width: 40px;
@@ -1113,7 +1160,7 @@ QPushButton#sidebarToggle {
 }
 
 QPushButton#sidebarToggle:hover {
-    background: #f1f5f9;
+    background: #e2e8f0;
     color: #0f172a;
 }
 
@@ -1127,26 +1174,26 @@ QPushButton#sidebarToggle:pressed {
 QPushButton#ghost {
     background: #ffffff;
     color: #0f172a;
-    border-color: #e2e8f0;
+    border-color: #cbd5e1;
 }
 
 QPushButton#ghost:hover {
-    background: #f1f5f9;
-    border-color: #e2e8f0;
+    background: #e2e8f0;
+    border-color: #cbd5e1;
 }
 
 /* ---------- شرائح تصفية المنتجات ---------- */
 QPushButton#filterChip {
     background: transparent;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 999px;
     padding: 7px 14px;
     font-size: 13px;
-    color: #64748b;
+    color: #475569;
 }
 QPushButton#filterChip:hover {
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    background: #e2e8f0;
+    border: 1px solid #cbd5e1;
 }
 QPushButton#filterChipActive {
     background: #dbeafe;
@@ -1186,14 +1233,14 @@ QTableWidget#usersTable QPushButton {
    takes the card surface, so the selected tab reads as part of the pane it
    opens: its bottom border is the pane colour, which closes the seam. */
 QTabWidget::pane {
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 14px;
     background: #ffffff;
     top: -1px;
 }
 QTabBar::tab {
     background: transparent;
-    color: #64748b;
+    color: #475569;
     padding: 14px 21px;
     margin-right: 7px;
     border-top-left-radius: 7px;
@@ -1202,13 +1249,13 @@ QTabBar::tab {
     font-size: 15px;
 }
 QTabBar::tab:hover {
-    background: #f1f5f9;
+    background: #e2e8f0;
     color: #0f172a;
 }
 QTabBar::tab:selected {
     background: #ffffff;
     color: #2563eb;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-bottom-color: #ffffff;
     font-weight: 700;
 }

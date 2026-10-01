@@ -1,20 +1,21 @@
 #include "refunds_page.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
-#include <QGroupBox>
 #include <QHeaderView>
 #include <QInputDialog>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTime>
 #include <QVBoxLayout>
 
 #include <algorithm>
 #include <set>
+#include <vector>
 
 #include "core/audit_log_entry.h"
 #include "core/session.h"
@@ -23,8 +24,10 @@
 #include "data/customer_repository.h"
 #include "data/payment_repository.h"
 #include "data/payment_service.h"
+#include "data/sale_item_repository.h"
 #include "data/sale_repository.h"
 #include "data/sale_service.h"
+#include "data/setting_repository.h"
 #include "format_utils.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
@@ -44,7 +47,59 @@ void writeAudit(app::data::Database& db, const QString& action, const QString& t
     app::data::AuditLogRepository(db).insert(entry);
 }
 
+// The one button on a row: a symbol rather than the word, because the column is
+// 60px wide and "Rembourser" does not fit it at a readable size.
+//
+// The colour arrives as a parameter instead of being read here: a free function
+// has no database to read the setting from, and passing one in just to pick a
+// colour would couple a widget factory to the data layer for the sake of one
+// QColor. The caller asks once and reuses the answer for every row.
+QPushButton* makeRowRefundButton(QWidget* parent, const QColor& iconColor)
+{
+    auto* button = new QPushButton(parent);
+    button->setObjectName(QStringLiteral("rowRefundButton"));
+    button->setIcon(appIcon(Icon::Return, iconColor, 16));
+    button->setIconSize(QSize(16, 16));
+    button->setFixedSize(32, 32);
+    button->setCursor(Qt::PointingHandCursor);
+    button->setToolTip(QCoreApplication::translate("RefundsPage", "Rembourser"));
+    return button;
+}
+
 } // namespace
+
+QColor RefundsPage::rowIconColor() const
+{
+    // The setting the settings page's own selector writes, so the two cannot
+    // disagree about which theme the shop is running.
+    data::SettingRepository settings(m_db);
+    const QString theme =
+        settings.value(QStringLiteral("theme")).value_or(QStringLiteral("light"));
+    return theme == QStringLiteral("dark") ? QColor(QStringLiteral("#a3a3a3"))
+                                           : QColor(QStringLiteral("#475569"));
+}
+
+void RefundsPage::changeEvent(QEvent* event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::StyleChange || event->type() == QEvent::ThemeChange
+        || event->type() == QEvent::PaletteChange) {
+        repaintRowButtons();
+    }
+}
+
+void RefundsPage::repaintRowButtons()
+{
+    // Re-tinted rather than rebuilt: the rows carry the ids in their button
+    // closures, and rebuilding here would replace the closure a confirmation
+    // dialog is holding open.
+    const QColor color = rowIconColor();
+    for (QPushButton* button : m_rowButtons) {
+        if (button) {
+            button->setIcon(appIcon(Icon::Return, color, 16));
+        }
+    }
+}
 
 RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
@@ -57,69 +112,70 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_salesTable->setShowGrid(true);
     m_salesTable->setColumnCount(4);
     m_salesTable->setHorizontalHeaderLabels(
-        {tr("الوقت"), tr("المصدر"), tr("الإجمالي"), tr("الحالة")});
+        {tr("الساعة"), tr("الإجمالي"), tr("Articles"), tr("")});
     m_salesTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_salesTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_salesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_salesTable->horizontalHeader()->setStretchLastSection(true);
     m_salesTable->verticalHeader()->setDefaultSectionSize(42);
     m_salesTable->verticalHeader()->hide();
+    // Action last, so it reads as the tail of each row rather than as a second
+    // quantity beside Total: stretching anything else would squeeze the money.
+    m_salesTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    m_salesTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
+    m_salesTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
+    m_salesTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
+    m_salesTable->setColumnWidth(0, 90);
+    m_salesTable->setColumnWidth(1, 120);
+    m_salesTable->setColumnWidth(2, 100);
+    m_salesTable->setColumnWidth(3, 60);
 
-    m_refundSale = new QPushButton(tr("استرداد المبيع"));
-    m_refundSale->setObjectName(QStringLiteral("danger"));
-    m_refundSale->setIcon(appIcon(Icon::Return, QColor(QStringLiteral("#ffffff")), 18));
-    m_refundSale->setEnabled(false);
-    connect(m_refundSale, &QPushButton::clicked, this, &RefundsPage::onRefundSaleClicked);
-    connect(m_salesTable, &QTableWidget::itemSelectionChanged, this,
-            [this]() { m_refundSale->setEnabled(m_salesTable->currentRow() >= 0); });
+    m_salesEmpty = new QLabel(tr("لا يوجد بيع للاسترداد اليوم"));
+    m_salesEmpty->setObjectName(QStringLiteral("faintText"));
+    m_salesEmpty->setAlignment(Qt::AlignCenter);
 
-    auto* refundSaleRow = new QHBoxLayout;
-    refundSaleRow->addWidget(new QLabel(tr("مبيعات اليوم (تُعرض الأصول فقط):")));
-    refundSaleRow->addStretch(1);
-    refundSaleRow->addWidget(m_refundSale);
-
-    auto* salesCard = makeCard();
-    auto* salesLayout = new QVBoxLayout(salesCard);
-    salesLayout->setContentsMargins(18, 16, 18, 16);
-    salesLayout->setSpacing(10);
-    salesLayout->addWidget(makeCardTitle(tr("استرداد مبيع")));
-    salesLayout->addLayout(refundSaleRow);
-    salesLayout->addWidget(m_salesTable, 1);
+    auto* salesTab = new QWidget;
+    auto* salesTabLayout = new QVBoxLayout(salesTab);
+    salesTabLayout->setContentsMargins(0, 14, 0, 0);
+    salesTabLayout->setSpacing(0);
+    salesTabLayout->addWidget(m_salesEmpty, 1);
+    salesTabLayout->addWidget(m_salesTable, 1);
 
     m_paymentsTable = new QTableWidget;
     m_paymentsTable->setObjectName(QStringLiteral("refundPaymentsTable"));
     m_paymentsTable->setAlternatingRowColors(true);
     m_paymentsTable->setFrameShape(QFrame::NoFrame);
     m_paymentsTable->setShowGrid(true);
-    m_paymentsTable->setColumnCount(3);
-    m_paymentsTable->setHorizontalHeaderLabels({tr("الوقت"), tr("العميل"), tr("المبلغ")});
+    m_paymentsTable->setColumnCount(4);
+    m_paymentsTable->setHorizontalHeaderLabels(
+        {tr("الساعة"), tr("المبلغ"), tr("الزبون"), tr("")});
     m_paymentsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_paymentsTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_paymentsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_paymentsTable->horizontalHeader()->setStretchLastSection(true);
     m_paymentsTable->verticalHeader()->setDefaultSectionSize(42);
     m_paymentsTable->verticalHeader()->hide();
+    m_paymentsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    m_paymentsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
+    m_paymentsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
+    m_paymentsTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
+    m_paymentsTable->setColumnWidth(0, 90);
+    m_paymentsTable->setColumnWidth(1, 120);
+    m_paymentsTable->setColumnWidth(2, 260);
+    m_paymentsTable->setColumnWidth(3, 60);
 
-    m_refundPayment = new QPushButton(tr("استرداد السداد"));
-    m_refundPayment->setObjectName(QStringLiteral("danger"));
-    m_refundPayment->setIcon(appIcon(Icon::Return, QColor(QStringLiteral("#ffffff")), 18));
-    m_refundPayment->setEnabled(false);
-    connect(m_refundPayment, &QPushButton::clicked, this, &RefundsPage::onRefundPaymentClicked);
-    connect(m_paymentsTable, &QTableWidget::itemSelectionChanged, this,
-            [this]() { m_refundPayment->setEnabled(m_paymentsTable->currentRow() >= 0); });
+    m_paymentsEmpty = new QLabel(tr("لا يوجد سداد للاسترداد اليوم"));
+    m_paymentsEmpty->setObjectName(QStringLiteral("faintText"));
+    m_paymentsEmpty->setAlignment(Qt::AlignCenter);
 
-    auto* refundPaymentRow = new QHBoxLayout;
-    refundPaymentRow->addWidget(new QLabel(tr("سدايدات العملاء اليوم:")));
-    refundPaymentRow->addStretch(1);
-    refundPaymentRow->addWidget(m_refundPayment);
+    auto* paymentsTab = new QWidget;
+    auto* paymentsTabLayout = new QVBoxLayout(paymentsTab);
+    paymentsTabLayout->setContentsMargins(0, 14, 0, 0);
+    paymentsTabLayout->setSpacing(0);
+    paymentsTabLayout->addWidget(m_paymentsEmpty, 1);
+    paymentsTabLayout->addWidget(m_paymentsTable, 1);
 
-    auto* paymentsCard = makeCard();
-    auto* paymentsLayout = new QVBoxLayout(paymentsCard);
-    paymentsLayout->setContentsMargins(18, 16, 18, 16);
-    paymentsLayout->setSpacing(10);
-    paymentsLayout->addWidget(makeCardTitle(tr("استرداد سداد عميل")));
-    paymentsLayout->addLayout(refundPaymentRow);
-    paymentsLayout->addWidget(m_paymentsTable, 1);
+    auto* tabs = new QTabWidget;
+    tabs->addTab(salesTab, tr("Ventes"));
+    tabs->addTab(paymentsTab, tr("Règlements clients"));
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);
@@ -131,8 +187,7 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     padPageLayout(root);
     root->addWidget(new PageHeader(tr("الاستردادات"),
                                    tr("عكس مبيع أو إرجاع سداد عميل")));
-    root->addWidget(salesCard, 1);
-    root->addWidget(paymentsCard, 1);
+    root->addWidget(tabs, 1);
     root->addWidget(m_notice);
 
     refresh();
@@ -157,22 +212,56 @@ void RefundsPage::refresh()
             reversedIds.insert(sale.reversedSaleId);
         }
     }
-    m_salesTable->setRowCount(0);
+
+    // Which sales are actually refundable, worked out before anything is built:
+    // the item counts are one query over exactly these ids, and querying the
+    // whole day's sales would fetch lines for rows already filtered out.
+    std::vector<core::Sale> refundable;
     for (const core::Sale& sale : todaySales) {
         if (sale.totalCents <= 0 || sale.reversedSaleId != 0 || reversedIds.count(sale.id) != 0) {
             continue;
         }
+        refundable.push_back(sale);
+    }
+
+    std::vector<int> saleIds;
+    saleIds.reserve(refundable.size());
+    for (const core::Sale& sale : refundable) {
+        saleIds.push_back(sale.id);
+    }
+    const auto itemQuantities = data::SaleItemRepository(m_db).findQuantitiesBySaleIds(saleIds);
+    const QColor iconColor = rowIconColor();
+    // Rebuilt from scratch every refresh: the old buttons are about to be deleted
+    // with their rows, and holding them here would keep the previous day's rows
+    // reachable for a repaint that has nothing to paint.
+    m_rowButtons.clear();
+
+    m_salesTable->setRowCount(0);
+    for (const core::Sale& sale : refundable) {
         const int row = m_salesTable->rowCount();
         m_salesTable->insertRow(row);
-        m_salesTable->setItem(row, 0, new QTableWidgetItem(sale.createdAt.toString(QStringLiteral("HH:mm"))));
-        m_salesTable->setItem(row, 1,
-                              new QTableWidgetItem(sale.deviceId == QLatin1String("desktop")
-                                                       ? tr("الحاسوب")
-                                                       : tr("جهاز %1").arg(sale.deviceId.left(8))));
-        m_salesTable->setItem(row, 2, new QTableWidgetItem(formatMoney(sale.totalCents)));
-        m_salesTable->setItem(row, 3, new QTableWidgetItem(tr("بيع")));
-        m_salesTable->item(row, 0)->setData(Qt::UserRole, sale.id);
+        m_salesTable->setItem(
+            row, 0, new QTableWidgetItem(sale.createdAt.toString(QStringLiteral("HH:mm"))));
+        m_salesTable->setItem(row, 1, new QTableWidgetItem(formatMoney(sale.totalCents)));
+        const auto quantity = itemQuantities.find(sale.id);
+        m_salesTable->setItem(
+            row, 2, new QTableWidgetItem(quantity == itemQuantities.end()
+                                             ? QStringLiteral("—")
+                                             : QString::number(quantity->second)));
+        // The id rides on the row button's closure rather than on a cell's
+        // UserRole: the button outlives any sorting the user does, and reading
+        // the id back off item(row, 0) would mean a re-sort could silently
+        // reverse a different sale than the one that was pressed.
+        const int saleId = sale.id;
+        auto* button = makeRowRefundButton(m_salesTable, iconColor);
+        button->setToolTip(
+            QCoreApplication::translate("RefundsPage", "Rembourser cette vente"));
+        connect(button, &QPushButton::clicked, this, [this, saleId]() { confirmSaleRefund(saleId); });
+        m_salesTable->setCellWidget(row, 3, button);
+        m_rowButtons.append(button);
     }
+    m_salesTable->setVisible(m_salesTable->rowCount() > 0);
+    m_salesEmpty->setVisible(m_salesTable->rowCount() == 0);
 
     auto todayPayments = payments.findBetween(dayStart, now);
     std::sort(todayPayments.begin(), todayPayments.end(),
@@ -185,19 +274,31 @@ void RefundsPage::refresh()
     }
     m_paymentsTable->setRowCount(0);
     for (const core::Payment& payment : todayPayments) {
-        if (payment.amountCents <= 0 || payment.reversedId != 0 || reversedPaymentIds.count(payment.id) != 0) {
+        if (payment.amountCents <= 0 || payment.reversedId != 0
+            || reversedPaymentIds.count(payment.id) != 0) {
             continue;
         }
         const auto customer = customers.findById(payment.customerId);
         const int row = m_paymentsTable->rowCount();
         m_paymentsTable->insertRow(row);
-        m_paymentsTable->setItem(row, 0, new QTableWidgetItem(payment.createdAt.toString(QStringLiteral("HH:mm"))));
-        m_paymentsTable->setItem(row, 1,
-                                 new QTableWidgetItem(customer ? customer->name
-                                                               : tr("زبون #%1").arg(payment.customerId)));
-        m_paymentsTable->setItem(row, 2, new QTableWidgetItem(formatMoney(payment.amountCents)));
-        m_paymentsTable->item(row, 0)->setData(Qt::UserRole, payment.id);
+        m_paymentsTable->setItem(
+            row, 0, new QTableWidgetItem(payment.createdAt.toString(QStringLiteral("HH:mm"))));
+        m_paymentsTable->setItem(row, 1, new QTableWidgetItem(formatMoney(payment.amountCents)));
+        m_paymentsTable->setItem(
+            row, 2,
+            new QTableWidgetItem(customer ? customer->name
+                                         : tr("زبون #%1").arg(payment.customerId)));
+        const int paymentId = payment.id;
+        auto* button = makeRowRefundButton(m_paymentsTable, iconColor);
+        button->setToolTip(
+            QCoreApplication::translate("RefundsPage", "Rembourser ce règlement"));
+        connect(button, &QPushButton::clicked, this,
+                [this, paymentId]() { confirmPaymentRefund(paymentId); });
+        m_paymentsTable->setCellWidget(row, 3, button);
+        m_rowButtons.append(button);
     }
+    m_paymentsTable->setVisible(m_paymentsTable->rowCount() > 0);
+    m_paymentsEmpty->setVisible(m_paymentsTable->rowCount() == 0);
 }
 
 int RefundsPage::salesRowCount() const
@@ -215,13 +316,8 @@ QString RefundsPage::noticeText() const
     return m_notice->text();
 }
 
-void RefundsPage::onRefundSaleClicked()
+void RefundsPage::confirmSaleRefund(int saleId)
 {
-    const int row = m_salesTable->currentRow();
-    if (row < 0) {
-        return;
-    }
-    const int saleId = m_salesTable->item(row, 0)->data(Qt::UserRole).toInt();
     if (QMessageBox::question(this, tr("استرداد"),
                               tr("هل تريد استرداد هذا المبيع وإرجاع البضاعة للرف؟")) ==
         QMessageBox::Yes) {
@@ -229,20 +325,15 @@ void RefundsPage::onRefundSaleClicked()
     }
 }
 
-void RefundsPage::onRefundPaymentClicked()
+void RefundsPage::confirmPaymentRefund(int paymentId)
 {
-    const int row = m_paymentsTable->currentRow();
-    if (row < 0) {
-        return;
-    }
-    const auto payment = m_paymentsTable->item(row, 0)->data(Qt::UserRole).toInt();
     if (QMessageBox::question(this, tr("استرداد"),
                               tr("هل تريد استرداد مبلغ هذا السداد للعميل؟")) == QMessageBox::Yes) {
         bool ok = false;
         const QString note =
             QInputDialog::getText(this, tr("استرداد سداد"), tr("ملاحظة (اختياري):"),
                                   QLineEdit::Normal, QString(), &ok);
-        refundPayment(payment, ok ? note : QString());
+        refundPayment(paymentId, ok ? note : QString());
     }
 }
 

@@ -313,6 +313,23 @@ QPushButton#secondary:hover {
     border-color: #2d2d2d;
 }
 
+/* The per-row reverse on the refunds lists. Outlined and danger-tinted rather
+   than filled: a row of filled red buttons reads as "every row is a mistake",
+   and the border is what makes the button findable inside a striped table. */
+QPushButton#rowRefundButton {
+    background: transparent;
+    border: 1px solid #2d2d2d;
+    border-radius: 7px;
+    color: #ef4444;
+    font-size: 16px;
+    padding: 0;
+}
+QPushButton#rowRefundButton:hover {
+    background: #3d1414;
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
 /* "Vérifier les mises à jour" is a low-emphasis action, not a command the
    operator has to notice. It keeps the base button's height and hit area but
    drops the fill, so it does not compete with the primary button above it. */
@@ -599,6 +616,12 @@ QListWidget {
    No :last rule here on purpose. Qt drops that pseudo-state on
    QHeaderView::section, so a rule there would be silently dead and the last
    section would keep its right border and read as the table's own edge. */
+QHeaderView {
+    /* The strip past the last section: see the note in light.qss. The header
+       paints this itself, so a background on the header is what reaches it --
+       the descendant form does not. */
+    background: #1a1a1a;
+}
 QHeaderView::section {
     background: #0a0a0a;
     color: #a3a3a3;
