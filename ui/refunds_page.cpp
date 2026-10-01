@@ -118,15 +118,16 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_salesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_salesTable->verticalHeader()->setDefaultSectionSize(42);
     m_salesTable->verticalHeader()->hide();
-    // Action last, so it reads as the tail of each row rather than as a second
-    // quantity beside Total: stretching anything else would squeeze the money.
+    // The amount stretches and the columns around it are fixed, so the table
+    // fills whatever width the window has without a dead strip past the last
+    // column. Action stays last and fixed: it is one icon, and a stretched one
+    // reads as a column of content rather than as the row's tail.
     m_salesTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
-    m_salesTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
+    m_salesTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     m_salesTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
     m_salesTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
     m_salesTable->setColumnWidth(0, 90);
-    m_salesTable->setColumnWidth(1, 120);
-    m_salesTable->setColumnWidth(2, 100);
+    m_salesTable->setColumnWidth(2, 90);
     m_salesTable->setColumnWidth(3, 60);
 
     m_salesEmpty = new QLabel(tr("لا يوجد بيع للاسترداد اليوم"));
@@ -154,12 +155,11 @@ RefundsPage::RefundsPage(app::data::Database& db, QWidget* parent)
     m_paymentsTable->verticalHeader()->setDefaultSectionSize(42);
     m_paymentsTable->verticalHeader()->hide();
     m_paymentsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
-    m_paymentsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
+    m_paymentsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     m_paymentsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
     m_paymentsTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
     m_paymentsTable->setColumnWidth(0, 90);
-    m_paymentsTable->setColumnWidth(1, 120);
-    m_paymentsTable->setColumnWidth(2, 260);
+    m_paymentsTable->setColumnWidth(2, 200);
     m_paymentsTable->setColumnWidth(3, 60);
 
     m_paymentsEmpty = new QLabel(tr("لا يوجد سداد للاسترداد اليوم"));
