@@ -1,6 +1,7 @@
 #include "product_repository.h"
 
 #include <QDateTime>
+#include <QRegularExpression>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -62,6 +63,11 @@ QString likePattern(const QString& query)
     return QLatin1Char('%') + escaped + QLatin1Char('%');
 }
 
+// True when the name holds at least one Unicode letter, which is what separates
+// a real product name from a row an import left nameless. \p{L} covers Latin,
+// Arabic and every other script, so this is not a test for ASCII.
+const QRegularExpression kNamedProductRe(QStringLiteral("[\\p{L}]"));
+
 } // namespace
 
 std::optional<core::Product> ProductRepository::findById(int id) const
@@ -86,7 +92,7 @@ std::optional<core::Product> ProductRepository::findByBarcode(const QString& bar
     return productFromQuery(query);
 }
 
-std::vector<core::Product> ProductRepository::findAll() const
+std::vector<core::Product> ProductRepository::findAll(Visibility visibility) const
 {
     std::vector<core::Product> products;
     QSqlQuery query(m_db.handle());
@@ -95,8 +101,27 @@ std::vector<core::Product> ProductRepository::findAll() const
         m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::findAll"));
         return products;
     }
+    if (visibility == Visibility::All) {
+        while (query.next()) {
+            products.push_back(productFromQuery(query));
+        }
+        return products;
+    }
+    // The name filter is done here rather than in SQL because the rule is a
+    // Unicode property, and SQLite has no way to ask for one: its GLOB and LIKE
+    // both work on bytes, so "no letters" would mean "no ASCII a-z and no
+    // A-Z", which would hide every Arabic product -- the majority of them.
+    // QRegularExpression with \p{L} is the property Qt has always had.
+    //
+    // It is a match, not a test for emptiness: "---" and "123 456" hold no letter
+    // and are dropped, while "Coca 123" holds one and is kept. An empty name is
+    // dropped by the same test, since there is no letter in it to match.
     while (query.next()) {
-        products.push_back(productFromQuery(query));
+        core::Product product = productFromQuery(query);
+        if (!kNamedProductRe.match(product.name).hasMatch()) {
+            continue;
+        }
+        products.push_back(product);
     }
     return products;
 }

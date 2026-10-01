@@ -153,7 +153,8 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
 void ProductsPage::refresh()
 {
     const QString query = m_search->text().trimmed();
-    const std::vector<core::Product> all = data::ProductRepository(m_db).findAll();
+    const std::vector<core::Product> all = data::ProductRepository(m_db).findAll(
+        data::ProductRepository::Visibility::Visible);
 
     int shown = 0;
     int active = 0;

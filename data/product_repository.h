@@ -11,11 +11,25 @@ namespace app::data {
 
 class ProductRepository {
 public:
+    // How findAll() treats products that have no real name -- a name holding no
+    // Unicode letter at all. An import from another till writes rows like "12345"
+    // or "---" where a name should be, and those are not products anyone browses
+    // for. They stay in the table and stay sellable by scanning, which is why
+    // findByBarcode() below still sees them; they are only kept out of a list.
+    enum class Visibility {
+        Visible,  // only products whose name carries a letter
+        All,      // every row, named or not
+    };
+
     explicit ProductRepository(Database& db);
 
     std::optional<core::Product> findById(int id) const;
     std::optional<core::Product> findByBarcode(const QString& barcode) const;
-    std::vector<core::Product> findAll() const;
+
+    // Defaults to Visibility::Visible, so a list built from this repository does
+    // not show the nameless rows. Ask for Visibility::All when the caller needs
+    // to see them, such as an export or a repair tool.
+    std::vector<core::Product> findAll(Visibility visibility = Visibility::Visible) const;
 
     // Quick items are active products with no barcode (NULL, or blank). They
     // are sold without scanning, so they are never looked up by barcode.

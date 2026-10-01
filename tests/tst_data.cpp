@@ -59,6 +59,7 @@ private slots:
     void initTestCase();
     void schemaContainsAllTables();
     void productSaveAndFind();
+    void product_visibility_filter();
     void quick_items_roundtrip();
     void two_products_without_barcode();
     void barcode_with_value_still_unique();
@@ -188,6 +189,56 @@ void DataLayerTest::productSaveAndFind()
     QCOMPARE(found->quantity, 0LL);
 
     QVERIFY(!repo.findByBarcode(QStringLiteral("9999999999999")).has_value());
+}
+
+// An import from another till leaves rows whose name is not a name at all --
+// "12345", "---", or nothing. They are kept in the table and stay sellable by
+// scanning, but they are not browsed for, so findAll() hides them by default.
+void DataLayerTest::product_visibility_filter()
+{
+    // Its own database: m_db is shared by every test in this class, so counting
+    // absolute rows would be counting what the tests before this one left behind.
+    const QString path = m_dir.filePath(QStringLiteral("visibility.sqlite"));
+    QFile::remove(path);
+    data::Database own_db(path);
+    data::ProductRepository repo(own_db);
+
+    struct Seed {
+        QString barcode;
+        QString name;
+    };
+    const QVector<Seed> seeds = {
+        {QStringLiteral("111"), QStringLiteral("Coca")},     // a name: visible
+        {QStringLiteral("222"), QStringLiteral("12345")},    // digits only: hidden
+        // The empty name is an empty string, not a null one: products.name is
+        // NOT NULL, and an import that has no name writes '' rather than NULL.
+        {QStringLiteral("333"), QStringLiteral("")},        // empty: hidden
+        {QStringLiteral("444"), QStringLiteral("منتج")},  // Arabic: visible
+        {QStringLiteral("555"), QStringLiteral("123 456")},  // digits and a space: hidden
+    };
+    for (const Seed& seed : seeds) {
+        core::Product product;
+        product.barcode = seed.barcode;
+        product.name = seed.name;
+        product.unit = QStringLiteral("وحدة");
+        product.packageSize = 1;
+        QVERIFY(repo.save(product) > 0);
+    }
+
+    using Visibility = data::ProductRepository::Visibility;
+
+    // Two of the five names hold a Unicode letter.
+    QCOMPARE(static_cast<int>(repo.findAll(Visibility::Visible).size()), 2);
+    QCOMPARE(static_cast<int>(repo.findAll(Visibility::All).size()), 5);
+
+    // No argument means Visible, which is what the pages call.
+    QCOMPARE(static_cast<int>(repo.findAll().size()), 2);
+
+    // A hidden row is hidden from a list, not gone: it is still found by
+    // barcode, so scanning it at the till still sells it.
+    const auto hidden = repo.findByBarcode(QStringLiteral("222"));
+    QVERIFY(hidden.has_value());
+    QCOMPARE(hidden->name, QStringLiteral("12345"));
 }
 
 void DataLayerTest::quick_items_roundtrip()
