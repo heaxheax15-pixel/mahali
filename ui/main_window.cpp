@@ -25,6 +25,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 
@@ -73,6 +74,11 @@ constexpr int Users = 10;
 constexpr int Purchases = 11;
 constexpr int Occasions = 12;
 constexpr int Settings = 13;
+// Appended at the end, never in the middle. These constants are also the stacked
+// widget's indices, and the sidebar, the fade and the quick-nav buttons all hold
+// an index of their own; slipping a page in between them would silently repoint
+// every button built after it at the wrong page.
+constexpr int Stock = 14;
 } // namespace page
 
 // A page that is on the roadmap but not written yet. It exists so its sidebar
@@ -96,6 +102,56 @@ QWidget* makeStubPage(const QString& title, const QString& body)
     layout->addWidget(note);
     layout->addStretch(1);
     return page;
+}
+
+// One of the four square buttons in the top bar: the page's icon over its name.
+//
+// A QPushButton with a layout inside, not a QToolButton with
+// ToolButtonTextUnderIcon. The mode is what the two agree on, but the stylesheet
+// settles it: the rules are written as QPushButton#quickNavButton, and Qt matches
+// a QSS type selector against the widget's own class rather than its base classes,
+// so a QToolButton would have missed every one of them and kept the theme's plain
+// button look with no warning. The icon is a QLabel for the same reason the text
+// is: QPushButton has no icon-over-text mode, and its own text cannot be styled
+// separately from the button.
+//
+// Both labels are transparent to the mouse so the click lands on the button. Left
+// out, they would swallow it and the button would answer only in the few pixels of
+// padding around them.
+QPushButton* makeQuickNavButton(const QString& label)
+{
+    auto* button = new QPushButton;
+    button->setObjectName(QStringLiteral("quickNavButton"));
+    button->setFixedSize(64, 64);
+    button->setCheckable(true);
+    button->setCursor(Qt::PointingHandCursor);
+    button->setToolTip(label);
+    // Written before the first polish: the [active="true"] rule is matched when
+    // the widget is first styled, so leaving the property unset would paint the
+    // button in the default colours until the first page change came along.
+    button->setProperty("active", false);
+
+    auto* layout = new QVBoxLayout(button);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+    layout->setAlignment(Qt::AlignCenter);
+
+    auto* icon = new QLabel(button);
+    icon->setObjectName(QStringLiteral("quickNavIcon"));
+    // Pinned so the pixmap cannot stretch the button past its 64px and the text
+    // below it cannot be squeezed out when the label is long.
+    icon->setFixedSize(24, 24);
+    icon->setAlignment(Qt::AlignCenter);
+    icon->setAttribute(Qt::WA_TransparentForMouseEvents);
+
+    auto* text = new QLabel(label, button);
+    text->setObjectName(QStringLiteral("quickNavLabel"));
+    text->setAlignment(Qt::AlignCenter);
+    text->setAttribute(Qt::WA_TransparentForMouseEvents);
+
+    layout->addWidget(icon, 0, Qt::AlignCenter);
+    layout->addWidget(text);
+    return button;
 }
 
 // Qt's stylesheet has no pseudo-state for reading direction, so the direction
@@ -210,6 +266,13 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
              return static_cast<QWidget*>(page);
          },
          [](QWidget* w) { qobject_cast<SettingsPage*>(w)->refresh(); }},
+        // The stock page is one of the four the top bar puts a square button for,
+        // so it needs a slot to land in before that page is written. It is a stub
+        // rather than a blank widget for the same reason Purchases and Occasions
+        // are: a button that opens an empty white rectangle reads as a broken
+        // window, and this one says the page is on the way instead.
+        {[this] { return makeStubPage(tr("Stock"), tr("Page en construction.")); },
+         nullptr},
     };
 
     // An empty widget per index until the page is opened. The stack keeps the
@@ -222,8 +285,8 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     // Index guards rather than trust: the stack and the page:: constants above
     // are written side by side, and a mismatch should fail loudly here rather
     // than show the wrong page to someone trying to take money.
-    Q_ASSERT(m_pages->count() == page::Settings + 1);
-    Q_ASSERT(m_pageFactories.size() == page::Settings + 1);
+    Q_ASSERT(m_pages->count() == page::Stock + 1);
+    Q_ASSERT(m_pageFactories.size() == page::Stock + 1);
 
     auto* central = new QWidget;
     // The root is vertical: the top bar spans the full width, the update bar
@@ -396,14 +459,18 @@ void MainWindow::onPageChanged(int row)
     refreshNavActiveState();
 }
 
-// The strip above everything: the brand on the right, then the shop's global
-// search, then the controls that used to sit in the status bar (who is signed
-// in, which occasion is running) plus the theme toggle.
+// The strip above everything: the brand on the right, the four pages that are
+// reached most often, the shop's global search, then the controls that used to
+// sit in the status bar (who is signed in, which occasion is running) plus the
+// theme toggle.
 QWidget* MainWindow::buildTopBar()
 {
     m_topBar = new QWidget;
     m_topBar->setObjectName(QStringLiteral("topBar"));
-    m_topBar->setFixedHeight(56);
+    // Was 56, which fitted the 36px controls it held. The four square buttons are
+    // 64 tall, and a fixed height does not grow to fit a child: at 56 the button
+    // row was clipped and the names under the icons were cut off.
+    m_topBar->setFixedHeight(80);
 
     m_brandIcon = new QLabel;
     m_brandIcon->setObjectName(QStringLiteral("brandIcon"));
@@ -418,6 +485,48 @@ QWidget* MainWindow::buildTopBar()
     brandRow->setSpacing(10);
     brandRow->addWidget(m_brandIcon);
     brandRow->addWidget(brandTitle);
+
+    // The four pages an operator reaches for most, next to the brand. The same
+    // pages the sidebar lists, put where the eye already is: the sidebar is a
+    // rail of fourteen items that has to be scrolled, and the quick sale is the
+    // one page that must never be more than one click away.
+    auto* quickNav = new QWidget;
+    quickNav->setObjectName(QStringLiteral("quickNav"));
+    auto* quickNavLayout = new QHBoxLayout(quickNav);
+    quickNavLayout->setContentsMargins(0, 0, 0, 0);
+    // 7px is the gap between the four, chosen so the row reads as one block
+    // rather than as four separate controls.
+    quickNavLayout->setSpacing(7);
+
+    struct QuickNavEntry {
+        Icon icon;
+        QString label;
+        int pageIndex;
+    };
+    // Box for the stock page, not a warehouse: there is no warehouse pictogram in
+    // app_icon.h, and drawing one would mean editing the icon set, which is out of
+    // this change's scope. Box is what a stock page shows anyway, so Produits and
+    // Stock share an icon until a real one is added.
+    const std::vector<QuickNavEntry> quickEntries = {
+        {Icon::Cart, tr("البيع السريع"), page::QuickSale},
+        {Icon::Box, tr("المنتجات"), page::Products},
+        {Icon::Box, tr("المخزون"), page::Stock},
+        {Icon::BarChart, tr("التقارير"), page::Reports},
+    };
+    for (const QuickNavEntry& entry : quickEntries) {
+        QPushButton* button = makeQuickNavButton(entry.label);
+        quickNavLayout->addWidget(button);
+        const int pageIndex = entry.pageIndex;
+        connect(button, &QPushButton::clicked, this, [this, pageIndex]() {
+            onPageChanged(pageIndex);
+        });
+        // Held with its icon, like the sidebar's: the highlight has to be
+        // repainted from the page on screen and the pixmap has to be redrawn on a
+        // theme change, and neither can be done from a button the window no
+        // longer holds.
+        m_quickNavButtons.push_back({button, pageIndex});
+        m_quickNavIcons.push_back(entry.icon);
+    }
 
     m_occasionLabel = new QLabel;
     m_occasionLabel->setObjectName(QStringLiteral("occasionLabel"));
@@ -455,14 +564,17 @@ QWidget* MainWindow::buildTopBar()
     // colour rather than a flash of the light-theme one.
     refreshThemeIcons();
 
-    // In RTL the first widget added lands on the right. The brand leads, the
-    // occasion badge sits beside it, and the user and the two icon buttons close
-    // the left end. The stretch takes up what is left, which is what holds the
-    // two groups apart now that the bar carries no search field.
+    // In RTL the first widget added lands on the right. The brand leads, the quick
+    // pages sit beside it where a second click is never needed, the occasion badge
+    // follows, and the user and the two icon buttons close the left end. The
+    // stretch takes up what is left, which is what holds the two groups apart now
+    // that the bar carries no search field.
     auto* layout = new QHBoxLayout(m_topBar);
     layout->setContentsMargins(16, 8, 16, 8);
     layout->setSpacing(12);
     layout->addLayout(brandRow);
+    layout->addSpacing(16);
+    layout->addWidget(quickNav);
     layout->addSpacing(16);
     layout->addWidget(m_occasionLabel);
     layout->addStretch(1);
@@ -692,20 +804,26 @@ void MainWindow::buildNavForRole(const QString& role)
 void MainWindow::refreshNavActiveState()
 {
     const int current = m_pages->currentIndex();
-    for (const NavButton& entry : m_navButtons) {
-        const bool active = entry.pageIndex == current;
-        if (entry.button->isChecked() == active) {
-            continue;
+    // The sidebar rail and the top bar's four squares, through the same code: both
+    // mark the page on screen rather than the page that was asked for, so a
+    // programmatic switch lights up both and they cannot disagree about which one
+    // is showing.
+    for (const std::vector<NavButton>* row : {&m_navButtons, &m_quickNavButtons}) {
+        for (const NavButton& entry : *row) {
+            const bool active = entry.pageIndex == current;
+            if (entry.button->isChecked() == active) {
+                continue;
+            }
+            // setProperty alone does not restyle the button: the style has to be
+            // unpolished and polished again for the [active] rule to be re-read.
+            entry.button->setChecked(active);
+            entry.button->setProperty("active", active);
+            // A dynamic property only re-reads the stylesheet once the style is
+            // cleared, so unpolish/polish is what actually repaints the button.
+            entry.button->style()->unpolish(entry.button);
+            entry.button->style()->polish(entry.button);
+            entry.button->update();
         }
-        // setProperty alone does not restyle the button: the style has to be
-        // unpolished and polished again for the [active] rule to be re-read.
-        entry.button->setChecked(active);
-        entry.button->setProperty("active", active);
-        // A dynamic property only re-reads the stylesheet once the style is
-        // cleared, so unpolish/polish is what actually repaints the button.
-        entry.button->style()->unpolish(entry.button);
-        entry.button->style()->polish(entry.button);
-        entry.button->update();
     }
 
     // The icon colour is tied to the same state, and it is a pixmap the
@@ -751,8 +869,13 @@ void MainWindow::refreshThemeIcons()
     // here too, because the buttons are created without one and an unset
     // setIconSize leaves Qt guessing from the pixmap.
     const int current = m_pages->currentIndex();
-    for (qsizetype i = 0; i < m_navIcons.size() && i < m_navButtons.size(); ++i) {
-        const NavButton& entry = m_navButtons[static_cast<std::size_t>(i)];
+    // Indexed by std::size_t and not by qsizetype: the button list is a std::vector
+    // and the icon list a QVector, and mixing the two index types in one
+    // comparison is the sign-compare warning this used to produce.
+    const std::size_t navCount = std::min(static_cast<std::size_t>(m_navIcons.size()),
+                                          m_navButtons.size());
+    for (std::size_t i = 0; i < navCount; ++i) {
+        const NavButton& entry = m_navButtons[i];
         if (!entry.button) {
             continue;
         }
@@ -761,6 +884,29 @@ void MainWindow::refreshThemeIcons()
         entry.button->setIcon(appIcon(m_navIcons[static_cast<qsizetype>(i)],
                                       active ? accent : text,
                                       20));
+    }
+
+    // The top bar's four squares hold their icon in a QLabel rather than on the
+    // button, because QPushButton cannot stack one over a text. So it is drawn
+    // here for the same reason as above, and it follows the same state: the accent
+    // on the active square, the muted colour on the rest, which is the colour the
+    // stylesheet gives their labels, so icon and name do not disagree.
+    const std::size_t quickCount = std::min(static_cast<std::size_t>(m_quickNavIcons.size()),
+                                            m_quickNavButtons.size());
+    for (std::size_t i = 0; i < quickCount; ++i) {
+        const NavButton& entry = m_quickNavButtons[i];
+        if (!entry.button) {
+            continue;
+        }
+        auto* icon = entry.button->findChild<QLabel*>(QStringLiteral("quickNavIcon"));
+        if (!icon) {
+            continue;
+        }
+        const bool active = entry.pageIndex == current;
+        icon->setPixmap(appIcon(m_quickNavIcons[static_cast<qsizetype>(i)],
+                                active ? accent : muted,
+                                24)
+                            .pixmap(24, 24));
     }
 }
 

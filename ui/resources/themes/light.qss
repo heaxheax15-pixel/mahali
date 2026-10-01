@@ -1006,6 +1006,84 @@ QFrame#updateBar QLabel {
     font-weight: 700;
 }
 
+/* ---------- إشعار منتج بلا اسم ---------- */
+/* Shown inside the product dialog when the scanned barcode already belongs to a
+   row whose name holds no letter. The colours are the primary soft surface and
+   the primary line, the same pair as the update bar: a notice about a row that
+   needs attention, not an error. */
+QFrame#stockNotification {
+    background: #dbeafe;
+    border: 1px solid #2563eb;
+    border-radius: 14px;
+    padding: 14px 21px;
+}
+
+QFrame#stockNotification QLabel#noticeTitle {
+    color: #0f172a;
+    font-weight: 700;
+}
+
+QFrame#stockNotification QLabel#noticeBody {
+    color: #0f172a;
+    background: transparent;
+}
+
+/* The "×" hides the panel and leaves the form as typed, so it stays quiet and
+   borderless: a full button would invite it to be read as another action. */
+QFrame#stockNotification QPushButton#noticeClose {
+    background: transparent;
+    border: none;
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QFrame#stockNotification QPushButton#noticeClose:hover {
+    background: #bfdbfe;
+    border: none;
+}
+
+/* ---------- أزرار الوصول السريع في الشريط العلوي ---------- */
+/* The four square buttons beside the brand. Their background is transparent so
+   the bar's own surface shows through and the row reads as part of the bar rather
+   than as four boxes laid on it; the border is transparent until hover, which is
+   what keeps them from looking like fields. */
+QWidget#quickNav {
+    background: transparent;
+}
+
+QPushButton#quickNavButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px;
+}
+
+QPushButton#quickNavButton:hover {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+/* The page on screen. Set as a property rather than a pseudo-class because the
+   state has to be written from refreshNavActiveState, which reads the stacked
+   widget rather than the click that asked for the change. */
+QPushButton#quickNavButton[active="true"] {
+    background: #dbeafe;
+    color: #2563eb;
+    border-color: #2563eb;
+}
+
+/* The two labels inside a square button. The icon is a pixmap the stylesheet
+   cannot recolour -- refreshThemeIcons draws it -- so only the name is styled
+   here, and it inherits the colour from the button. */
+QPushButton#quickNavButton QLabel {
+    background: transparent;
+    color: inherit;
+}
+
 /* Same surface as the secondary buttons, so "لاحقًا" does not compete with
    the primary "تنزيل" next to it. */
 QPushButton#ghost {

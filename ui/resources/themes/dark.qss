@@ -1008,6 +1008,72 @@ QFrame#updateBar QLabel {
     font-weight: 700;
 }
 
+/* ---------- إشعار منتج بلا اسم ---------- */
+/* The product dialog's notice for a scanned barcode that already belongs to a
+   nameless row. Same pair as the update bar: primary soft surface, primary line. */
+QFrame#stockNotification {
+    background: #2d1f04;
+    border: 1px solid #d4a017;
+    border-radius: 14px;
+    padding: 14px 21px;
+}
+
+QFrame#stockNotification QLabel#noticeTitle {
+    color: #fafafa;
+    font-weight: 700;
+}
+
+QFrame#stockNotification QLabel#noticeBody {
+    color: #fafafa;
+    background: transparent;
+}
+
+QFrame#stockNotification QPushButton#noticeClose {
+    background: transparent;
+    border: none;
+    color: #fafafa;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QFrame#stockNotification QPushButton#noticeClose:hover {
+    background: #3d2a08;
+    border: none;
+}
+
+/* ---------- أزرار الوصول السريع في الشريط العلوي ---------- */
+/* The four square buttons beside the brand: transparent surface, so the bar's own
+   background shows through and the row reads as part of the bar. */
+QWidget#quickNav {
+    background: transparent;
+}
+
+QPushButton#quickNavButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: #a3a3a3;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px;
+}
+
+QPushButton#quickNavButton:hover {
+    background: #262626;
+    border-color: #2d2d2d;
+}
+
+QPushButton#quickNavButton[active="true"] {
+    background: #2d1f04;
+    color: #d4a017;
+    border-color: #d4a017;
+}
+
+QPushButton#quickNavButton QLabel {
+    background: transparent;
+    color: inherit;
+}
+
 /* Same surface as the secondary buttons, so "لاحقًا" does not compete with
    the primary "تنزيل" next to it. */
 QPushButton#ghost {
