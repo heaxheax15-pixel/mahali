@@ -11,6 +11,7 @@
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
 #include <QProcess>
@@ -47,6 +48,7 @@
 #include "reports_page.h"
 #include "sales_page.h"
 #include "settings_page.h"
+#include "stock_page.h"
 #include "suppliers_page.h"
 #include "users_page.h"
 #include "theme.h"
@@ -266,13 +268,9 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
              return static_cast<QWidget*>(page);
          },
          [](QWidget* w) { qobject_cast<SettingsPage*>(w)->refresh(); }},
-        // The stock page is one of the four the top bar puts a square button for,
-        // so it needs a slot to land in before that page is written. It is a stub
-        // rather than a blank widget for the same reason Purchases and Occasions
-        // are: a button that opens an empty white rectangle reads as a broken
-        // window, and this one says the page is on the way instead.
-        {[this] { return makeStubPage(tr("Stock"), tr("Page en construction.")); },
-         nullptr},
+        // The stock page is one of the four the top bar puts a square button for.
+        {[this] { return static_cast<QWidget*>(new StockPage(m_db)); },
+         [](QWidget* w) { qobject_cast<StockPage*>(w)->refresh(); }},
     };
 
     // An empty widget per index until the page is opened. The stack keeps the
@@ -304,6 +302,20 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     bodyLayout->addWidget(m_pages, 1);
     layout->addLayout(bodyLayout);
     setCentralWidget(central);
+
+    // The rail is shown or hidden from what was stored, and read here rather than
+    // in buildSidebar() because the button that changes it is built earlier, in
+    // buildTopBar(), while the rail itself only exists once buildSidebar() has
+    // run above. Reading it inside the rail's own builder would have meant the
+    // two halves of one decision living in two places.
+    //
+    // An absent key reads as shown: a window that has never been toggled opens
+    // with its navigation, which is what a first run should look like.
+    {
+        const auto stored = data::SettingRepository(m_db).value(QStringLiteral("sidebar_visible"));
+        m_sidebarVisible = !stored.has_value() || *stored != QStringLiteral("0");
+        m_sidebar->setVisible(m_sidebarVisible);
+    }
 
     buildNavForRole(app::core::Session::instance().currentUser().role);
 
@@ -457,9 +469,57 @@ void MainWindow::onPageChanged(int row)
     // The stacked widget is what actually moved, so the highlight follows it
     // rather than the click that asked for the change.
     refreshNavActiveState();
+
+    // The register takes the caret back every time it is the page on screen. A
+    // page that is switched away and back leaves the focus wherever the last
+    // click put it, so without this a cashier returning to the register after
+    // touching a table would be typing a barcode into a cell.
+    //
+    // Asked of the page the stack is now holding rather than of posPage(), which
+    // would build the register just because some other page was opened.
+    if (row == page::QuickSale) {
+        if (auto* pos = qobject_cast<PosPage*>(m_pages->currentWidget())) {
+            pos->focusEntry();
+        }
+    }
 }
 
-// The strip above everything: the brand on the right, the four pages that are
+void MainWindow::keyPressEvent(QKeyEvent* event)
+{
+    // F11 on its own: no modifier required, and none accepted. A till keyboard is
+    // a scanner's keyboard, and a shortcut that needed a modifier would be one
+    // more thing that could fire by accident while a hand was resting on a key.
+    //
+    // The window is the only place that can answer, so it takes the key and stops
+    // there: F11 never reaches the page below, where it would do nothing anyway.
+    if (event->key() == Qt::Key_F11) {
+        if (isFullScreen()) {
+            showNormal();
+        } else {
+            showFullScreen();
+        }
+        return;
+    }
+    QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::onSidebarToggleClicked()
+{
+    m_sidebarVisible = !m_sidebarVisible;
+    // No animation. The rail takes a fixed 240px from the body's row layout, so a
+    // slide would mean animating the layout as well as the widget, and the tables
+    // would have to be reflowed at every frame of it to stay aligned. Hiding the
+    // widget is enough on its own: a layout skips hidden widgets, so the page's
+    // stretch takes the rail's width and the tables resize with it.
+    m_sidebar->setVisible(m_sidebarVisible);
+    // Written so the window opens as it was left. A shop that works with the rail
+    // closed gets it back closed, rather than being shown a rail on every start.
+    data::SettingRepository(m_db).set(QStringLiteral("sidebar_visible"),
+                                      m_sidebarVisible ? QStringLiteral("1")
+                                                       : QStringLiteral("0"));
+}
+
+// The strip above everything: the brand on the right, the rail's toggle, the four
 // reached most often, the shop's global search, then the controls that used to
 // sit in the status bar (who is signed in, which occasion is running) plus the
 // theme toggle.
@@ -485,6 +545,28 @@ QWidget* MainWindow::buildTopBar()
     brandRow->setSpacing(10);
     brandRow->addWidget(m_brandIcon);
     brandRow->addWidget(brandTitle);
+
+    // The rail's own show/hide. Placed right after the brand rather than at either
+    // end of the bar, because that is the one position that puts it on the same
+    // edge as the rail in both languages: the rail follows the reading direction,
+    // and so does the layout order. In Arabic the bar fills right to left and this
+    // lands next to the rail; in French it fills left to right and it lands there
+    // too. At either end of the layout it would sit opposite the rail in one of the
+    // two, which is where a control for something is least expected.
+    m_sidebarToggle = new QPushButton;
+    m_sidebarToggle->setObjectName(QStringLiteral("sidebarToggle"));
+    // A character rather than a drawn pixmap, like the two controls beside it: the
+    // stylesheet sets a foreground colour and so can reach this one, which it
+    // cannot do for a pixmap. U+2630 is in the basic multilingual plane, so it
+    // needs no UTF-8 decoding to survive into the QString.
+    m_sidebarToggle->setText(QString(QChar(0x2630)));
+    m_sidebarToggle->setFixedSize(40, 40);
+    m_sidebarToggle->setCursor(Qt::PointingHandCursor);
+    // One tooltip for both states rather than one that tracks the toggle: the mark
+    // is a hamburger either way, and a tooltip that changed meaning on every click
+    // would have to be rewritten in step with the state.
+    m_sidebarToggle->setToolTip(tr("إظهار/إخفاء القائمة"));
+    connect(m_sidebarToggle, &QPushButton::clicked, this, &MainWindow::onSidebarToggleClicked);
 
     // The four pages an operator reaches for most, next to the brand. The same
     // pages the sidebar lists, put where the eye already is: the sidebar is a
@@ -564,15 +646,16 @@ QWidget* MainWindow::buildTopBar()
     // colour rather than a flash of the light-theme one.
     refreshThemeIcons();
 
-    // In RTL the first widget added lands on the right. The brand leads, the quick
-    // pages sit beside it where a second click is never needed, the occasion badge
-    // follows, and the user and the two icon buttons close the left end. The
-    // stretch takes up what is left, which is what holds the two groups apart now
-    // that the bar carries no search field.
+    // In RTL the first widget added lands on the right. The brand leads, the rail's
+    // toggle sits against it, the quick pages follow where a second click is never
+    // needed, the occasion badge after them, and the user and the two icon buttons
+    // close the left end. The stretch takes up what is left, which is what holds
+    // the two groups apart now that the bar carries no search field.
     auto* layout = new QHBoxLayout(m_topBar);
     layout->setContentsMargins(16, 8, 16, 8);
     layout->setSpacing(12);
     layout->addLayout(brandRow);
+    layout->addWidget(m_sidebarToggle);
     layout->addSpacing(16);
     layout->addWidget(quickNav);
     layout->addSpacing(16);

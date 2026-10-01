@@ -32,7 +32,17 @@ int main(int argc, char* argv[])
 
     // The taskbar and window icon come from mahali.rc on Windows; this is the
     // in-app icon for every other platform and for the window's own icon.
+    // Set here, before anything is built and long before any widget is shown,
+    // because the login gate is the first thing on screen and it draws its own
+    // title bar from this. A window that appears before the icon is known gets
+    // the platform's placeholder painted first, which on Windows is the black
+    // square the icon is meant to be sitting in.
     app.setWindowIcon(QIcon(QStringLiteral(":/mahali/icons/app.ico")));
+
+    // Nothing here is a shortcut for the black flash: it is set so the gate's
+    // own title bar and taskbar entry carry the mark from its first paint. The
+    // flash has a different cause and is not addressed by this attribute.
+    app.setAttribute(Qt::AA_DontShowIconsInMenus, true);
 
     QString dbPath;
     if (argc > 1) {
@@ -74,7 +84,14 @@ int main(int argc, char* argv[])
     // Apply the stored theme before the window appears (default: light).
     app::ui::applyTheme(settings.value(QStringLiteral("theme")).value_or(QStringLiteral("light")), app);
 
-    // Login flow
+    // Login flow. This is the first window the process shows, and it is shown before
+    // the server is started and before the shell is built: the gate needs nothing
+    // but the database, and starting the sync server or laying out fourteen pages
+    // behind an open dialog is work that would delay the one thing the shop is
+    // waiting for. Nothing here runs processEvents either, so the dialog is fully
+    // built and styled by the time exec() puts it on screen -- a window that
+    // repaints itself in stages while the rest of the start-up runs behind it is
+    // what a flash of unstyled black looks like.
     app::data::UserRepository userRepo(*db);
     app::ui::LoginDialog login(*db);
     if (login.exec() != QDialog::Accepted) {
@@ -85,8 +102,11 @@ int main(int argc, char* argv[])
     controller.start();
 
     app::ui::MainWindow window(*db, controller);
-    window.show();
-    window.raise();
-    window.activateWindow();
+    // Maximized rather than shown at its own size. The shell is a full till: the
+    // page, the table and the top bar are all laid out to use the width they are
+    // given, and a window the operator then has to maximise by hand would show
+    // them all at their minimum sizes first. showMaximized() also happens before
+    // the first paint, so the window is never seen at the smaller size and grown.
+    window.showMaximized();
     return app.exec();
 }

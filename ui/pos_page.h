@@ -57,6 +57,12 @@ public slots:
     void addEntry();
     void completeSale();
 
+    // Puts the caret in the scan field and selects what is in it. Called by the
+    // shell each time the register becomes the visible page: the window gives
+    // focus to whichever page it lands on, and a cashier who switches away and
+    // back would otherwise be typing a barcode into a table cell.
+    void focusEntry();
+
 private slots:
     void onBarcodeTextChanged(const QString& text);
     void onRemoveLine();

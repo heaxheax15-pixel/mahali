@@ -1084,6 +1084,32 @@ QPushButton#quickNavButton QLabel {
     color: inherit;
 }
 
+/* ---------- زر القائمة الجانبية ---------- */
+/* The ☰ in the top bar. Transparent like the other top-bar controls, so the row
+   reads as one strip; the border is drawn on all sides because this one has to
+   keep a visible edge on hover -- it has no label to fall back on. */
+QPushButton#sidebarToggle {
+    background: transparent;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    color: #64748b;
+    font-size: 18px;
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
+}
+
+QPushButton#sidebarToggle:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+QPushButton#sidebarToggle:pressed {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
 /* Same surface as the secondary buttons, so "لاحقًا" does not compete with
    the primary "تنزيل" next to it. */
 QPushButton#ghost {

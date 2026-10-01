@@ -11,6 +11,7 @@
 #include <functional>
 #include <vector>
 
+class QKeyEvent;
 class QLabel;
 class QFrame;
 class QPropertyAnimation;
@@ -102,6 +103,11 @@ private slots:
     void onPageChanged(int row);
     void onSwitchUserClicked();
     void rebuildNav();
+    // Flips the sidebar between shown and hidden and remembers the choice, so the
+    // window opens the way it was left. The tables take the rail's width back on
+    // their own: the rail is one widget in the body's row layout, and a hidden
+    // widget is skipped by the layout, leaving the rest to the page's stretch.
+    void onSidebarToggleClicked();
     // Flips the theme between light and dark, stores the choice, and re-paints
     // the toggle so it always offers the theme it would switch to.
     void onThemeToggleClicked();
@@ -120,6 +126,12 @@ private slots:
     void onUpdateDownloadFinished(const QString& path);
     void onUpdateDownloadFailed(const QString& reason);
     void onRestartToInstall();
+
+protected:
+    // F11 fills the screen and comes back out of it. Handled here rather than by
+    // a QShortcut so the key works wherever the focus is, including inside the
+    // tables and the scan field, which would eat a shortcut aimed at the window.
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     void refreshOccasionLabel();
@@ -158,6 +170,10 @@ private:
     // The group's layout buttons are added to. Kept so a role change can clear
     // the sidebar without rebuilding the whole window.
     QWidget* m_sidebar = nullptr;
+    // Whether the rail is showing, kept alongside the widget because the choice is
+    // written to the settings and has to be re-applied on the next start, long
+    // after the rail itself has been built.
+    bool m_sidebarVisible = true;
     // The column the nav groups are added to. Held so a role change can empty
     // it and build the groups again without rebuilding the window.
     QVBoxLayout* m_sidebarGroupLayout = nullptr;
@@ -176,6 +192,10 @@ private:
     QWidget* m_topBar = nullptr;
     QPushButton* m_themeToggle = nullptr;
     QPushButton* m_settingsBtn = nullptr;
+    // The ☰ in the top bar. It lives in the window and not in the rail, because the
+    // rail is the thing it hides: a control inside the thing it controls cannot
+    // bring it back.
+    QPushButton* m_sidebarToggle = nullptr;
     // Created lazily, on the first newer release, so the app opens with no bar
     // at all rather than an empty one.
     QFrame* m_updateBar = nullptr;

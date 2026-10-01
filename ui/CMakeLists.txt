@@ -53,6 +53,8 @@ target_sources(mahali-ui PRIVATE
     audit_log_page.h
     products_page.cpp
     products_page.h
+    stock_page.cpp
+    stock_page.h
     customers_page.cpp
     customers_page.h
     suppliers_page.cpp

@@ -167,7 +167,12 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     connect(m_quickItems, &QuickItemsBar::productClicked, this, &PosPage::onQuickItemClicked);
     connect(m_quickItems, &QuickItemsBar::addNewRequested, this, &PosPage::onAddQuickProduct);
 
+    // The filter is installed on the page itself as well as on the entry field,
+    // because the entry is not the only thing it watches: the page's own Show
+    // event is what tells us the register has become the visible page, and that
+    // has to reach the entry for the cashier's next scan.
     m_entry->installEventFilter(this);
+    installEventFilter(this);
     m_table->installEventFilter(this);
 
     refreshTotals();
@@ -208,6 +213,8 @@ bool PosPage::eventFilter(QObject* watched, QEvent* event)
             onRemoveLine();
             return true;
         }
+    } else if (watched == this && event->type() == QEvent::Show) {
+        m_entry->setFocus();
     }
     return QWidget::eventFilter(watched, event);
 }
@@ -249,6 +256,15 @@ QString PosPage::noticeText() const
 void PosPage::setEntryText(const QString& text)
 {
     m_entry->setText(text);
+}
+
+void PosPage::focusEntry()
+{
+    m_entry->setFocus();
+    // The whole line, so a scan does not land in the middle of a half-typed code
+    // from an earlier one. The field is cleared before every scan anyway, but a
+    // half-typed name that survived a rejected sale would be appended to here.
+    m_entry->selectAll();
 }
 
 std::optional<core::Product> PosPage::findProduct(const QString& text) const
