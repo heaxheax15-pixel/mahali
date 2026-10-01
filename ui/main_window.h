@@ -11,7 +11,6 @@
 #include <functional>
 #include <vector>
 
-class QKeyEvent;
 class QLabel;
 class QFrame;
 class QPropertyAnimation;
@@ -126,12 +125,6 @@ private slots:
     void onUpdateDownloadFinished(const QString& path);
     void onUpdateDownloadFailed(const QString& reason);
     void onRestartToInstall();
-
-protected:
-    // F11 fills the screen and comes back out of it. Handled here rather than by
-    // a QShortcut so the key works wherever the focus is, including inside the
-    // tables and the scan field, which would eat a shortcut aimed at the window.
-    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     void refreshOccasionLabel();

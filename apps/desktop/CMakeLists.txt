@@ -6,6 +6,12 @@
 # relative to the .rc, so both files must stay side by side in this directory.
 qt_add_executable(mahali-desktop main.cpp mahali.rc)
 
+if(WIN32)
+    set_target_properties(mahali-desktop PROPERTIES
+        WIN32_EXECUTABLE TRUE)
+endif()
+
+
 # rc.exe resolves the relative icon path in mahali.rc against its own working
 # directory, which for the Visual Studio generator is the build tree. Adding the
 # source directory passes it as an /I include path, so mahali-orange.ico

@@ -11,7 +11,7 @@
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QIcon>
-#include <QKeyEvent>
+#include <QShortcut>
 #include <QLabel>
 #include <QMessageBox>
 #include <QProcess>
@@ -354,6 +354,22 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     connect(m_updateDownloader, &app::core::UpdateDownloader::failed,
             this, &MainWindow::onUpdateDownloadFailed);
 
+    // F11 fills the screen and comes back out of it. A shortcut rather than a
+    // keyPressEvent override: the override only ever sees a key that no focused
+    // widget has already taken, and the scan field takes every one of them, so
+    // F11 would have been dead exactly when the cashier is most likely to press
+    // it. ApplicationShortcut rather than WindowShortcut because the point is to
+    // answer regardless of which child holds the focus, the dialogs included.
+    auto* fullScreen = new QShortcut(QKeySequence(Qt::Key_F11), this);
+    fullScreen->setContext(Qt::ApplicationShortcut);
+    connect(fullScreen, &QShortcut::activated, this, [this]() {
+        if (isFullScreen()) {
+            showNormal();
+        } else {
+            showFullScreen();
+        }
+    });
+
     // Opened on the quick sale: the first click an operator makes is almost
     // always a sale, and the page should be ready before they look for it.
     onPageChanged(page::QuickSale);
@@ -482,25 +498,6 @@ void MainWindow::onPageChanged(int row)
             pos->focusEntry();
         }
     }
-}
-
-void MainWindow::keyPressEvent(QKeyEvent* event)
-{
-    // F11 on its own: no modifier required, and none accepted. A till keyboard is
-    // a scanner's keyboard, and a shortcut that needed a modifier would be one
-    // more thing that could fire by accident while a hand was resting on a key.
-    //
-    // The window is the only place that can answer, so it takes the key and stops
-    // there: F11 never reaches the page below, where it would do nothing anyway.
-    if (event->key() == Qt::Key_F11) {
-        if (isFullScreen()) {
-            showNormal();
-        } else {
-            showFullScreen();
-        }
-        return;
-    }
-    QMainWindow::keyPressEvent(event);
 }
 
 void MainWindow::onSidebarToggleClicked()
