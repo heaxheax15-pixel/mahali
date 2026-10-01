@@ -18,13 +18,16 @@ namespace app::ui {
 
 namespace {
 
-constexpr int kBarHeight = 130;
+constexpr int kBarHeight = 60;
 constexpr int kCardWidth = 140;
-constexpr int kCardHeight = 100;
+constexpr int kCardHeight = 44;
 constexpr int kSearchWidth = 220;
-// The themed horizontal scrollbar is 12px plus a 2px margin. The strip leaves
-// room for it so the 100px card is never clipped once the row overflows.
-constexpr int kBarMarginY = 7;
+// The themed horizontal scrollbar is 14px (light.qss:972). The strip is
+// kBarHeight less the vertical margins, and the card has to fit in what is
+// left of that once the scrollbar takes its band: 60 - 8 - 14 = 38, so the
+// card is 36 and the strip holds it. This is why the card is a single row --
+// a name above a price needs about 60px, which is the whole bar.
+constexpr int kBarMarginY = 4;
 constexpr int kStripHeight = kBarHeight - 2 * kBarMarginY;
 
 } // namespace
@@ -37,18 +40,24 @@ QuickItemCard::QuickItemCard(int productId, const QString& name, const QString& 
     setFixedSize(kCardWidth, kCardHeight);
     setCursor(Qt::PointingHandCursor);
 
-    auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(10, 10, 10, 10);
-    layout->setSpacing(4);
+    // Side by side rather than stacked. The card is 36px tall, and a name over a
+    // price at that height leaves each label one line at best and clips the
+    // name on anything longer than a word. Here the name takes the width it
+    // needs and elides, and the price stays whole because it is short.
+    auto* layout = new QHBoxLayout(this);
+    layout->setContentsMargins(10, 0, 10, 0);
+    layout->setSpacing(8);
 
     auto* nameLabel = new QLabel(name, this);
     nameLabel->setObjectName(QStringLiteral("quickName"));
-    nameLabel->setWordWrap(true);
-    nameLabel->setAlignment(Qt::AlignCenter);
+    // No word wrap: wrapped text at a fixed height grows the label's sizeHint
+    // past the card, and the card is fixed, so the two fight and the price ends
+    // up pushed out of view. Eliding keeps both on one line.
+    nameLabel->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
 
     auto* priceLabel = new QLabel(price, this);
     priceLabel->setObjectName(QStringLiteral("quickPrice"));
-    priceLabel->setAlignment(Qt::AlignCenter);
+    priceLabel->setAlignment(Qt::AlignVCenter);
 
     layout->addWidget(nameLabel, 1);
     layout->addWidget(priceLabel);
@@ -75,10 +84,10 @@ QuickAddCard::QuickAddCard(QWidget* parent)
     setToolTip(tr("Ajouter un produit"));
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setContentsMargins(0, 0, 0, 0);
     m_glyph = new QLabel(this);
     m_glyph->setAlignment(Qt::AlignCenter);
-    layout->addWidget(m_glyph, 1);
+    layout->addWidget(m_glyph);
     refreshGlyph();
 }
 
@@ -124,8 +133,15 @@ QuickItemsBar::QuickItemsBar(app::data::Database& db, QWidget* parent)
     root->setContentsMargins(12, kBarMarginY, 12, kBarMarginY);
     root->setSpacing(16);
 
+    // Built, but never laid out in the bar: the register's own scan field above
+    // already searches by name, so a second field doing the same job was a
+    // duplicate on screen and 220px of width. The widget stays because it is
+    // the documented way to filter the strip programmatically (searchField() in
+    // the header is a test accessor, and refresh(query) takes the same string),
+    // so removing it would take the filtering away with the duplicate.
     m_search = makeSearchField(tr("بحث سريع"), this);
     m_search->setFixedWidth(kSearchWidth);
+    m_search->hide();
 
     m_cards = new QWidget;
     m_cards->setObjectName(QStringLiteral("quickCardsRow"));
@@ -143,24 +159,16 @@ QuickItemsBar::QuickItemsBar(app::data::Database& db, QWidget* parent)
     m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_scroll->setFixedHeight(kStripHeight);
 
-    m_empty = new QLabel(tr("لا منتجات سريعة"));
-    m_empty->setObjectName(QStringLiteral("quickEmpty"));
-    m_empty->setAlignment(Qt::AlignCenter);
-    m_empty->setFixedHeight(kStripHeight);
-
-    // The message takes the strip's place when there is nothing to list, so the
-    // two never compete for the same row.
-    auto* strip = new QVBoxLayout;
-    strip->setContentsMargins(0, 0, 0, 0);
-    strip->setSpacing(0);
-    strip->addWidget(m_scroll);
-    strip->addWidget(m_empty);
+    // No "no quick items" label. It used to sit in a strip layout beside the
+    // scroll area and the two took turns being visible, which cost no height
+    // but left a row that said nothing useful: a till with no quick items is the
+    // normal case for a shop that scans everything, and the strip reads as
+    // empty on its own.
 
     m_addCard = new QuickAddCard(this);
     connect(m_addCard, &QuickAddCard::clicked, this, &QuickItemsBar::addNewRequested);
 
-    root->addWidget(m_search);
-    root->addLayout(strip, 1);
+    root->addWidget(m_scroll, 1);
     root->addWidget(m_addCard);
 
     connect(m_search, &QLineEdit::textChanged, this, [this](const QString& text) { refresh(text); });
@@ -182,9 +190,8 @@ void QuickItemsBar::refresh(const QString& query)
         m_cardsLayout->insertWidget(m_cardsLayout->count() - 1, card);
     }
 
-    const bool empty = items.empty();
-    m_scroll->setVisible(!empty);
-    m_empty->setVisible(empty);
+    // No widget to hide now that the empty message is gone: the scroll area is
+    // always shown and simply holds no cards when there is nothing to list.
 }
 
 void QuickItemsBar::clearCards()
@@ -207,7 +214,11 @@ int QuickItemsBar::cardCount() const
 
 bool QuickItemsBar::isEmptyMessageVisible() const
 {
-    return !m_empty->isHidden();
+    // The name is kept because the header declares it and a test asserts on it,
+    // but there is no longer a label to report: what it answered is whether the
+    // strip is showing nothing, which is the same question. After clearCards()
+    // the row holds the trailing stretch and nothing else.
+    return m_cardsLayout->count() <= 1;
 }
 
 } // namespace app::ui

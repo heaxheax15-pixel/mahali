@@ -106,53 +106,37 @@ QWidget* makeStubPage(const QString& title, const QString& body)
     return page;
 }
 
-// One of the four square buttons in the top bar: the page's icon over its name.
+// One of the four square buttons in the top bar: one letter, nothing else.
 //
-// A QPushButton with a layout inside, not a QToolButton with
-// ToolButtonTextUnderIcon. The mode is what the two agree on, but the stylesheet
-// settles it: the rules are written as QPushButton#quickNavButton, and Qt matches
-// a QSS type selector against the widget's own class rather than its base classes,
-// so a QToolButton would have missed every one of them and kept the theme's plain
-// button look with no warning. The icon is a QLabel for the same reason the text
-// is: QPushButton has no icon-over-text mode, and its own text cannot be styled
-// separately from the button.
+// The letter replaces the icon-over-name pair these used to hold. At 64x64 with
+// an Arabic page name underneath, the row was 80px of the window and the names
+// were the widest thing in the bar; at 40x40 with a single glyph the four take
+// 187px instead of 300px, and the page is named in the tooltip and by the active
+// state rather than by a caption repeated from the sidebar two hundred pixels
+// away.
 //
-// Both labels are transparent to the mouse so the click lands on the button. Left
-// out, they would swallow it and the button would answer only in the few pixels of
-// padding around them.
-QPushButton* makeQuickNavButton(const QString& label)
+// A QPushButton rather than a QToolButton: the stylesheet rules are written as
+// QPushButton#quickNavLetter, and Qt matches a QSS type selector against the
+// widget's own class rather than its base classes, so a QToolButton would miss
+// every one of them and keep the theme's plain button look with no warning.
+// Plain button text also means no layout and no child labels inside, so nothing
+// has to be made transparent to the mouse.
+QPushButton* makeQuickNavButton(QLatin1Char letter, const QString& toolTip)
 {
     auto* button = new QPushButton;
-    button->setObjectName(QStringLiteral("quickNavButton"));
-    button->setFixedSize(64, 64);
+    button->setObjectName(QStringLiteral("quickNavLetter"));
+    button->setText(QString(letter));
+    // 40x40 here as well as in the stylesheet's min/max: the stylesheet sets the
+    // box, and this pins it, so the button cannot be widened by a longer label
+    // or by a future translation of the tooltip.
+    button->setFixedSize(40, 40);
     button->setCheckable(true);
     button->setCursor(Qt::PointingHandCursor);
-    button->setToolTip(label);
+    button->setToolTip(toolTip);
     // Written before the first polish: the [active="true"] rule is matched when
     // the widget is first styled, so leaving the property unset would paint the
     // button in the default colours until the first page change came along.
     button->setProperty("active", false);
-
-    auto* layout = new QVBoxLayout(button);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(2);
-    layout->setAlignment(Qt::AlignCenter);
-
-    auto* icon = new QLabel(button);
-    icon->setObjectName(QStringLiteral("quickNavIcon"));
-    // Pinned so the pixmap cannot stretch the button past its 64px and the text
-    // below it cannot be squeezed out when the label is long.
-    icon->setFixedSize(24, 24);
-    icon->setAlignment(Qt::AlignCenter);
-    icon->setAttribute(Qt::WA_TransparentForMouseEvents);
-
-    auto* text = new QLabel(label, button);
-    text->setObjectName(QStringLiteral("quickNavLabel"));
-    text->setAlignment(Qt::AlignCenter);
-    text->setAttribute(Qt::WA_TransparentForMouseEvents);
-
-    layout->addWidget(icon, 0, Qt::AlignCenter);
-    layout->addWidget(text);
     return button;
 }
 
@@ -524,10 +508,12 @@ QWidget* MainWindow::buildTopBar()
 {
     m_topBar = new QWidget;
     m_topBar->setObjectName(QStringLiteral("topBar"));
-    // Was 56, which fitted the 36px controls it held. The four square buttons are
-    // 64 tall, and a fixed height does not grow to fit a child: at 56 the button
-    // row was clipped and the names under the icons were cut off.
-    m_topBar->setFixedHeight(80);
+    // Back to 56, which is what fitted the 36px controls before the quick-nav
+    // buttons were 64 tall. The four are 40 now, the tallest thing in the bar, and
+    // 40 plus the 8px margin above and below is exactly 56. A fixed height does
+    // not grow to fit a child, which is what made 56 too short at 64 and would
+    // make it too short again if the buttons ever grew.
+    m_topBar->setFixedHeight(56);
 
     m_brandIcon = new QLabel;
     m_brandIcon->setObjectName(QStringLiteral("brandIcon"));
@@ -578,33 +564,34 @@ QWidget* MainWindow::buildTopBar()
     quickNavLayout->setSpacing(7);
 
     struct QuickNavEntry {
-        Icon icon;
-        QString label;
+        QLatin1Char letter;
+        QString toolTip;
         int pageIndex;
     };
-    // Box for the stock page, not a warehouse: there is no warehouse pictogram in
-    // app_icon.h, and drawing one would mean editing the icon set, which is out of
-    // this change's scope. Box is what a stock page shows anyway, so Produits and
-    // Stock share an icon until a real one is added.
+    // The letters are Latin initialisms and deliberately not translated: they
+    // are mnemonics, not words, and a translated initial would stop matching the
+    // page it stands for. The tooltips are translated, and they carry the full
+    // name -- they are the only place the letter is given one, now that the
+    // caption under the icon is gone.
     const std::vector<QuickNavEntry> quickEntries = {
-        {Icon::Cart, tr("البيع السريع"), page::QuickSale},
-        {Icon::Box, tr("المنتجات"), page::Products},
-        {Icon::Box, tr("المخزون"), page::Stock},
-        {Icon::BarChart, tr("التقارير"), page::Reports},
+        {QLatin1Char('V'), tr("Vente rapide"), page::QuickSale},
+        {QLatin1Char('P'), tr("Produits"), page::Products},
+        {QLatin1Char('S'), tr("Stock"), page::Stock},
+        {QLatin1Char('R'), tr("Rapports"), page::Reports},
     };
     for (const QuickNavEntry& entry : quickEntries) {
-        QPushButton* button = makeQuickNavButton(entry.label);
+        QPushButton* button = makeQuickNavButton(entry.letter, entry.toolTip);
         quickNavLayout->addWidget(button);
         const int pageIndex = entry.pageIndex;
         connect(button, &QPushButton::clicked, this, [this, pageIndex]() {
             onPageChanged(pageIndex);
         });
-        // Held with its icon, like the sidebar's: the highlight has to be
-        // repainted from the page on screen and the pixmap has to be redrawn on a
-        // theme change, and neither can be done from a button the window no
-        // longer holds.
+        // Held like the sidebar's: the highlight has to be repainted from the
+        // page on screen, which cannot be done from a button the window no longer
+        // holds. No icon is kept alongside it, because there is no pixmap to
+        // redraw on a theme change -- the letter is the button's own text and the
+        // stylesheet colours it.
         m_quickNavButtons.push_back({button, pageIndex});
-        m_quickNavIcons.push_back(entry.icon);
     }
 
     m_occasionLabel = new QLabel;
@@ -928,13 +915,13 @@ void MainWindow::refreshThemeIcons()
     const QColor muted(dark ? QStringLiteral("#a3a3a3") : QStringLiteral("#64748b"));
 
     if (m_brandIcon) {
-        // A letter, not the storefront pictogram: the drawn mark read as loose
-        // strokes at this size, whereas one heavy glyph is unambiguous. The
-        // colour is set here because the accent is a theme value that a
-        // stylesheet cannot reach without being rebuilt on every switch.
-        m_brandIcon->setText(QStringLiteral("M"));
-        m_brandIcon->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 24px; font-weight: 900; }")
-                                       .arg(accent.name()));
+        // The storefront pictogram rather than a letter. "M" was a stand-in for
+        // a mark that did not exist; the app icon has been in the binary all
+        // along, so the brand now shows the shop it is a till for. The colour is
+        // set here rather than in the stylesheet because the accent is a theme
+        // value, and a pixmap keeps the colour it was painted with: a theme
+        // switch has to repaint it, exactly as QuickAddCard's glyph does.
+        m_brandIcon->setPixmap(appIcon(Icon::Shop, accent, 28).pixmap(28, 28));
     }
     if (m_settingsBtn) {
         m_settingsBtn->setText(QString::fromUtf8("\xe2\x9a\x99"));
@@ -966,28 +953,11 @@ void MainWindow::refreshThemeIcons()
                                       20));
     }
 
-    // The top bar's four squares hold their icon in a QLabel rather than on the
-    // button, because QPushButton cannot stack one over a text. So it is drawn
-    // here for the same reason as above, and it follows the same state: the accent
-    // on the active square, the muted colour on the rest, which is the colour the
-    // stylesheet gives their labels, so icon and name do not disagree.
-    const std::size_t quickCount = std::min(static_cast<std::size_t>(m_quickNavIcons.size()),
-                                            m_quickNavButtons.size());
-    for (std::size_t i = 0; i < quickCount; ++i) {
-        const NavButton& entry = m_quickNavButtons[i];
-        if (!entry.button) {
-            continue;
-        }
-        auto* icon = entry.button->findChild<QLabel*>(QStringLiteral("quickNavIcon"));
-        if (!icon) {
-            continue;
-        }
-        const bool active = entry.pageIndex == current;
-        icon->setPixmap(appIcon(m_quickNavIcons[static_cast<qsizetype>(i)],
-                                active ? accent : muted,
-                                24)
-                            .pixmap(24, 24));
-    }
+    // The four squares in the top bar need nothing here: their glyph is the
+    // button's own text and the stylesheet colours it, active and inactive, from
+    // the same rules the sidebar's labels use. There is no pixmap to repaint, so
+    // m_quickNavIcons is gone and the theme switch reaches these four through
+    // the stylesheet alone.
 }
 
 void MainWindow::onThemeToggleClicked()

@@ -818,6 +818,21 @@ QFrame#statCard {
     border-radius: 21px;
 }
 
+/* The invoice bar under the register's grid. A bar rather than a card: it is
+   pinned to the bottom of the page rather than floating in it, so the rule is
+   a top edge and the corners stay square. The height is pinned to match the
+   fixed 70px the page sets, which keeps the total's baseline from moving when
+   the bar's contents do. */
+QFrame#invoiceBar {
+    background: #ffffff;
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 0;
+    padding: 14px 21px;
+    min-height: 70px;
+    max-height: 70px;
+}
+
 /* The icon well inside a stat card. Without a rule the label is a bare
    pixmap on the card, which reads as a smudge rather than as a mark. */
 QFrame#statCard QLabel#statIcon {
@@ -1044,44 +1059,41 @@ QFrame#stockNotification QPushButton#noticeClose:hover {
 }
 
 /* ---------- أزرار الوصول السريع في الشريط العلوي ---------- */
-/* The four square buttons beside the brand. Their background is transparent so
-   the bar's own surface shows through and the row reads as part of the bar rather
-   than as four boxes laid on it; the border is transparent until hover, which is
-   what keeps them from looking like fields. */
+/* The four square buttons beside the brand: one letter each. The background is
+   transparent so the bar's own surface shows through and the row reads as part
+   of the bar rather than as four boxes laid on it; the border is drawn in both
+   themes because there is no label to fall back on the way there used to be --
+   an 11px caption under an icon told you what the button was, a letter does not. */
 QWidget#quickNav {
     background: transparent;
 }
 
-QPushButton#quickNavButton {
+QPushButton#quickNavLetter {
     background: transparent;
-    border: 1px solid transparent;
+    border: 1px solid #e2e8f0;
     border-radius: 7px;
     color: #64748b;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px;
+    font-size: 18px;
+    font-weight: 800;
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
 }
 
-QPushButton#quickNavButton:hover {
+QPushButton#quickNavLetter:hover {
     background: #f1f5f9;
-    border-color: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #0f172a;
 }
 
 /* The page on screen. Set as a property rather than a pseudo-class because the
    state has to be written from refreshNavActiveState, which reads the stacked
    widget rather than the click that asked for the change. */
-QPushButton#quickNavButton[active="true"] {
+QPushButton#quickNavLetter[active="true"] {
     background: #dbeafe;
     color: #2563eb;
     border-color: #2563eb;
-}
-
-/* The two labels inside a square button. The icon is a pixmap the stylesheet
-   cannot recolour -- refreshThemeIcons draws it -- so only the name is styled
-   here, and it inherits the colour from the button. */
-QPushButton#quickNavButton QLabel {
-    background: transparent;
-    color: inherit;
 }
 
 /* ---------- زر القائمة الجانبية ---------- */

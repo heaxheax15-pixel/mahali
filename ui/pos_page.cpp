@@ -42,21 +42,27 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
 
-    auto* header = new PageHeader(tr("Vente rapide"), tr("Code-barres ou nom du produit"));
+    // No subtitle: the scan field directly below repeats it as its placeholder,
+    // and a page header is a fixed block either way, so the line was costing
+    // about 20px of grid for a sentence the operator reads twice. PageHeader
+    // hides an empty subtitle itself, so nothing is left of it.
+    auto* header = new PageHeader(tr("Vente rapide"), QString());
     m_sessionChip = makeChip(tr("Session"), QStringLiteral("info"));
     header->addAction(m_sessionChip);
     root->addWidget(header);
 
     // The barcode field is the only thing that has to be reachable without
-    // touching the mouse, so it is the tallest control on the page. The inline
-    // rule overrides the app-wide #searchField min-height so the box really
-    // lands on 56px instead of the 44px+padding the theme would ask for.
+    // touching the mouse, so it stays the tallest control on the page even at
+    // 49px: a scan target smaller than the buttons around it stops reading as
+    // the primary input. The inline rule overrides the app-wide #searchField
+    // min-height, and the padding comes down with the height so the text keeps
+    // its 18px and the box loses only its slack.
     m_entry = new QLineEdit;
     m_entry->setObjectName(QStringLiteral("searchField"));
     m_entry->setPlaceholderText(tr("Code-barres ou nom du produit"));
     m_entry->setClearButtonEnabled(true);
-    m_entry->setStyleSheet(QStringLiteral("min-height: 36px; padding: 10px 14px; font-size: 18px;"));
-    m_entry->setFixedHeight(56);
+    m_entry->setStyleSheet(QStringLiteral("min-height: 31px; padding: 8px 14px; font-size: 18px;"));
+    m_entry->setFixedHeight(49);
     m_entry->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
                        QLineEdit::LeadingPosition);
     root->addWidget(m_entry);
@@ -64,13 +70,17 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     // Quick items are the products that cannot be scanned, so they get a
     // permanent strip under the entry instead of a search box of their own.
     m_quickItems = new QuickItemsBar(m_db, this);
-    m_quickItems->setFixedHeight(120);
+    // The bar's own kBarHeight is 60 (quick_items_bar.cpp); set here as well
+    // because the page is what decides how much of itself the strip may keep.
+    m_quickItems->setFixedHeight(60);
     root->addWidget(m_quickItems);
 
-    auto* body = new QHBoxLayout;
-    body->setSpacing(16);
-
-    // ---- cart, on the wide side ----
+    // The cart owns the whole width. It used to sit beside a fixed 320px rail
+    // that held the total and the save button, which cost a third of the page on
+    // every till and left the grid four columns wide in the space left over. The
+    // rail's contents moved into a bar under the grid instead, so the same
+    // numbers and the same button are still on screen but the rows get the
+    // width the operator's product names actually need.
     auto* cart = new QWidget;
     auto* cartLayout = new QVBoxLayout(cart);
     cartLayout->setContentsMargins(0, 0, 0, 0);
@@ -97,58 +107,66 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_table->setColumnWidth(2, 120);
     cartLayout->addWidget(m_table, 1);
 
-    auto* cartActions = new QHBoxLayout;
-    cartActions->setSpacing(12);
-
     auto* clearButton = new QPushButton(tr("Vider"));
     clearButton->setObjectName(QStringLiteral("secondary"));
     auto* removeButton = new QPushButton(tr("Retirer ligne"));
     removeButton->setObjectName(QStringLiteral("secondary"));
 
-    cartActions->addWidget(clearButton);
-    cartActions->addWidget(removeButton);
-    cartLayout->addLayout(cartActions);
+    // ---- the invoice bar, under the grid ----
+    // One horizontal band rather than the rail it replaces. The total is the
+    // largest thing on the page, so it leads and the line count sits under it:
+    // reading a sale means reading the money first, then how it was made up.
+    auto* invoiceBar = new QFrame;
+    invoiceBar->setObjectName(QStringLiteral("invoiceBar"));
+    invoiceBar->setFixedHeight(70);
 
-    body->addWidget(cart, 3);
-
-    // ---- invoice, fixed rail on the right ----
-    auto* invoice = new QFrame;
-    invoice->setObjectName(QStringLiteral("card"));
-    invoice->setFixedWidth(320);
-    auto* invoiceLayout = new QVBoxLayout(invoice);
-    invoiceLayout->setContentsMargins(18, 18, 18, 18);
-    invoiceLayout->setSpacing(8);
+    auto* totals = new QVBoxLayout;
+    totals->setSpacing(0);
+    totals->setContentsMargins(0, 0, 0, 0);
 
     auto* totalCaption = new QLabel(tr("Total"));
     totalCaption->setObjectName(QStringLiteral("heroCaption"));
-    // #heroCaption is 13px in the theme; only the size is overridden here, the
-    // muted colour still comes from the object name rule.
     totalCaption->setStyleSheet(QStringLiteral("font-size: 12px;"));
 
     m_totalLabel = new QLabel(QStringLiteral("0.00"));
     m_totalLabel->setObjectName(QStringLiteral("heroValue"));
-    m_totalLabel->setStyleSheet(QStringLiteral("font-size: 36px;"));
-    m_totalLabel->setAlignment(Qt::AlignCenter);
+    // The theme's #heroValue is 36px, which was sized for a 320px rail where
+    // the figure had the width to itself. In a bar it shares a line with the
+    // buttons, so it comes down to 26px and keeps its bold weight.
+    m_totalLabel->setStyleSheet(QStringLiteral("font-size: 26px;"));
 
     m_countLabel = new QLabel;
     m_countLabel->setObjectName(QStringLiteral("heroCaption"));
-    m_countLabel->setAlignment(Qt::AlignCenter);
+    m_countLabel->setStyleSheet(QStringLiteral("font-size: 13px;"));
+
+    totals->addWidget(totalCaption);
+    totals->addWidget(m_totalLabel);
+    totals->addWidget(m_countLabel);
 
     m_save = new QPushButton(tr("Enregistrer la vente"));
     m_save->setObjectName(QStringLiteral("primary"));
-    m_save->setFixedHeight(52);
+    m_save->setMinimumWidth(200);
+    m_save->setFixedHeight(49);
     m_save->setIcon(appIcon(Icon::Check, QColor(QStringLiteral("#ffffff")), 20));
 
-    invoiceLayout->addStretch(1);
-    invoiceLayout->addWidget(totalCaption, 0, Qt::AlignHCenter);
-    invoiceLayout->addWidget(m_totalLabel);
-    invoiceLayout->addWidget(m_countLabel);
-    invoiceLayout->addStretch(1);
-    invoiceLayout->addWidget(m_save);
+    auto* barLayout = new QHBoxLayout(invoiceBar);
+    barLayout->setContentsMargins(0, 0, 0, 0);
+    barLayout->setSpacing(14);
+    // Buttons first, then the stretch, then the totals. The layout adds widgets
+    // in reading order, so in Arabic this puts the action group at the right edge
+    // and the figures at the left, and in French the mirror of both. The totals
+    // went last rather than first because the buttons are what the cashier acts
+    // on: the hand goes to the action, then the eye checks the number it acted
+    // on, and the number now sits where the hand is not.
+    barLayout->addWidget(clearButton);
+    barLayout->addWidget(removeButton);
+    barLayout->addWidget(m_save);
+    barLayout->addStretch(1);
+    barLayout->addLayout(totals);
 
-    body->addWidget(invoice);
+    cartLayout->addWidget(invoiceBar);
 
-    root->addLayout(body, 1);
+    root->addWidget(cart, 1);
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);

@@ -135,32 +135,29 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     m_cashTable->setHorizontalHeaderLabels(
         {tr("العملية"), tr("العدد"), tr("المجموع")});
     m_cashTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_cashTable->horizontalHeader()->setStretchLastSection(true);
+    // The two narrow columns are pinned and the money takes the rest. A sum is
+    // the only figure here with no natural length -- it is a run of digits with a
+    // currency mark and separators -- so it is the one that has to be allowed to
+    // grow with the window rather than be given a fixed width and then clipped.
+    m_cashTable->horizontalHeader()->setStretchLastSection(false);
+    m_cashTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    m_cashTable->setColumnWidth(0, 200);
+    m_cashTable->setColumnWidth(1, 100);
+    m_cashTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
     m_cashTable->verticalHeader()->setDefaultSectionSize(42);
     m_cashTable->verticalHeader()->hide();
 
-    auto* quick = new QHBoxLayout;
-    quick->setSpacing(10);
-    for (QPushButton* button : {todayButton, yesterdayButton, weekButton, monthButton, allButton}) {
-        quick->addWidget(button);
-    }
-    quick->addStretch(1);
-
-    auto* range = new QHBoxLayout;
-    range->setSpacing(10);
-    range->addWidget(m_fromEdit);
-    range->addWidget(new QLabel(tr("إلى:")));
-    range->addWidget(m_toEdit);
-    range->addStretch(1);
-
-    auto* summaryCard = makeCard();
-    auto* summaryLayout = new QVBoxLayout(summaryCard);
-    summaryLayout->setContentsMargins(18, 16, 18, 16);
-    summaryLayout->setSpacing(10);
-    summaryLayout->addWidget(makeCardTitle(tr("الملخص")));
-    summaryLayout->addWidget(m_summary);
-    summaryLayout->addWidget(m_costs);
-    summaryLayout->addWidget(m_bottom);
+    // The three report lines as bare text, not a card. A card around them cost
+    // 32px of padding, a 21px rounded border and a "Résumé" heading that said
+    // nothing the lines under it did not: about 90px of the page, which on a
+    // laptop screen is two rows of the table that has to be read instead. The
+    // summary is reference, the table is the work.
+    auto* summary = new QVBoxLayout;
+    summary->setContentsMargins(4, 0, 4, 0);
+    summary->setSpacing(6);
+    summary->addWidget(m_summary);
+    summary->addWidget(m_costs);
+    summary->addWidget(m_bottom);
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);
@@ -169,13 +166,30 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     tableLayout->addWidget(makeCardTitle(tr("تفاصيل العمليات")));
     tableLayout->addWidget(m_cashTable, 1);
 
+    // The filters and the range share one row. They were two rows because the
+    // summary card stood between nothing and everything, and two rows of
+    // 42px controls is 42px the table does not get. The stretch is what keeps
+    // the group against the leading edge in both layout directions.
+    auto* controls = new QHBoxLayout;
+    controls->setSpacing(8);
+    for (QPushButton* button : {todayButton, yesterdayButton, weekButton, monthButton, allButton}) {
+        controls->addWidget(button);
+    }
+    controls->addWidget(new QLabel(tr("من:")));
+    controls->addWidget(m_fromEdit);
+    controls->addWidget(new QLabel(tr("إلى:")));
+    controls->addWidget(m_toEdit);
+    controls->addStretch(1);
+
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
-    root->addWidget(new PageHeader(tr("التقارير"),
-                                   tr("ملخص حركات الصندوق خلال فترة محددة")));
-    root->addLayout(quick);
-    root->addLayout(range);
-    root->addWidget(summaryCard);
+    // Title only. The subtitle named what the page is, and the summary lines
+    // directly under it are exactly that: three lines of figures about the cash
+    // movements over the selected period. Saying it above them spent a line on
+    // a sentence the numbers then repeated.
+    root->addWidget(new PageHeader(tr("التقارير"), QString()));
+    root->addLayout(controls);
+    root->addLayout(summary);
     root->addWidget(tableCard, 1);
 
     connect(todayButton, &QPushButton::clicked, this, &ReportsPage::onToday);

@@ -809,6 +809,19 @@ QFrame#statCard {
     border-radius: 21px;
 }
 
+/* The invoice bar under the register's grid. Same reasoning as the light
+   theme's: pinned to the bottom of the page, so a top edge and square
+   corners rather than a floating card. */
+QFrame#invoiceBar {
+    background: #1a1a1a;
+    border: none;
+    border-top: 1px solid #2d2d2d;
+    border-radius: 0;
+    padding: 14px 21px;
+    min-height: 70px;
+    max-height: 70px;
+}
+
 /* The icon well inside a stat card. Without a rule the label is a bare
    pixmap on the card, which reads as a smudge rather than as a mark. */
 QFrame#statCard QLabel#statIcon {
@@ -1042,36 +1055,37 @@ QFrame#stockNotification QPushButton#noticeClose:hover {
 }
 
 /* ---------- أزرار الوصول السريع في الشريط العلوي ---------- */
-/* The four square buttons beside the brand: transparent surface, so the bar's own
-   background shows through and the row reads as part of the bar. */
+/* The four square buttons beside the brand: one letter each, transparent surface
+   so the bar's own background shows through and the row reads as part of the
+   bar. The border is drawn in both themes, because a letter alone says nothing
+   about what the button opens. */
 QWidget#quickNav {
     background: transparent;
 }
 
-QPushButton#quickNavButton {
+QPushButton#quickNavLetter {
     background: transparent;
-    border: 1px solid transparent;
+    border: 1px solid #2d2d2d;
     border-radius: 7px;
     color: #a3a3a3;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px;
+    font-size: 18px;
+    font-weight: 800;
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
 }
 
-QPushButton#quickNavButton:hover {
+QPushButton#quickNavLetter:hover {
     background: #262626;
-    border-color: #2d2d2d;
+    border-color: #3d3d3d;
+    color: #fafafa;
 }
 
-QPushButton#quickNavButton[active="true"] {
+QPushButton#quickNavLetter[active="true"] {
     background: #2d1f04;
     color: #d4a017;
     border-color: #d4a017;
-}
-
-QPushButton#quickNavButton QLabel {
-    background: transparent;
-    color: inherit;
 }
 
 /* ---------- زر القائمة الجانبية ---------- */

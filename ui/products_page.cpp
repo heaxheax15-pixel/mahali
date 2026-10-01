@@ -31,11 +31,10 @@ namespace {
 // Column order shared by the grid, the footer counters and the edit handlers.
 constexpr int kColBarcode = 0;
 constexpr int kColName = 1;
-constexpr int kColCost = 2;
-constexpr int kColSale = 3;
-constexpr int kColQuantity = 4;
-constexpr int kColUnit = 5;
-constexpr int kColState = 6;
+constexpr int kColUnit = 2;
+constexpr int kColCost = 3;
+constexpr int kColSale = 4;
+constexpr int kColQuantity = 5;
 
 // "Stock bas" is the reorder band: on the shelf but nearly gone. It deliberately
 // excludes zero and anything below it, which the negative chip owns.
@@ -50,8 +49,18 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
 {
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
+    // Tighter than the shared helper's (20, 18, 20, 18) and 16px spacing. This
+    // page is a grid first: every millimetre of margin here is a millimetre a
+    // product name cannot use, and the cards have their own padding, so the
+    // page margins are double-counted. Set here rather than in padPageLayout()
+    // because that helper pads eleven pages, and a grid-only change would
+    // narrow the dialogs and the reports along with it.
+    root->setContentsMargins(14, 14, 14, 14);
+    root->setSpacing(10);
 
-    root->addWidget(new PageHeader(tr("Produits"), tr("Gérez les articles, les prix et le stock")));
+    // Title only. The subtitle listed what the page manages, and the toolbar
+    // immediately below is that list made operable: search, four filters, add.
+    root->addWidget(new PageHeader(tr("Produits"), QString()));
 
     // ---- card 1: search, filters, add ----
     m_search = new QLineEdit;
@@ -107,25 +116,40 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     // ---- card 2: the grid ----
     m_table = new QTableWidget;
     m_table->setObjectName(QStringLiteral("productTable"));
-    m_table->setAlternatingRowColors(true);
-    m_table->setFrameShape(QFrame::NoFrame);
-    m_table->setShowGrid(true);
-    m_table->setColumnCount(7);
-    m_table->setHorizontalHeaderLabels({tr("Code-barres"), tr("Nom"), tr("Prix rev."),
-                                        tr("Prix vente"), tr("Qté"), tr("Unité"), tr("État")});
-    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_table->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed
-                             | QAbstractItemView::AnyKeyPressed);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_table->setColumnCount(6);
+    m_table->setHorizontalHeaderLabels({tr("Code-barres"), tr("Nom"), tr("Unité"),
+                                        tr("Prix rev."), tr("Prix vente"), tr("Qté")});
+    // Six columns, no state column. The state was the widest thing on a
+    // row of text and the least useful of them: it read "Actif" or "Inactif"
+    // under a filter chip that already says which of the two the list is
+    // showing, and it was the only column whose width had to be negotiated
+    // because nothing else could take its place. Dropping it takes the grid
+    // from seven columns to six and leaves the name with more room, which is
+    // what the width it holds is for.
+    m_table->horizontalHeader()->setStretchLastSection(false);
+    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    m_table->setColumnWidth(kColBarcode, 180);
+    m_table->setColumnWidth(kColUnit, 80);
+    m_table->setColumnWidth(kColCost, 130);
+    m_table->setColumnWidth(kColSale, 130);
+    m_table->setColumnWidth(kColQuantity, 80);
+    // The name absorbs whatever the five fixed columns leave. Stretch and not a
+    // computed width: setMaximumSectionSize does not reach a Stretch section --
+    // it caps a section that has a width of its own -- and a hand-written cap
+    // needs a resize handler to reapply it, which is more machinery than the
+    // ceiling was worth here now that there is one column fewer to feed.
+    m_table->horizontalHeader()->setSectionResizeMode(kColName, QHeaderView::Stretch);
+    //
+    // 42 rather than the default 46 the theme asks for: a catalogue is a
+    // scrolling list, so rows that fit on screen matter more than rows that
+    // breathe.
     m_table->verticalHeader()->setDefaultSectionSize(42);
     m_table->verticalHeader()->hide();
 
     auto* gridCard = makeCard();
     auto* gridLayout = new QVBoxLayout(gridCard);
-    gridLayout->setContentsMargins(18, 16, 18, 16);
-    gridLayout->setSpacing(12);
+    gridLayout->setContentsMargins(14, 12, 14, 12);
+    gridLayout->setSpacing(8);
     gridLayout->addWidget(makeCardTitle(tr("Catalogue")));
     gridLayout->addWidget(m_table, 1);
 
@@ -207,7 +231,6 @@ void ProductsPage::refresh()
         put(kColSale, formatMoney(product.salePriceCents), true);
         put(kColQuantity, QString::number(product.quantity), true);
         put(kColUnit, product.unit, false);
-        put(kColState, product.active ? tr("Actif") : tr("Inactif"), false);
 
         for (int column = 0; column < m_table->columnCount(); ++column) {
             m_table->item(row, column)->setData(Qt::UserRole, product.id);

@@ -122,13 +122,25 @@ StockPage::StockPage(app::data::Database& db, QWidget* parent)
     m_table->setColumnCount(5);
     m_table->setHorizontalHeaderLabels({tr("Qté"), tr("Nom"), tr("Code-barres"),
                                         tr("Unité"), tr("Valeur")});
+    // The order is the order an operator reads this page in: how many, what, then
+    // how it is identified and what it is worth. Unchanged from before, but the
+    // widths are now pinned rather than shared out evenly -- setSectionResizeMode
+    // (Stretch) on all five gave a three-character count the same 250px as a
+    // fifteen-character name, which is the same complaint the products grid had.
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     // Nothing on this page is editable: a count is changed by selling, receiving
     // or a stock movement, never by typing over a cell here.
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_table->horizontalHeader()->setStretchLastSection(false);
+    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    m_table->setColumnWidth(kColQuantity, 90);
+    m_table->setColumnWidth(kColBarcode, 180);
+    m_table->setColumnWidth(kColUnit, 80);
+    m_table->setColumnWidth(kColValue, 130);
+    // The name takes what is left, as on the products grid: a stock list is read
+    // by name, and the barcode beside it is the same fixed 180px it is there.
+    m_table->horizontalHeader()->setSectionResizeMode(kColName, QHeaderView::Stretch);
     m_table->verticalHeader()->setDefaultSectionSize(42);
     m_table->verticalHeader()->hide();
 

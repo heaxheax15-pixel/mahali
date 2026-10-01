@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class QHBoxLayout;
+class QLabel;
 
 namespace app::ui {
 
@@ -18,6 +19,9 @@ public:
 
 private:
     QHBoxLayout* m_actionLayout = nullptr;
+    // Held so setSubtitle() can reach it and so clearing the text can hide the
+    // label instead of leaving an empty line taking up height.
+    QLabel* m_subtitle = nullptr;
 };
 
 } // namespace app::ui

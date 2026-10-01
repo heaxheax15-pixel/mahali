@@ -177,9 +177,6 @@ private:
     // must survive that: they are not role-dependent, so a role change has no
     // reason to unhook the page switching.
     std::vector<NavButton> m_quickNavButtons;
-    // The icon each quick-nav button was built with, in the same order as
-    // m_quickNavButtons, for the reason m_navIcons gives for the sidebar's.
-    QVector<Icon> m_quickNavIcons;
     // The strip above the sidebar and the pages. Kept so the icons on it can be
     // repainted when the theme changes, rather than only at construction.
     QWidget* m_topBar = nullptr;
