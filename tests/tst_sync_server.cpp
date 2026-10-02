@@ -179,30 +179,7 @@ void SyncServerTest::hmacValidProcessesBatch()
     const QByteArray body = QJsonDocument(ops).toJson(QJsonDocument::Compact);
     const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
 
-    {
-        FILE* f = fopen("/tmp/sync_debug.txt", "a");
-        if (f) {
-            fprintf(f, "DEBUG: about to call process\n");
-            fclose(f);
-        }
-    }
     const network::SyncBatchResult result = processor.process(body, signature, m_key);
-    {
-        FILE* f = fopen("/tmp/sync_debug.txt", "a");
-        if (f) {
-            fprintf(f, "DEBUG: hmacValid=%d batchValid=%d applied=%zu errors=%zu error=%s\n",
-                    result.hmacValid, result.batchValid, result.applied.size(), result.errors.size(),
-                    qPrintable(result.error));
-            if (result.applied.empty()) {
-                QString errors;
-                for (const auto& e : result.errors) {
-                    errors += QString(" opId=%1 class=%2 msg=%3").arg(e.opId).arg(int(e.errorClass)).arg(e.message);
-                }
-                fprintf(f, "Errors: %s\n", qPrintable(errors));
-            }
-            fclose(f);
-        }
-    }
     QVERIFY2(result.hmacValid, qPrintable(QString("HMAC invalid: %1").arg(result.error)));
     QVERIFY2(result.batchValid, qPrintable(QString("Batch invalid: %1").arg(result.error)));
     QCOMPARE(result.applied.size(), 1);

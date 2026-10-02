@@ -4,6 +4,7 @@
 #include <optional>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QList>
 #include <QSqlQuery>
 
 #include "barcode_utils.h"
@@ -3263,38 +3264,77 @@ void DataLayerTest::cash_movements_carry_correct_reference()
     QVERIFY(spSvc.reversePayment(spPaymentId, sessionId).ok);
 
     // --- Refund (money out) ---
-    data::PaymentService paySvc2(db);
     const int paymentId2 = paySvc.recordCustomerPayment(customerId, 5000, sessionId, QString()).paymentId;
-    QVERIFY(paySvc2.refundCustomerPayment(paymentId2, sessionId, QString()).ok);
+    QVERIFY(paySvc.refundCustomerPayment(paymentId2, sessionId, QString()).ok);
 
     // Now check every movement has the right ref_type/ref_id
     data::CashMovementRepository movements(db);
     const auto rows = movements.findBySessionId(sessionId);
 
-    QMap<QString, QPair<QString, int>> expected;
-    expected[QStringLiteral("customer_payment")] = {QStringLiteral("payment"), customerPayment.paymentId};
-    expected[QStringLiteral("expense")] = {QStringLiteral("expense"), expense.entryId};
-    expected[QStringLiteral("drawing")] = {QStringLiteral("owner_drawing"), drawing.entryId};
-    expected[QStringLiteral("supplier_payment")] = {QStringLiteral("supplier_payment"), spPaymentId};
-    expected[QStringLiteral("supplier_payment_reversal")] = {QStringLiteral("supplier_payment"), spPaymentId};
-    expected[QStringLiteral("refund")] = {QStringLiteral("payment"), paymentId2};
+    struct ExpectedCashMovement {
+        QString type;
+        QString refType;
+        int refId;
+    };
+    QList<ExpectedCashMovement> expected = {
+        // Sale and its refund both point to the original sale.
+        {core::cashMovementType::kSale, QStringLiteral("sale"), saleId},
+        {core::cashMovementType::kRefund, QStringLiteral("sale"), saleId},
+        // Each customer payment points to its own payment row; the refund points to paymentId2.
+        {core::cashMovementType::kCustomerPayment, QStringLiteral("payment"), customerPayment.paymentId},
+        {core::cashMovementType::kCustomerPayment, QStringLiteral("payment"), paymentId2},
+        {core::cashMovementType::kRefund, QStringLiteral("payment"), paymentId2},
+        // Expense, drawing, supplier payment, and its reversal retain their document references.
+        {core::cashMovementType::kExpense, QStringLiteral("expense"), expense.entryId},
+        {core::cashMovementType::kDrawing, QStringLiteral("owner_drawing"), drawing.entryId},
+        {core::cashMovementType::kSupplierPayment, QStringLiteral("supplier_payment"), spPaymentId},
+        {core::cashMovementType::kSupplierPaymentReversal, QStringLiteral("supplier_payment"), spPaymentId},
+    };
+    const std::size_t expectedMovementCount = static_cast<std::size_t>(expected.size());
 
-    for (const auto& m : movements.findBySessionId(sessionId)) {
-        if (m.type == core::cashMovementType::kSale
-            || (m.type == core::cashMovementType::kRefund && m.refType == QStringLiteral("sale"))) {
-            QCOMPARE(m.refType, QStringLiteral("sale"));
-            QCOMPARE(m.refId, saleId);
-        } else {
-            QVERIFY2(expected.contains(m.type), qPrintable(QStringLiteral("Unexpected movement type %1").arg(m.type)));
-            QCOMPARE(m.refType, expected.value(m.type).first);
-            QCOMPARE(m.refId, expected.value(m.type).second);
+    for (const auto& movement : rows) {
+        qsizetype matchedIndex = -1;
+        for (qsizetype expectedIndex = 0; expectedIndex < expected.size(); ++expectedIndex) {
+            const ExpectedCashMovement& candidate = expected.at(expectedIndex);
+            if (candidate.type == movement.type && candidate.refType == movement.refType
+                && candidate.refId == movement.refId) {
+                matchedIndex = expectedIndex;
+                break;
+            }
         }
-        QVERIFY2(m.refId > 0, qPrintable(QStringLiteral("Movement %1 type %2 has ref_id <= 0").arg(m.id).arg(m.type)));
+        QVERIFY2(matchedIndex >= 0,
+                 qPrintable(QStringLiteral("Unexpected movement type=%1 refType=%2 refId=%3")
+                                .arg(movement.type, movement.refType)
+                                .arg(movement.refId)));
+        expected.removeAt(matchedIndex);
+        QVERIFY2(movement.refId > 0,
+                 qPrintable(QStringLiteral("Movement %1 type %2 has ref_id <= 0")
+                                .arg(movement.id)
+                                .arg(movement.type)));
     }
-    QCOMPARE(movements.findBySessionId(sessionId).size(), std::size_t(expected.size() + 2));
+    QCOMPARE(static_cast<std::size_t>(rows.size()), expectedMovementCount);
+    QVERIFY2(expected.isEmpty(), qPrintable(QStringLiteral("%1 expected cash movement(s) missing")
+                                                .arg(expected.size())));
+
+    const QList<QPair<QString, int>> reversalReferences = {
+        {QStringLiteral("sale"), saleId},
+        {QStringLiteral("supplier_payment"), spPaymentId},
+        {QStringLiteral("payment"), paymentId2},
+    };
+    for (const auto& reference : reversalReferences) {
+        QSqlQuery netQuery(db.handle());
+        netQuery.prepare(QStringLiteral(
+            "SELECT COALESCE(SUM(amount_cents), 0) FROM cash_movements "
+            "WHERE ref_type = ? AND ref_id = ?"));
+        netQuery.addBindValue(reference.first);
+        netQuery.addBindValue(reference.second);
+        QVERIFY2(netQuery.exec(), qPrintable(netQuery.lastError().text()));
+        QVERIFY(netQuery.next());
+        QCOMPARE(netQuery.value(0).toLongLong(), 0LL);
+    }
 
     QString helperError;
-    QVERIFY(!cashDrawer::recordMoneyIn(db, sessionId, QStringLiteral("invalid"), 100,
+    QVERIFY(!data::cashDrawer::recordMoneyIn(db, sessionId, QStringLiteral("invalid"), 100,
                                        QString(), QStringLiteral("test"), QString(), 0,
                                        &helperError).has_value());
     QVERIFY(!helperError.isEmpty());

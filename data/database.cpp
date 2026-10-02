@@ -705,13 +705,7 @@ void Database::createSchema()
             "  UPDATE products SET quantity = quantity + NEW.delta WHERE id = NEW.product_id; "
             "END;"),
 
-        QStringLiteral(
-            "CREATE TRIGGER IF NOT EXISTS trg_stock_before_insert_guard "
-            "BEFORE INSERT ON stock_movements "
-            "WHEN COALESCE((SELECT quantity FROM products WHERE id = NEW.product_id), 0) + NEW.delta < 0 "
-            "BEGIN "
-            "  SELECT RAISE(ABORT, 'stock quantity cannot be negative'); "
-            "END;"),
+        QStringLiteral("DROP TRIGGER IF EXISTS trg_stock_before_insert_guard;"),
 
         QStringLiteral(
             "CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);"),
