@@ -89,7 +89,7 @@ private slots:
     void pagesReflectSeededData();
     void flexibleAmountParsing();
     void posSaleWithPriceOverride();
-    void pos_catalog_uses_in_memory_search_and_unit_filter();
+    void pos_cart_grid_is_the_wide_table_and_the_narrow_one_is_empty();
     void posSaleRequiresOpenSession();
     void cashSessionLifecycle();
     void cash_session_rejects_invalid_amount();
@@ -385,9 +385,10 @@ void UiTest::posSaleWithPriceOverride()
     QCOMPARE(page.linePriceAt(0), 10000LL);
     QCOMPARE(page.totalCents(), 10000LL);
 
-    // Cashier edits quantity and overrides the unit price in the grid.
-    page.table()->item(0, 1)->setText(QStringLiteral("2"));
-    page.table()->item(0, 2)->setText(QStringLiteral("7.50"));
+    // Cashier edits quantity and overrides the unit price in the grid, which is
+    // the wide table now: quantity is the fourth column, price the fifth.
+    page.table()->item(0, 3)->setText(QStringLiteral("2"));
+    page.table()->item(0, 4)->setText(QStringLiteral("7.50"));
     page.completeSale();
 
     QVERIFY(page.lastSaleId() != 0);
@@ -425,9 +426,9 @@ void UiTest::posSaleWithPriceOverride()
     QCOMPARE(overrides, 1);
 }
 
-void UiTest::pos_catalog_uses_in_memory_search_and_unit_filter()
+void UiTest::pos_cart_grid_is_the_wide_table_and_the_narrow_one_is_empty()
 {
-    const QString path = m_dir.filePath(QStringLiteral("pos-catalog.sqlite"));
+    const QString path = m_dir.filePath(QStringLiteral("pos-grid.sqlite"));
     QFile::remove(path);
     data::Database db(path);
     data::ProductRepository products(db);
@@ -439,32 +440,59 @@ void UiTest::pos_catalog_uses_in_memory_search_and_unit_filter()
     first.salePriceCents = 350;
     QVERIFY(products.save(first) > 0);
 
-    core::Product second;
-    second.barcode = QStringLiteral("10002");
-    second.name = QStringLiteral("قهوة");
-    second.unit = QStringLiteral("كيس");
-    second.salePriceCents = 500;
-    QVERIFY(products.save(second) > 0);
-
     ui::PosPage page(db);
-    auto* catalog = page.findChild<QTableView*>(QStringLiteral("posProductTable"));
-    auto* search = page.findChild<QLineEdit*>(QStringLiteral("posCatalogSearch"));
-    auto* unitFilter = page.findChild<QComboBox*>(QStringLiteral("posUnitFilter"));
-    QVERIFY(catalog);
-    QVERIFY(search);
-    QVERIFY(unitFilter);
-    QCOMPARE(catalog->model()->rowCount(), 2);
 
-    search->setText(QStringLiteral("قهوة"));
-    QCOMPARE(catalog->model()->rowCount(), 1);
-    QCOMPARE(catalog->model()->index(0, 0).data().toString(), QStringLiteral("قهوة"));
+    // The wide table is the sale grid now, so its columns are the line's own
+    // fields and not the stock on the shelf.
+    QTableWidget* grid = page.table();
+    QVERIFY(grid);
+    QCOMPARE(grid->columnCount(), 5);
+    QCOMPARE(grid->rowCount(), 0);
+    QCOMPARE(grid->horizontalHeaderItem(0)->text(), QStringLiteral("Produit"));
+    QCOMPARE(grid->horizontalHeaderItem(1)->text(), QStringLiteral("Code-barres"));
+    QCOMPARE(grid->horizontalHeaderItem(2)->text(), QStringLiteral("Unité"));
+    QCOMPARE(grid->horizontalHeaderItem(3)->text(), QStringLiteral("Qté"));
+    QCOMPARE(grid->horizontalHeaderItem(4)->text(), QStringLiteral("Prix"));
 
-    search->clear();
-    const int boxUnit = unitFilter->findData(QStringLiteral("علبة"));
-    QVERIFY(boxUnit >= 0);
-    unitFilter->setCurrentIndex(boxUnit);
-    QCOMPARE(catalog->model()->rowCount(), 1);
-    QCOMPARE(catalog->model()->index(0, 0).data().toString(), QStringLiteral("شاي أخضر"));
+    // The catalogue it used to be is gone with its two filters, and nothing on
+    // the page builds a +/- button any more.
+    QVERIFY(!page.findChild<QTableView*>(QStringLiteral("posProductTable")));
+    QVERIFY(!page.findChild<QLineEdit*>(QStringLiteral("posCatalogSearch")));
+    QVERIFY(!page.findChild<QComboBox*>(QStringLiteral("posUnitFilter")));
+    QVERIFY(!page.findChild<QPushButton*>(QStringLiteral("cartQuantityIncrease")));
+    QVERIFY(!page.findChild<QPushButton*>(QStringLiteral("cartQuantityDecrease")));
+
+    // The narrow table stays in the layout, empty.
+    auto* narrow = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(narrow);
+    QCOMPARE(narrow->rowCount(), 0);
+
+    page.setEntryText(QStringLiteral("10001"));
+    page.addEntry();
+    QCOMPARE(grid->rowCount(), 1);
+    QCOMPARE(grid->item(0, 0)->text(), QStringLiteral("شاي أخضر"));
+    QCOMPARE(grid->item(0, 1)->text(), QStringLiteral("10001"));
+    QCOMPARE(grid->item(0, 2)->text(), QStringLiteral("علبة"));
+    QCOMPARE(grid->item(0, 3)->text(), QStringLiteral("1"));
+    QCOMPARE(grid->item(0, 4)->text(), ui::formatMoney(350));
+
+    // The quantity is the one cell that opens for typing; the price is reached
+    // through the dialog and cannot be typed over.
+    QVERIFY(grid->item(0, 3)->flags().testFlag(Qt::ItemIsEditable));
+    QVERIFY(!grid->item(0, 4)->flags().testFlag(Qt::ItemIsEditable));
+
+    // Typing in it moves the line and the money. QTableWidgetItem::setText is
+    // silent, so the slot is invoked the way a committed edit would reach it.
+    grid->item(0, 3)->setText(QStringLiteral("3"));
+    QVERIFY(QMetaObject::invokeMethod(&page, "onCellChanged", Q_ARG(int, 0), Q_ARG(int, 3)));
+    QCOMPARE(page.lineQuantityAt(0), 3LL);
+    QCOMPARE(page.totalCents(), 1050LL);
+
+    // A quantity no sale could be made of is put back rather than kept.
+    grid->item(0, 3)->setText(QStringLiteral("0"));
+    QVERIFY(QMetaObject::invokeMethod(&page, "onCellChanged", Q_ARG(int, 0), Q_ARG(int, 3)));
+    QCOMPARE(page.lineQuantityAt(0), 3LL);
+    QCOMPARE(grid->item(0, 3)->text(), QStringLiteral("3"));
 }
 
 void UiTest::posSaleRequiresOpenSession()

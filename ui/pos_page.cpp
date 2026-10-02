@@ -1,8 +1,6 @@
 #include "pos_page.h"
 
 #include <QBrush>
-#include <QAbstractTableModel>
-#include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -15,11 +13,9 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSet>
-#include <QSortFilterProxyModel>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStackedWidget>
-#include <QTableView>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QStyle>
@@ -36,170 +32,12 @@
 #include "dialogs/product_dialog.h"
 #include "format_utils.h"
 #include "quick_items_bar.h"
-#include "theme.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
 #include "theme_tokens.h"
 #include "widgets/ui_helpers.h"
 
 namespace app::ui {
-
-class PosProductModel final : public QAbstractTableModel {
-public:
-    enum Role {
-        ProductIdRole = Qt::UserRole + 1,
-        UnitRole,
-    };
-
-    explicit PosProductModel(data::Database& db, QObject* parent = nullptr)
-        : QAbstractTableModel(parent)
-        , m_db(db)
-    {
-        refresh();
-    }
-
-    int rowCount(const QModelIndex& parent = QModelIndex()) const override
-    {
-        return parent.isValid() ? 0 : static_cast<int>(m_products.size());
-    }
-
-    int columnCount(const QModelIndex& parent = QModelIndex()) const override
-    {
-        return parent.isValid() ? 0 : 5;
-    }
-
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override
-    {
-        if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) {
-            return {};
-        }
-        const core::Product& product = m_products[static_cast<std::size_t>(index.row())];
-        if (role == ProductIdRole) {
-            return product.id;
-        }
-        if (role == UnitRole) {
-            return product.unit;
-        }
-        if (role == Qt::TextAlignmentRole) {
-            if (index.column() == 3 || index.column() == 4) {
-                return QVariant::fromValue(Qt::Alignment(Qt::AlignRight | Qt::AlignVCenter));
-            }
-            if (index.column() == 1) {
-                return QVariant::fromValue(Qt::Alignment(Qt::AlignCenter));
-            }
-        }
-        if (role == Qt::ForegroundRole && index.column() == 3) {
-            const auto& colors = activeTheme() == QStringLiteral("dark")
-                ? themeTokens::darkColors
-                : themeTokens::lightColors;
-            if (product.quantity <= 0) {
-                return QColor::fromRgba(colors.negative);
-            }
-            if (product.quantity <= 5) {
-                return QColor::fromRgba(colors.warning);
-            }
-        }
-        if (role == Qt::FontRole && index.column() == 4) {
-            QFont priceFont;
-            priceFont.setBold(true);
-            return priceFont;
-        }
-        if (role != Qt::DisplayRole) {
-            return {};
-        }
-        switch (index.column()) {
-        case 0: return product.name;
-        case 1: return product.barcode;
-        case 2: return product.unit;
-        case 3: return QString::number(product.quantity);
-        case 4: return formatMoney(product.salePriceCents);
-        default: return {};
-        }
-    }
-
-    QVariant headerData(int section, Qt::Orientation orientation, int role) const override
-    {
-        if (orientation != Qt::Horizontal || role != Qt::DisplayRole) {
-            return {};
-        }
-        switch (section) {
-        case 0: return tr("Produit");
-        case 1: return tr("Code-barres");
-        case 2: return tr("Unité");
-        case 3: return tr("Stock");
-        case 4: return tr("Prix");
-        default: return {};
-        }
-    }
-
-    void refresh()
-    {
-        beginResetModel();
-        m_products = data::ProductRepository(m_db).findAll();
-        m_products.erase(std::remove_if(m_products.begin(), m_products.end(), [](const core::Product& product) {
-            return !product.active || product.barcode.trimmed().isEmpty();
-        }), m_products.end());
-        endResetModel();
-    }
-
-    QStringList units() const
-    {
-        QStringList result;
-        for (const core::Product& product : m_products) {
-            if (!product.unit.trimmed().isEmpty() && !result.contains(product.unit)) {
-                result.append(product.unit);
-            }
-        }
-        result.sort(Qt::CaseInsensitive);
-        return result;
-    }
-
-    std::optional<core::Product> productById(int id) const
-    {
-        const auto found = std::find_if(m_products.cbegin(), m_products.cend(),
-                                        [id](const core::Product& product) { return product.id == id; });
-        return found == m_products.cend() ? std::nullopt : std::optional<core::Product>(*found);
-    }
-
-private:
-    data::Database& m_db;
-    std::vector<core::Product> m_products;
-};
-
-class PosProductFilter final : public QSortFilterProxyModel {
-public:
-    explicit PosProductFilter(QObject* parent = nullptr)
-        : QSortFilterProxyModel(parent)
-    {
-        setFilterCaseSensitivity(Qt::CaseInsensitive);
-        setFilterKeyColumn(-1);
-    }
-
-    void setUnitFilter(const QString& unit)
-    {
-        if (m_unit == unit) {
-            return;
-        }
-        m_unit = unit;
-        invalidateFilter();
-    }
-
-protected:
-    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override
-    {
-        if (!QSortFilterProxyModel::filterAcceptsRow(sourceRow, sourceParent)) {
-            return false;
-        }
-        if (m_unit.isEmpty()) {
-            return true;
-        }
-        const QModelIndex index = sourceModel()->index(sourceRow, 0, sourceParent);
-        return sourceModel()->data(index, PosProductModel::UnitRole).toString() == m_unit;
-    }
-
-private:
-    QString m_unit;
-};
 
 PosPage::PosPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
@@ -225,110 +63,55 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_workspace->setChildrenCollapsible(false);
     m_workspace->setHandleWidth(themeTokens::space4);
 
-    auto* catalog = new QWidget;
-    auto* catalogLayout = new QVBoxLayout(catalog);
-    catalogLayout->setContentsMargins(0, 0, 0, 0);
-    catalogLayout->setSpacing(themeTokens::space8);
-
-    m_productModel = new PosProductModel(m_db, this);
-    m_productFilter = new PosProductFilter(this);
-    m_productFilter->setSourceModel(m_productModel);
-
-    m_catalogSearch = new QLineEdit;
-    m_catalogSearch->setObjectName(QStringLiteral("posCatalogSearch"));
-    m_catalogSearch->setProperty("fullPlaceholder", tr("Rechercher dans les produits"));
-    m_catalogSearch->setToolTip(m_catalogSearch->property("fullPlaceholder").toString());
-    m_catalogSearch->setClearButtonEnabled(true);
-    m_catalogSearch->setFixedHeight(44);
-    m_catalogSearch->setMinimumWidth(120);
-    QFont searchFont = m_catalogSearch->font();
-    searchFont.setPointSize(14);
-    m_catalogSearch->setFont(searchFont);
-    m_unitFilter = new QComboBox;
-    m_unitFilter->setObjectName(QStringLiteral("posUnitFilter"));
-    m_unitFilter->setFixedHeight(44);
-    m_unitFilter->setMinimumWidth(120);
-    QFont unitFont = m_unitFilter->font();
-    unitFont.setPointSize(14);
-    m_unitFilter->setFont(unitFont);
-    m_unitFilter->addItem(tr("Toutes les unités"), QString());
-    for (const QString& unit : m_productModel->units()) {
-        m_unitFilter->addItem(unit, unit);
-    }
-
-    auto* searchRow = new QHBoxLayout;
-    searchRow->setContentsMargins(0, 0, 0, 0);
-    searchRow->setSpacing(themeTokens::space8);
-    searchRow->addWidget(m_entry, 2);
-    searchRow->addWidget(m_catalogSearch, 1);
-    searchRow->addWidget(m_unitFilter);
-    root->addLayout(searchRow);
-
-    m_productTable = new QTableView;
-    m_productTable->setObjectName(QStringLiteral("posProductTable"));
-    m_productTable->setModel(m_productFilter);
-    m_productTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_productTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_productTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_productTable->setAlternatingRowColors(true);
-    m_productTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_productTable->verticalHeader()->hide();
-    m_productTable->verticalHeader()->setDefaultSectionSize(40);
-    m_productTable->horizontalHeader()->setFixedHeight(34);
-    QFont productFont = m_productTable->font();
-    productFont.setPointSize(14);
-    m_productTable->setFont(productFont);
-    QFont productHeaderFont = m_productTable->horizontalHeader()->font();
-    productHeaderFont.setPointSize(12);
-    productHeaderFont.setBold(true);
-    m_productTable->horizontalHeader()->setFont(productHeaderFont);
-    m_productTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_productTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-    m_productTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-    m_productTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-    m_productTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    m_productTable->setColumnWidth(1, 128);
-    m_productTable->setColumnWidth(2, 80);
-    m_productTable->setColumnWidth(3, 64);
-    m_productTable->setColumnWidth(4, 80);
-    catalogLayout->addWidget(m_productTable, 1);
-
-    m_quickItems = new QuickItemsBar(m_db, this);
-    catalogLayout->addWidget(m_quickItems);
-
-    auto* cart = new QWidget;
-    auto* cartLayout = new QVBoxLayout(cart);
+    auto* cartPane = new QWidget;
+    auto* cartLayout = new QVBoxLayout(cartPane);
     cartLayout->setContentsMargins(0, 0, 0, 0);
     cartLayout->setSpacing(themeTokens::space8);
 
+    // The wide table on the left is the sale itself. It used to be the catalogue,
+    // which is what left the cart boxed into the narrow right-hand pane and the
+    // cashier counting a bill against a two-column strip; the lines need the room
+    // more than the browsing did, so the grid took the wide slot and the stock
+    // column it was carrying is replaced by the quantity of the line.
     m_table = new QTableWidget;
     m_table->setObjectName(QStringLiteral("posTable"));
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(true);
     m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_table->setColumnCount(5);
+    m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels(
-        {tr("Produit"), tr("Qté"), tr("Prix"), tr("Total"), QString()});
+        {tr("Produit"), tr("Code-barres"), tr("Unité"), tr("Qté"), tr("Prix")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    // Qty and PU are edited through QInputDialog on double click, which is the
-    // only way to get a number pad on a tablet. Leaving the items editable as
-    // well would let a stray keypress silently rewrite a price.
-    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    // Only the quantity takes a typed edit, and only from the keyboard: F2 or
+    // Enter on the current cell. A second tap does not open an inline editor on
+    // top of the dialog a double click opens, and a stray keypress can never
+    // rewrite a price, which is a number the audit log ends up holding.
+    m_table->setEditTriggers(QAbstractItemView::EditKeyPressed);
     m_table->horizontalHeader()->setStretchLastSection(false);
-    m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-    m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(NameColumn, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(BarcodeColumn, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(UnitColumn, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(QuantityColumn, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(PriceColumn, QHeaderView::Fixed);
     m_table->verticalHeader()->setDefaultSectionSize(44);
     m_table->horizontalHeader()->setFixedHeight(34);
     m_table->verticalHeader()->hide();
-    m_table->setColumnWidth(1, 130);
-    m_table->setColumnWidth(2, 76);
-    m_table->setColumnWidth(3, 84);
-    m_table->setColumnWidth(4, 40);
+    m_table->setColumnWidth(BarcodeColumn, 128);
+    m_table->setColumnWidth(UnitColumn, 80);
+    m_table->setColumnWidth(QuantityColumn, 64);
+    m_table->setColumnWidth(PriceColumn, 80);
+    // The typography the wide table already had, kept so the grid reads as the
+    // same size it read as when it was the catalogue: 14pt for a tablet, with a
+    // heavier 12pt header row above it.
+    QFont gridFont = m_table->font();
+    gridFont.setPointSize(14);
+    m_table->setFont(gridFont);
+    QFont gridHeaderFont = m_table->horizontalHeader()->font();
+    gridHeaderFont.setPointSize(12);
+    gridHeaderFont.setBold(true);
+    m_table->horizontalHeader()->setFont(gridHeaderFont);
     m_cartStack = new QStackedWidget;
     m_cartStack->addWidget(m_table);
     auto* emptyCart = new QLabel(tr("Scannez un produit ou choisissez-en un dans la liste"));
@@ -338,6 +121,30 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_cartStack->addWidget(emptyCart);
     m_cartStack->setCurrentWidget(emptyCart);
     cartLayout->addWidget(m_cartStack, 1);
+
+    m_quickItems = new QuickItemsBar(m_db, this);
+    cartLayout->addWidget(m_quickItems);
+
+    auto* rightPane = new QWidget;
+    auto* rightLayout = new QVBoxLayout(rightPane);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(themeTokens::space8);
+
+    // The narrow table stays exactly where it was, in the layout, with its header
+    // and no rows under it. The +/- buttons that used to sit in a cell of every
+    // line are gone with the lines, so nothing in here builds a control any more.
+    m_emptyTable = new QTableWidget;
+    m_emptyTable->setObjectName(QStringLiteral("posEmptyTable"));
+    m_emptyTable->setAlternatingRowColors(true);
+    m_emptyTable->setFrameShape(QFrame::NoFrame);
+    m_emptyTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_emptyTable->setColumnCount(5);
+    m_emptyTable->setHorizontalHeaderLabels(
+        {tr("Produit"), tr("Qté"), tr("Prix"), tr("Total"), QString()});
+    m_emptyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_emptyTable->horizontalHeader()->setFixedHeight(34);
+    m_emptyTable->verticalHeader()->hide();
+    rightLayout->addWidget(m_emptyTable, 1);
 
     auto* clearButton = new QPushButton(tr("Vider"));
     clearButton->setObjectName(QStringLiteral("secondary"));
@@ -350,7 +157,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     removeButton->setText(tr("Retirer ligne"));
     removeButton->setToolTip(tr("Retirer la ligne sélectionnée"));
 
-    // ---- the invoice bar, under the grid ----
+    // ---- the invoice bar, at the foot of the right-hand pane ----
     // One horizontal band rather than the rail it replaces. The total is the
     // largest thing on the page, so it leads and the line count sits under it:
     // reading a sale means reading the money first, then how it was made up.
@@ -426,11 +233,15 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     barLayout->addWidget(m_save);
     barLayout->addLayout(secondaryRow);
 
-    cartLayout->addWidget(invoiceBar);
+    rightLayout->addWidget(invoiceBar);
 
-    m_workspace->addWidget(catalog);
-    m_workspace->addWidget(cart);
-    cart->setMinimumWidth(400);
+    // The scan field is the only control above the panes now: the catalogue
+    // search that shared the row went with the catalogue it filtered.
+    root->addWidget(m_entry);
+
+    m_workspace->addWidget(cartPane);
+    m_workspace->addWidget(rightPane);
+    rightPane->setMinimumWidth(400);
     m_workspace->setStretchFactor(0, 60);
     m_workspace->setStretchFactor(1, 40);
     root->addWidget(m_workspace, 1);
@@ -451,21 +262,6 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     connect(m_table, &QTableWidget::cellDoubleClicked, this, &PosPage::onCellDoubleClicked);
     connect(m_quickItems, &QuickItemsBar::productClicked, this, &PosPage::onQuickItemClicked);
     connect(m_quickItems, &QuickItemsBar::addNewRequested, this, &PosPage::onAddQuickProduct);
-    connect(m_catalogSearch, &QLineEdit::textChanged, m_productFilter,
-            &QSortFilterProxyModel::setFilterFixedString);
-    connect(m_unitFilter, &QComboBox::currentIndexChanged, this, [this](int index) {
-        static_cast<PosProductFilter*>(m_productFilter)->setUnitFilter(m_unitFilter->itemData(index).toString());
-    });
-    const auto addSelectedProduct = [this](const QModelIndex& proxyIndex) {
-        if (!proxyIndex.isValid()) {
-            return;
-        }
-        const int productId = proxyIndex.data(PosProductModel::ProductIdRole).toInt();
-        if (const auto product = m_productModel->productById(productId)) {
-            addProductToCart(*product, 1);
-        }
-    };
-    connect(m_productTable, &QTableView::activated, this, addSelectedProduct);
 
     // The filter is installed on the page itself as well as on the entry field,
     // because the entry is not the only thing it watches: the page's own Show
@@ -476,7 +272,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_table->installEventFilter(this);
 
     refreshTotals();
-    m_quickItems->refresh();
+    refreshQuickItems();
     m_entry->setFocus();
 }
 
@@ -492,17 +288,9 @@ void PosPage::onBarcodeTextChanged(const QString& text)
     m_entry->setCursorPosition(normalized.length());
 }
 
-void PosPage::refreshCatalog()
+void PosPage::refreshQuickItems()
 {
-    m_productModel->refresh();
-    const QString selectedUnit = m_unitFilter->currentData().toString();
-    const QSignalBlocker blocker(m_unitFilter);
-    m_unitFilter->clear();
-    m_unitFilter->addItem(tr("Toutes les unités"), QString());
-    for (const QString& unit : m_productModel->units()) {
-        m_unitFilter->addItem(unit, unit);
-    }
-    m_unitFilter->setCurrentIndex(qMax(0, m_unitFilter->findData(selectedUnit)));
+    m_quickItems->refresh();
 }
 
 bool PosPage::eventFilter(QObject* watched, QEvent* event)
@@ -534,14 +322,12 @@ bool PosPage::eventFilter(QObject* watched, QEvent* event)
 void PosPage::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
-    for (QLineEdit* field : {m_entry, m_catalogSearch}) {
-        if (!field) {
-            continue;
-        }
-        const QString fullText = field->property("fullPlaceholder").toString();
-        field->setPlaceholderText(QFontMetrics(field->font()).elidedText(
-            fullText, Qt::ElideRight, qMax(0, field->contentsRect().width() - 36)));
-    }
+    // The field advertises both a barcode and a name, which is longer than the
+    // box; what it cannot show is replaced by an ellipsis rather than cut off
+    // mid-word.
+    m_entry->setPlaceholderText(QFontMetrics(m_entry->font()).elidedText(
+        m_entry->property("fullPlaceholder").toString(), Qt::ElideRight,
+        qMax(0, m_entry->contentsRect().width() - 36)));
     if (!m_workspace) {
         return;
     }
@@ -675,8 +461,7 @@ void PosPage::addEntry()
         // carry id 0 and the second one would land on the first one's line.
         core::Product saved = *created;
         saved.id = id;
-        refreshCatalog();
-        m_quickItems->refresh();
+        refreshQuickItems();
 
         const QString label = saved.name.isEmpty() ? saved.barcode : saved.name;
         const auto answer =
@@ -714,8 +499,7 @@ void PosPage::onAddQuickProduct()
     }
     core::Product saved = *created;
     saved.id = id;
-    refreshCatalog();
-    m_quickItems->refresh();
+    refreshQuickItems();
     addProductToCart(saved, 1);
 }
 
@@ -774,7 +558,10 @@ void PosPage::onCellDoubleClicked(int row, int column)
     if (m_updating || row < 0 || row >= m_lines.size()) {
         return;
     }
-    if (column == 1) {
+    // Two cells answer a double click, each with the dialog a tablet can put a
+    // number pad behind: the quantity of the line, and its unit price, which a
+    // cashier may override and which the audit log records when they do.
+    if (column == QuantityColumn) {
         bool accepted = false;
         const int quantity = QInputDialog::getInt(this, tr("Quantité"), tr("Quantité"),
                                                   static_cast<int>(m_lines[row].quantity), 1, 1000000, 1,
@@ -782,8 +569,10 @@ void PosPage::onCellDoubleClicked(int row, int column)
         if (!accepted) {
             return;
         }
+        m_lines[row].quantity = quantity;
         m_table->item(row, column)->setText(QString::number(quantity));
-    } else if (column == 2) {
+        refreshTotals();
+    } else if (column == PriceColumn) {
         bool accepted = false;
         const QString price =
             QInputDialog::getText(this, tr("Prix unitaire"), tr("Prix unitaire"),
@@ -791,7 +580,12 @@ void PosPage::onCellDoubleClicked(int row, int column)
         if (!accepted) {
             return;
         }
-        m_table->item(row, column)->setText(price);
+        const auto cents = parseMoney(price);
+        if (!cents || *cents <= 0) {
+            return;
+        }
+        m_lines[row].unitPriceCents = *cents;
+        rebuildTable();
     }
 }
 
@@ -800,25 +594,29 @@ void PosPage::onCellChanged(int row, int column)
     if (m_updating || row < 0 || row >= m_lines.size()) {
         return;
     }
-    if (column == 1) {
-        bool ok = false;
-        const qlonglong quantity = m_table->item(row, column)->text().trimmed().toLongLong(&ok);
-        if (!ok || quantity <= 0) {
-            rebuildTable();
-            return;
-        }
-        m_lines[row].quantity = quantity;
-    } else if (column == 2) {
-        const auto cents = parseMoney(m_table->item(row, column)->text());
-        if (!cents || *cents <= 0) {
-            rebuildTable();
-            return;
-        }
-        m_lines[row].unitPriceCents = *cents;
-    } else {
+    // Only the quantity is editable in place. The price is left alone here on
+    // purpose: a stray keypress that lands in a price cell would rewrite a number
+    // that ends up in the audit log, so it has to go through the dialog above.
+    if (column != QuantityColumn) {
         return;
     }
-    rebuildTable();
+    QTableWidgetItem* item = m_table->item(row, column);
+    if (!item) {
+        return;
+    }
+    bool ok = false;
+    const qlonglong quantity = item->text().trimmed().toLongLong(&ok);
+    if (!ok || quantity <= 0) {
+        // Put back what the line really holds rather than keeping a number no
+        // sale could be made from.
+        item->setText(QString::number(m_lines[row].quantity));
+        return;
+    }
+    m_lines[row].quantity = quantity;
+    // The grid is not rebuilt here: nothing on it depends on the quantity, the
+    // total and the unit count in the invoice bar are the only things that move.
+    item->setText(QString::number(quantity));
+    refreshTotals();
 }
 
 void PosPage::setNotice(const QString& text, bool ok)
@@ -860,42 +658,34 @@ void PosPage::rebuildTable()
         const int row = m_table->rowCount();
         m_table->insertRow(row);
 
-        auto* nameItem = new QTableWidgetItem(line.unit.isEmpty() ? line.name
-                                                                  : QStringLiteral("%1 / %2").arg(line.name, line.unit));
+        // A QTableWidget item is editable by default, so every cell that is not
+        // the quantity has to say so itself. The quantity is the one cell that
+        // opens for typing, which is what makes it changeable from a keyboard
+        // attached to a till; F2 or Enter starts the editor, and a double click
+        // opens the dialog in onCellDoubleClicked.
+        const auto readOnly = [](QTableWidgetItem* item) {
+            item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+        };
+
+        auto* nameItem = new QTableWidgetItem(line.name);
         nameItem->setData(Qt::UserRole, line.productId);
-        m_table->setItem(row, 0, nameItem);
+        readOnly(nameItem);
+        m_table->setItem(row, NameColumn, nameItem);
+
+        auto* barcodeItem = new QTableWidgetItem(line.barcode);
+        barcodeItem->setTextAlignment(Qt::AlignCenter);
+        readOnly(barcodeItem);
+        m_table->setItem(row, BarcodeColumn, barcodeItem);
+
+        auto* unitItem = new QTableWidgetItem(line.unit);
+        unitItem->setTextAlignment(Qt::AlignCenter);
+        readOnly(unitItem);
+        m_table->setItem(row, UnitColumn, unitItem);
 
         auto* qtyItem = new QTableWidgetItem(QString::number(line.quantity));
         qtyItem->setTextAlignment(Qt::AlignCenter);
-        m_table->setItem(row, 1, qtyItem);
-
-        auto* quantityControls = new QWidget;
-        auto* quantityLayout = new QHBoxLayout(quantityControls);
-        quantityLayout->setContentsMargins(0, 0, 0, 0);
-        quantityLayout->setSpacing(2);
-        auto* decrease = new QPushButton(QString::fromUtf8("\xe2\x88\x92"));
-        decrease->setObjectName(QStringLiteral("cartQuantityDecrease"));
-        decrease->setFixedSize(36, 36);
-        decrease->setToolTip(tr("Diminuer la quantité"));
-        decrease->setAccessibleName(tr("Diminuer la quantité"));
-        auto* quantity = new QLabel(QString::number(line.quantity));
-        quantity->setAlignment(Qt::AlignCenter);
-        auto* increase = new QPushButton(QStringLiteral("+"));
-        increase->setObjectName(QStringLiteral("cartQuantityIncrease"));
-        increase->setFixedSize(36, 36);
-        increase->setToolTip(tr("Augmenter la quantité"));
-        increase->setAccessibleName(tr("Augmenter la quantité"));
-        quantityLayout->addWidget(decrease);
-        quantityLayout->addWidget(quantity, 1);
-        quantityLayout->addWidget(increase);
-        m_table->setCellWidget(row, 1, quantityControls);
-        connect(decrease, &QPushButton::clicked, this, [this, row]() {
-            adjustQuantity(row, -1);
-        });
-        connect(increase, &QPushButton::clicked, this, [this, row]() {
-            adjustQuantity(row, 1);
-        });
-        decrease->setEnabled(line.quantity > 1);
+        qtyItem->setFlags(qtyItem->flags() | Qt::ItemIsEditable);
+        m_table->setItem(row, QuantityColumn, qtyItem);
 
         auto* priceItem = new QTableWidgetItem(formatMoney(line.unitPriceCents));
         priceItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -904,39 +694,12 @@ void PosPage::rebuildTable()
         if (line.unitPriceCents != line.basePriceCents) {
             priceItem->setForeground(QBrush(Qt::red));
         }
-        m_table->setItem(row, 2, priceItem);
-
-        auto* totalItem = new QTableWidgetItem(formatMoney(line.unitPriceCents * line.quantity));
-        totalItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        m_table->setItem(row, 3, totalItem);
-
-        auto* deleteButton = new QPushButton(QString::fromUtf8("\xc3\x97"));
-        deleteButton->setObjectName(QStringLiteral("cartRemoveLine"));
-        deleteButton->setFixedSize(40, 40);
-        deleteButton->setToolTip(tr("Retirer la ligne"));
-        deleteButton->setAccessibleName(tr("Retirer la ligne"));
-        m_table->setCellWidget(row, 4, deleteButton);
-        connect(deleteButton, &QPushButton::clicked, this, [this, row]() {
-            m_table->selectRow(row);
-            onRemoveLine();
-        });
+        readOnly(priceItem);
+        m_table->setItem(row, PriceColumn, priceItem);
     }
     m_updating = false;
     m_cartStack->setCurrentWidget(m_lines.isEmpty() ? m_cartStack->widget(1) : m_table);
     refreshTotals();
-}
-
-void PosPage::adjustQuantity(int row, long long delta)
-{
-    if (row < 0 || row >= m_lines.size()) {
-        return;
-    }
-    const long long quantity = m_lines[row].quantity + delta;
-    if (quantity <= 0) {
-        return;
-    }
-    m_lines[row].quantity = quantity;
-    rebuildTable();
 }
 
 bool PosPage::syncFromTable()
@@ -946,11 +709,11 @@ bool PosPage::syncFromTable()
     }
     bool ok = true;
     for (int i = 0; i < m_lines.size(); ++i) {
-        if (!m_table->item(i, 1) || !m_table->item(i, 2)) {
+        if (!m_table->item(i, QuantityColumn) || !m_table->item(i, PriceColumn)) {
             return false;
         }
-        const qlonglong quantity = m_table->item(i, 1)->text().trimmed().toLongLong();
-        const auto cents = parseMoney(m_table->item(i, 2)->text());
+        const qlonglong quantity = m_table->item(i, QuantityColumn)->text().trimmed().toLongLong();
+        const auto cents = parseMoney(m_table->item(i, PriceColumn)->text());
         if (quantity <= 0 || !cents || *cents < 0) {
             ok = false;
             continue;
@@ -1018,7 +781,7 @@ void PosPage::completeSale()
     setNotice(tr("تم البيع: %1").arg(formatMoney(result.totalCents)), true);
     m_lines.clear();
     rebuildTable();
-    refreshCatalog();
+    refreshQuickItems();
     m_entry->setFocus();
 }
 

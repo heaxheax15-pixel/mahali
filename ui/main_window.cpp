@@ -499,9 +499,35 @@ void MainWindow::onSidebarToggleClicked()
                                                        : QStringLiteral("0"));
 }
 
-// The strip above everything: the brand on the right, the rail's toggle, the four
-// reached most often, the shop's global search, then the controls that used to
-// sit in the status bar (who is signed in, which occasion is running) plus the
+// One of the four square buttons in the top bar. A QPushButton so the
+// QPushButton#quickNavLetter rules reach it: Qt matches a QSS type selector
+// against the widget's own class rather than its base classes, so a QToolButton
+// would miss every one of them and keep the theme's plain button look with no
+// warning. The letter is the button's own text, which also means the stylesheet
+// colours it and the theme switch needs no pixmap to repaint.
+//
+// 36x36 rather than the 64x64 these started at, and 16px rather than 18: the row
+// is the widest thing in the bar, and the name behind the letter is already in
+// the sidebar and in the tooltip. It sits against a 1px border so the glyph has
+// an edge to sit on in both themes.
+QPushButton* MainWindow::makeQuickNavButton(QLatin1Char letter, const QString& toolTip)
+{
+    auto* button = new QPushButton(this);
+    button->setObjectName(QStringLiteral("quickNavLetter"));
+    button->setText(QString(letter));
+    button->setFixedSize(36, 36);
+    button->setCheckable(true);
+    button->setCursor(Qt::PointingHandCursor);
+    button->setToolTip(toolTip);
+    // Written before the first polish, since the stylesheet reads it while it is
+    // matching; refreshNavActiveState rewrites it whenever the page changes.
+    button->setProperty("active", false);
+    return button;
+}
+
+// The strip above everything: the brand on the right, the four pages reached most
+// often, the rail's toggle, the shop's global search, then the controls that used
+// to sit in the status bar (who is signed in, which occasion is running) plus the
 // theme toggle.
 QWidget* MainWindow::buildTopBar()
 {
@@ -614,16 +640,49 @@ QWidget* MainWindow::buildTopBar()
     // colour rather than a flash of the light-theme one.
     refreshThemeIcons();
 
-    // In RTL the first widget added lands on the right. The brand leads, the rail's
-    // toggle sits against it, the quick pages follow where a second click is never
-    // needed, the occasion badge after them, and the user and the two icon buttons
-    // close the left end. The stretch takes up what is left, which is what holds
-    // the two groups apart now that the bar carries no search field.
+    // The four squares go with the brand, before the rail's toggle. Beside the
+    // mark is where a second click is never needed: the rail follows the reading
+    // direction, so a button that opens a page from the rail costs a reach across
+    // the window to find first, and the quick sale is the one page that must
+    // always be in sight.
+    QWidget* quickNavGroup = new QWidget;
+    quickNavGroup->setObjectName(QStringLiteral("quickNavGroup"));
+    auto* quickNavLayout = new QHBoxLayout(quickNavGroup);
+    quickNavLayout->setContentsMargins(0, 0, 0, 0);
+    // 7px, a wider gap than the bar's own spacing: these are four separate
+    // destinations and not one control split in four, and at 36px across they sit
+    // close enough to read as a single group without that.
+    quickNavLayout->setSpacing(7);
+
+    struct QuickEntry { QLatin1Char letter; QString tooltip; int pageIndex; };
+    const QuickEntry quickEntries[] = {
+        {QLatin1Char('V'), tr("Vente rapide"), page::QuickSale},
+        {QLatin1Char('P'), tr("Produits"),     page::Products},
+        {QLatin1Char('S'), tr("Stock"),        page::Stock},
+        {QLatin1Char('R'), tr("Rapports"),     page::Reports},
+    };
+
+    for (const QuickEntry& entry : quickEntries) {
+        QPushButton* button = makeQuickNavButton(entry.letter, entry.tooltip);
+        const int pageIndex = entry.pageIndex;
+        connect(button, &QPushButton::clicked, this, [this, pageIndex]() {
+            onPageChanged(pageIndex);
+        });
+        quickNavLayout->addWidget(button);
+        m_quickNavButtons.push_back({button, pageIndex});
+    }
+
+    // In RTL the first widget added lands on the right. The brand leads, the four
+    // quick pages follow it, the rail's toggle after them, the occasion badge
+    // next, and the user and the two icon buttons close the left end. The stretch
+    // takes up what is left, which is what holds the two groups apart now that the
+    // bar carries no search field.
     auto* layout = new QHBoxLayout(m_topBar);
     layout->setContentsMargins(themeTokens::space8, 0,
                                themeTokens::space8, 0);
     layout->setSpacing(themeTokens::space8);
     layout->addLayout(brandRow);
+    layout->addWidget(quickNavGroup);
     layout->addWidget(m_sidebarToggle);
     layout->addWidget(m_occasionLabel);
     layout->addWidget(m_sessionLabel);
@@ -866,17 +925,28 @@ void MainWindow::refreshNavActiveState()
     // mark the page on screen rather than the page that was asked for, so a
     // programmatic switch lights up both and they cannot disagree about which one
     // is showing.
-    for (const NavButton& entry : m_navButtons) {
-        const bool active = entry.pageIndex == current;
-        if (entry.button->isChecked() == active) {
-            continue;
+    const auto mark = [current](const std::vector<NavButton>& entries) {
+        for (const NavButton& entry : entries) {
+            const bool active = entry.pageIndex == current;
+            // Both have to agree before there is nothing to do, and the property
+            // is the one that decides it. Keying this on isChecked() alone skips
+            // every button that was reached by clicking: a checkable button sets
+            // itself before the slot runs, so it reads as already active, the
+            // property is never written, and the page on screen ends up marked on
+            // no button at all.
+            const QVariant marked = entry.button->property("active");
+            if (marked.toBool() == active && entry.button->isChecked() == active) {
+                continue;
+            }
+            entry.button->setChecked(active);
+            entry.button->setProperty("active", active);
+            entry.button->style()->unpolish(entry.button);
+            entry.button->style()->polish(entry.button);
+            entry.button->update();
         }
-        entry.button->setChecked(active);
-        entry.button->setProperty("active", active);
-        entry.button->style()->unpolish(entry.button);
-        entry.button->style()->polish(entry.button);
-        entry.button->update();
-    }
+    };
+    mark(m_navButtons);
+    mark(m_quickNavButtons);
 
     // The icon colour is tied to the same state, and it is a pixmap the
     // stylesheet cannot reach, so it is redrawn from here rather than by the
@@ -935,14 +1005,17 @@ void MainWindow::refreshThemeIcons()
             continue;
         }
         const bool active = entry.pageIndex == current;
-        entry.button->setIconSize(QSize(20, 20));
-        entry.button->setToolButtonStyle(width() < 1100
+        // The rail holds nothing but QToolButtons; only its entries reach this
+        // loop, so the narrower type is known to be right here.
+        auto* toolButton = static_cast<QToolButton*>(entry.button);
+        toolButton->setIconSize(QSize(20, 20));
+        toolButton->setToolButtonStyle(width() < 1100
                             ? Qt::ToolButtonIconOnly
                             : Qt::ToolButtonTextUnderIcon);
-        entry.button->setToolTip(entry.button->property("fullLabel").toString());
-        entry.button->setIcon(appIcon(m_navIcons[static_cast<qsizetype>(i)],
-                                      active ? accent : text,
-                                      20));
+        toolButton->setToolTip(toolButton->property("fullLabel").toString());
+        toolButton->setIcon(appIcon(m_navIcons[static_cast<qsizetype>(i)],
+                                    active ? accent : text,
+                                    20));
     }
 
     // The four squares in the top bar need nothing here: their glyph is the
@@ -970,19 +1043,22 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     const bool compact = width() < 1100;
+    // The rail only, and only its QToolButtons: the top bar's four squares carry
+    // one letter each and are laid out once, so there is nothing here to redo.
     for (const NavButton& entry : m_navButtons) {
         if (!entry.button) {
             continue;
         }
-        entry.button->setToolButtonStyle(compact ? Qt::ToolButtonIconOnly
-                                                 : Qt::ToolButtonTextUnderIcon);
-        const QString fullLabel = entry.button->property("fullLabel").toString();
-          const QString shortLabel = fullLabel.section(QLatin1Char(' '), 0, 0);
-          entry.button->setText(compact
+        auto* toolButton = static_cast<QToolButton*>(entry.button);
+        toolButton->setToolButtonStyle(compact ? Qt::ToolButtonIconOnly
+                                               : Qt::ToolButtonTextUnderIcon);
+        const QString fullLabel = toolButton->property("fullLabel").toString();
+        const QString shortLabel = fullLabel.section(QLatin1Char(' '), 0, 0);
+        toolButton->setText(compact
                             ? QString()
-                            : QFontMetrics(entry.button->font()).elidedText(
+                            : QFontMetrics(toolButton->font()).elidedText(
                                 shortLabel, Qt::ElideRight, 48));
-        entry.button->setToolTip(fullLabel);
+        toolButton->setToolTip(fullLabel);
     }
     for (QLabel* heading : findChildren<QLabel*>(QStringLiteral("navGroupTitle"))) {
         heading->setVisible(!compact);

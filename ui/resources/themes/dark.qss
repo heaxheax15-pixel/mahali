@@ -13,6 +13,11 @@
 * {
     font-size: %1pt;
     color: @TEXT@;
+    /* Semibold on the widget, not on QTableWidget::item: the item subcontrol
+       rule is dropped where the cells are painted, so a font set there changes
+       nothing on screen. The header keeps its own heavier 700 from
+       QHeaderView::section below, which is why only the rows read bolder. */
+    font-weight: 600;
     outline: 0;
 }
 
@@ -614,6 +619,11 @@ QTableView,
 QTableWidget {
     background: @SURFACE@;
     color: @TEXT@;
+    /* Semibold on the widget itself, not on QTableWidget::item: Qt drops the
+       item subcontrol rule where the cells are painted, so a font set there
+       changes nothing on screen (measured: not one pixel). This is the rule that
+       reaches the cells, through the font the delegate inherits from the table. */
+    font-weight: 600;
     border: 1px solid @BORDER@;
     border-radius: 7px;
     gridline-color: @BORDER@;
@@ -650,7 +660,11 @@ QHeaderView::section {
     border-bottom: 1px solid @BORDER@;
     border-right: 1px solid @BORDER@;
     padding: 10px 14px;
-    font-size: %3pt;
+    /* Was the %3pt token, which resolves to the 11pt note size: too small for
+       the column a cashier reads a barcode or a stock figure out of. Stated in
+       px here rather than through the token, because that token is shared with
+       the notes, the badges and the captions, and those are not what this is. */
+    font-size: 15px;
     font-weight: 700;
     text-align: center;
 }
@@ -678,7 +692,11 @@ QTableWidget QTableCornerButton::section {
 
 QTableWidget::item {
     padding: 10px 14px;
-    font-size: %1pt;
+    /* The row text: was the %1pt token, which resolves to the 12pt body size.
+       Stated in px here because that token is the body size for every button,
+       label and list in the app, and this grid is read at arm's length on a
+       till rather than glanced at. */
+    font-size: 18px;
 }
 
 /* A selected row is tinted, not re-coloured. @ACCENT@ on @ACCENT_SOFT@ measures
@@ -1170,6 +1188,37 @@ QFrame#stockNotification QPushButton#noticeClose:hover {
    about what the button opens. */
 QWidget#quickNav {
     background: transparent;
+}
+
+/* The button the rule above is the container for. 36x36 with no padding of its
+   own, so the fixed size in the code is the size that is measured: a QSS padding
+   is added to it and the letter ends up clipped or off-centre. */
+QPushButton#quickNavLetter {
+    background: transparent;
+    border: 1px solid #2d2d2d;
+    border-radius: 7px;
+    color: #a3a3a3;
+    font-size: 16px;
+    font-weight: 800;
+    padding: 0;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+}
+
+QPushButton#quickNavLetter:hover {
+    background: #262626;
+    color: #fafafa;
+    border-color: #2d2d2d;
+}
+
+/* The page this one opens is on screen. Marked with the primary rather than a
+   heavier weight alone, so the state survives a glance and not only a look. */
+QPushButton#quickNavLetter[active="true"] {
+    background: #2d1f04;
+    color: #d4a017;
+    border-color: #d4a017;
 }
 
 /* ---------- زر القائمة الجانبية ---------- */

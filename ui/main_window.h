@@ -13,6 +13,7 @@
 
 class QLabel;
 class QFrame;
+class QAbstractButton;
 class QPropertyAnimation;
 class QPushButton;
 class QResizeEvent;
@@ -49,8 +50,13 @@ struct NavEntry {
     int pageIndex;
 };
 
+// One nav button and the page it opens, whichever kind of button it is: the
+// sidebar's are QToolButtons, the top bar's four squares are QPushButtons, and
+// the marking of the active page is the same either way. QAbstractButton is the
+// base of both; a QPushButton is not a QToolButton, so a member typed as the
+// latter could not hold the four.
 struct NavButton {
-    QToolButton* button = nullptr;
+    QAbstractButton* button = nullptr;
     int pageIndex = 0;
 };
 // as the page indices the sidebar uses; an entry is filled in the first time its
@@ -130,6 +136,10 @@ private:
     void buildNavForRole(const QString& role);
     void showUpdateBar(const QString& tag);
     QWidget* buildTopBar();
+    // The square letter button the top bar carries for the four pages that must
+    // never be more than one click away. One letter, nothing else: the page is
+    // named by the tooltip and by the active state.
+    QPushButton* makeQuickNavButton(QLatin1Char letter, const QString& toolTip);
     QWidget* buildSidebar();
     // Repaints the top bar's icons for the theme in use. The icons are pixmaps,
     // so the stylesheet cannot recolour them: they are drawn here, and every
@@ -154,6 +164,10 @@ private:
     // is the source of truth for which page is showing; this only holds the
     // widgets so the active one can be repainted.
     std::vector<NavButton> m_navButtons;
+    // The four squares in the top bar, held apart from the rail because they are
+    // never rebuilt: they point at the same four pages whatever the signed-in role
+    // is, so a role change empties the rail and leaves these alone.
+    std::vector<NavButton> m_quickNavButtons;
     // The icon each nav button was built with, in the same order as
     // m_navButtons. The buttons are rebuilt from scratch when the role changes,
     // so this is cleared and refilled alongside them; keeping the icon beside

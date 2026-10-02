@@ -599,6 +599,11 @@ QTableView,
 QTableWidget {
     background: @SURFACE@;
     color: @TEXT@;
+    /* Semibold on the widget itself, not on QTableWidget::item: Qt drops the
+       item subcontrol rule where the cells are painted, so a font set there
+       changes nothing on screen (measured: not one pixel). This is the rule that
+       reaches the cells, through the font the delegate inherits from the table. */
+    font-weight: 600;
     border: 1px solid @BORDER@;
     border-radius: 7px;
     gridline-color: @BORDER@;
@@ -640,7 +645,11 @@ QHeaderView::section {
     border-bottom: 1px solid @BORDER@;
     border-right: 1px solid @BORDER@;
     padding: 10px 14px;
-    font-size: %3pt;
+    /* Was the %3pt token, which resolves to the 11pt note size: too small for
+       the column a cashier reads a barcode or a stock figure out of. Stated in
+       px here rather than through the token, because that token is shared with
+       the notes, the badges and the captions, and those are not what this is. */
+    font-size: 15px;
     font-weight: 700;
     text-align: center;
 }
@@ -668,11 +677,15 @@ QTableWidget QTableCornerButton::section {
 
 QTableWidget::item {
     padding: 10px 14px;
-    font-size: %1pt;
+    /* The row text: was the %1pt token, which resolves to the 12pt body size.
+       Stated in px here because that token is the body size for every button,
+       label and list in the app, and this grid is read at arm's length on a
+       till rather than glanced at. */
+    font-size: 18px;
 }
 
 /* A selected row is tinted, not re-coloured. @ACCENT@ on @ACCENT_SOFT@ is 4.24:1 and
-   the row text is 15px, so the one step darker #1d4ed8 — already the primary's
+   the row text is 18px, so the one step darker #1d4ed8 — already the primary's
    own border colour — is used here to clear WCAG AA at 5.49:1. */
 QTableWidget::item:selected {
     background: @ACCENT_SOFT@;
@@ -1237,6 +1250,37 @@ QFrame#stockNotification QPushButton#noticeClose:hover {
    an 11px caption under an icon told you what the button was, a letter does not. */
 QWidget#quickNav {
     background: transparent;
+}
+
+/* The button the rule above is the container for. 36x36 with no padding of its
+   own, so the fixed size in the code is the size that is measured: a QSS padding
+   is added to it and the letter ends up clipped or off-centre. */
+QPushButton#quickNavLetter {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    color: #64748b;
+    font-size: 16px;
+    font-weight: 800;
+    padding: 0;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+}
+
+QPushButton#quickNavLetter:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
+/* The page this one opens is on screen. Marked with the primary rather than a
+   heavier weight alone, so the state survives a glance and not only a look. */
+QPushButton#quickNavLetter[active="true"] {
+    background: #dbeafe;
+    color: #2563eb;
+    border-color: #2563eb;
 }
 
 /* ---------- زر القائمة الجانبية ---------- */

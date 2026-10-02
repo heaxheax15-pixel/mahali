@@ -11,19 +11,15 @@
 
 class QEvent;
 class QLabel;
-class QComboBox;
 class QLineEdit;
 class QPushButton;
-class QSortFilterProxyModel;
 class QSplitter;
 class QStackedWidget;
-class QTableView;
 class QTableWidget;
 
 namespace app::ui {
 
 class QuickItemsBar;
-class PosProductModel;
 
 struct PosLine {
     int productId = 0;
@@ -62,7 +58,6 @@ public:
 public slots:
     void addEntry();
     void completeSale();
-    void refreshCatalog();
 
     // Puts the caret in the scan field and selects what is in it. Called by the
     // shell each time the register becomes the visible page: the window gives
@@ -84,10 +79,26 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    // The sale grid, which is the wide table on the left. Named rather than
+    // spelled as literals at each use: the quantity is read back by two
+    // different code paths (the inline edit and the pre-sale sync) and a number
+    // typed twice is a number that can drift apart.
+    enum Column {
+        NameColumn = 0,
+        BarcodeColumn,
+        UnitColumn,
+        QuantityColumn,
+        PriceColumn,
+        ColumnCount,
+    };
+
     void rebuildTable();
-    void adjustQuantity(int row, long long delta);
     void refreshTotals();
     bool syncFromTable();
+    // The quick items are the only browsable list of products the page has left:
+    // the catalogue table is gone, so a product that has no quick item can only
+    // be brought in by its barcode.
+    void refreshQuickItems();
     // Looks up by barcode first, then by exact name, since the entry field
     // advertises both. Returns nothing when neither matches.
     std::optional<core::Product> findProduct(const QString& text) const;
@@ -99,17 +110,16 @@ private:
 
     app::data::Database& m_db;
     QVector<PosLine> m_lines;
-    PosProductModel* m_productModel = nullptr;
-    QSortFilterProxyModel* m_productFilter = nullptr;
-    QTableView* m_productTable = nullptr;
-    QComboBox* m_unitFilter = nullptr;
     QSplitter* m_workspace = nullptr;
     QStackedWidget* m_cartStack = nullptr;
     QuickItemsBar* m_quickItems = nullptr;
     QLineEdit* m_entry;
-    QLineEdit* m_catalogSearch = nullptr;
     QPushButton* m_save;
     QTableWidget* m_table;
+    // The narrow table on the right, deliberately kept in the layout with no
+    // rows: it is the slot the grid used to be built in, and a cashier still
+    // reads the sale as "two panes" before anything changes about the second.
+    QTableWidget* m_emptyTable = nullptr;
     QLabel* m_countLabel;
     QLabel* m_totalLabel;
     QLabel* m_paidLabel;
