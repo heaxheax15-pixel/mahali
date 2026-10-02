@@ -52,8 +52,7 @@ AuditLogPage::AuditLogPage(app::data::Database& db, QWidget* parent)
 
     auto* card = makeCard();
     auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(18, 16, 18, 16);
-    cardLayout->setSpacing(10);
+    padCardLayout(cardLayout);
     cardLayout->addLayout(top);
     cardLayout->addWidget(m_summary);
     cardLayout->addWidget(m_table, 1);

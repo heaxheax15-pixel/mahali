@@ -11,13 +11,17 @@
 
 class QEvent;
 class QLabel;
+class QComboBox;
 class QLineEdit;
 class QPushButton;
+class QSortFilterProxyModel;
+class QTableView;
 class QTableWidget;
 
 namespace app::ui {
 
 class QuickItemsBar;
+class PosProductModel;
 
 struct PosLine {
     int productId = 0;
@@ -56,6 +60,7 @@ public:
 public slots:
     void addEntry();
     void completeSale();
+    void refreshCatalog();
 
     // Puts the caret in the scan field and selects what is in it. Called by the
     // shell each time the register becomes the visible page: the window gives
@@ -91,12 +96,18 @@ private:
 
     app::data::Database& m_db;
     QVector<PosLine> m_lines;
+    PosProductModel* m_productModel = nullptr;
+    QSortFilterProxyModel* m_productFilter = nullptr;
+    QTableView* m_productTable = nullptr;
+    QComboBox* m_unitFilter = nullptr;
     QuickItemsBar* m_quickItems = nullptr;
     QLineEdit* m_entry;
     QPushButton* m_save;
     QTableWidget* m_table;
     QLabel* m_countLabel;
     QLabel* m_totalLabel;
+    QLabel* m_paidLabel;
+    QLabel* m_remainingLabel;
     QLabel* m_notice;
     QLabel* m_sessionChip = nullptr;
     int m_lastSaleId = 0;

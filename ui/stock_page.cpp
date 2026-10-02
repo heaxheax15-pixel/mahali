@@ -107,8 +107,7 @@ StockPage::StockPage(app::data::Database& db, QWidget* parent)
 
     auto* toolbarCard = makeCard();
     auto* toolbarLayout = new QVBoxLayout(toolbarCard);
-    toolbarLayout->setContentsMargins(18, 16, 18, 16);
-    toolbarLayout->setSpacing(12);
+    padCardLayout(toolbarLayout);
     toolbarLayout->addLayout(toolbar);
 
     // ---- card 2: the grid ----
@@ -146,8 +145,7 @@ StockPage::StockPage(app::data::Database& db, QWidget* parent)
 
     auto* gridCard = makeCard();
     auto* gridLayout = new QVBoxLayout(gridCard);
-    gridLayout->setContentsMargins(18, 16, 18, 16);
-    gridLayout->setSpacing(12);
+    padCardLayout(gridLayout);
     gridLayout->addWidget(m_table, 1);
 
     // ---- footer ----

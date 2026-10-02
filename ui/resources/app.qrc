@@ -3,6 +3,9 @@
   <qresource prefix="/mahali">
     <file alias="themes/light.qss">themes/light.qss</file>
     <file alias="themes/dark.qss">themes/dark.qss</file>
+    <file alias="fonts/NotoSansArabic-Regular.ttf">fonts/NotoSansArabic-Regular.ttf</file>
+    <file alias="fonts/NotoSansArabic-Bold.ttf">fonts/NotoSansArabic-Bold.ttf</file>
+    <file alias="fonts/OFL.txt">fonts/OFL.txt</file>
     <!-- The application icon, shared with the Windows resource script. The
          previous entry pointed at icons/mahali.ico under this same alias, so it
          was replaced rather than added: rcc rejects a duplicate alias. The PNG

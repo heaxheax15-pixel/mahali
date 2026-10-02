@@ -165,8 +165,7 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);
-    tableLayout->setContentsMargins(18, 16, 18, 16);
-    tableLayout->setSpacing(10);
+    padCardLayout(tableLayout);
     tableLayout->addWidget(makeCardTitle(tr("تفاصيل العمليات")));
     tableLayout->addWidget(m_cashTable, 1);
 

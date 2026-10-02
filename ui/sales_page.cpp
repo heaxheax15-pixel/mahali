@@ -21,6 +21,7 @@
 #include "format_utils.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
+#include "theme_tokens.h"
 #include "widgets/stat_card.h"
 #include "widgets/ui_helpers.h"
 
@@ -86,17 +87,20 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_table->horizontalHeader()->setStretchLastSection(false);
+    m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
     m_table->verticalHeader()->setDefaultSectionSize(42);
     m_table->verticalHeader()->hide();
     m_table->setColumnWidth(0, 90);
     m_table->setColumnWidth(2, 130);
+    m_table->setColumnWidth(3, 110);
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);
-    tableLayout->setContentsMargins(18, 16, 18, 16);
-    tableLayout->setSpacing(10);
+    padCardLayout(tableLayout);
     tableLayout->addWidget(makeCardTitle(tr("سجل فواتير اليوم")));
     tableLayout->addWidget(m_table, 1);
     tableLayout->addWidget(m_summary);

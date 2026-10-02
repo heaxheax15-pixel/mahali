@@ -22,6 +22,7 @@
 #include "data/user_repository.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
+#include "theme_tokens.h"
 #include "format_utils.h"
 
 namespace app::ui {
@@ -155,8 +156,9 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->verticalHeader()->hide();
 
     auto* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(24, 16, 24, 24);
-    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(themeTokens::space12, themeTokens::space12,
+                                   themeTokens::space12, themeTokens::space12);
+    mainLayout->setSpacing(themeTokens::space12);
     mainLayout->addLayout(headerRow);
     mainLayout->addWidget(m_table, 1);
 

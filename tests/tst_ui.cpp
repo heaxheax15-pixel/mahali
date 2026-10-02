@@ -6,6 +6,8 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTime>
+#include <QComboBox>
+#include <QTableView>
 #include <QTableWidget>
 #include <QUrl>
 #include <QFormLayout>
@@ -87,6 +89,7 @@ private slots:
     void pagesReflectSeededData();
     void flexibleAmountParsing();
     void posSaleWithPriceOverride();
+    void pos_catalog_uses_in_memory_search_and_unit_filter();
     void posSaleRequiresOpenSession();
     void cashSessionLifecycle();
     void cash_session_rejects_invalid_amount();
@@ -420,6 +423,48 @@ void UiTest::posSaleWithPriceOverride()
         }
     }
     QCOMPARE(overrides, 1);
+}
+
+void UiTest::pos_catalog_uses_in_memory_search_and_unit_filter()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-catalog.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product first;
+    first.barcode = QStringLiteral("10001");
+    first.name = QStringLiteral("شاي أخضر");
+    first.unit = QStringLiteral("علبة");
+    first.salePriceCents = 350;
+    QVERIFY(products.save(first) > 0);
+
+    core::Product second;
+    second.barcode = QStringLiteral("10002");
+    second.name = QStringLiteral("قهوة");
+    second.unit = QStringLiteral("كيس");
+    second.salePriceCents = 500;
+    QVERIFY(products.save(second) > 0);
+
+    ui::PosPage page(db);
+    auto* catalog = page.findChild<QTableView*>(QStringLiteral("posProductTable"));
+    auto* search = page.findChild<QLineEdit*>(QStringLiteral("posCatalogSearch"));
+    auto* unitFilter = page.findChild<QComboBox*>(QStringLiteral("posUnitFilter"));
+    QVERIFY(catalog);
+    QVERIFY(search);
+    QVERIFY(unitFilter);
+    QCOMPARE(catalog->model()->rowCount(), 2);
+
+    search->setText(QStringLiteral("قهوة"));
+    QCOMPARE(catalog->model()->rowCount(), 1);
+    QCOMPARE(catalog->model()->index(0, 0).data().toString(), QStringLiteral("قهوة"));
+
+    search->clear();
+    const int boxUnit = unitFilter->findData(QStringLiteral("علبة"));
+    QVERIFY(boxUnit >= 0);
+    unitFilter->setCurrentIndex(boxUnit);
+    QCOMPARE(catalog->model()->rowCount(), 1);
+    QCOMPARE(catalog->model()->index(0, 0).data().toString(), QStringLiteral("شاي أخضر"));
 }
 
 void UiTest::posSaleRequiresOpenSession()

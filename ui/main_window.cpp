@@ -52,6 +52,7 @@
 #include "suppliers_page.h"
 #include "users_page.h"
 #include "theme.h"
+#include "theme_tokens.h"
 #include "widgets/app_icon.h"
 
 namespace app::ui {
@@ -513,7 +514,7 @@ QWidget* MainWindow::buildTopBar()
     // 40 plus the 8px margin above and below is exactly 56. A fixed height does
     // not grow to fit a child, which is what made 56 too short at 64 and would
     // make it too short again if the buttons ever grew.
-    m_topBar->setFixedHeight(56);
+    m_topBar->setFixedHeight(themeTokens::topBarHeight);
 
     m_brandIcon = new QLabel;
     m_brandIcon->setObjectName(QStringLiteral("brandIcon"));
@@ -561,7 +562,7 @@ QWidget* MainWindow::buildTopBar()
     quickNavLayout->setContentsMargins(0, 0, 0, 0);
     // 7px is the gap between the four, chosen so the row reads as one block
     // rather than as four separate controls.
-    quickNavLayout->setSpacing(7);
+    quickNavLayout->setSpacing(themeTokens::space8);
 
     struct QuickNavEntry {
         QLatin1Char letter;
@@ -636,8 +637,9 @@ QWidget* MainWindow::buildTopBar()
     // close the left end. The stretch takes up what is left, which is what holds
     // the two groups apart now that the bar carries no search field.
     auto* layout = new QHBoxLayout(m_topBar);
-    layout->setContentsMargins(16, 8, 16, 8);
-    layout->setSpacing(12);
+    layout->setContentsMargins(themeTokens::space16, themeTokens::space8,
+                               themeTokens::space16, themeTokens::space8);
+    layout->setSpacing(themeTokens::space12);
     layout->addLayout(brandRow);
     layout->addWidget(m_sidebarToggle);
     layout->addSpacing(16);
@@ -671,7 +673,7 @@ QWidget* MainWindow::buildSidebar()
     // The stylesheet matches this token, because it has no direction of its own to
     // ask.
     m_sidebar->setProperty("direction", directionToken());
-    m_sidebar->setFixedWidth(240);
+    m_sidebar->setFixedWidth(themeTokens::sidebarWidth);
 
     auto* layout = new QVBoxLayout(m_sidebar);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -772,7 +774,7 @@ void MainWindow::addNavGroup(const QString& title, const std::vector<NavEntry>& 
     // spacing, and putting it in the stylesheet only gave a number that looked
     // like it controlled the gap but did not.
     groupLayout->setContentsMargins(0, 0, 0, 0);
-    groupLayout->setSpacing(2);
+    groupLayout->setSpacing(themeTokens::space4);
 
     auto* heading = new QLabel(title);
     heading->setObjectName(QStringLiteral("navGroupTitle"));

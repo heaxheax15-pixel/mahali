@@ -4,6 +4,8 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
+#include "theme_tokens.h"
+
 namespace app::ui {
 
 PageHeader::PageHeader(const QString& title, const QString& subtitle, QWidget* parent)
@@ -26,7 +28,7 @@ PageHeader::PageHeader(const QString& title, const QString& subtitle, QWidget* p
 
     auto* texts = new QVBoxLayout;
     texts->setContentsMargins(0, 0, 0, 0);
-    texts->setSpacing(3);
+    texts->setSpacing(themeTokens::space4);
     texts->addWidget(titleLabel);
     texts->addWidget(subtitleLabel);
 
@@ -35,8 +37,9 @@ PageHeader::PageHeader(const QString& title, const QString& subtitle, QWidget* p
     m_actionLayout->setSpacing(10);
 
     auto* row = new QHBoxLayout(this);
-    row->setContentsMargins(18, 14, 18, 14);
-    row->setSpacing(14);
+    row->setContentsMargins(themeTokens::space12, themeTokens::space8,
+                             themeTokens::space12, themeTokens::space8);
+    row->setSpacing(themeTokens::space12);
     row->addLayout(texts, 1);
     row->addLayout(m_actionLayout);
 }

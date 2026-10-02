@@ -91,8 +91,7 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
 
     auto* tableCard = makeCard();
     auto* tableLayout = new QVBoxLayout(tableCard);
-    tableLayout->setContentsMargins(18, 16, 18, 16);
-    tableLayout->setSpacing(10);
+    padCardLayout(tableLayout);
     tableLayout->addWidget(makeCardTitle(tr("سجل مصاريف وسحوبات اليوم")));
     tableLayout->addLayout(toolbar);
     tableLayout->addWidget(m_table, 1);

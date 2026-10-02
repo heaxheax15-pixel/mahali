@@ -131,8 +131,7 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     // screen — two different columns depending on the language.
     card->setFixedWidth(kFormWidth);
     auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(16, 14, 16, 16);
-    cardLayout->setSpacing(12);
+    padCardLayout(cardLayout);
     cardLayout->addWidget(formBox);
     cardLayout->addWidget(m_preview);
     cardLayout->addSpacing(21);

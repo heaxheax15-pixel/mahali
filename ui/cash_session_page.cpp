@@ -110,8 +110,7 @@ CashSessionPage::CashSessionPage(app::data::Database& db, QWidget* parent)
 
     auto* movementsCard = makeCard();
     auto* movementsLayout = new QVBoxLayout(movementsCard);
-    movementsLayout->setContentsMargins(18, 16, 18, 16);
-    movementsLayout->setSpacing(10);
+    padCardLayout(movementsLayout);
     movementsLayout->addWidget(makeCardTitle(tr("حركات الجلسة")));
     movementsLayout->addWidget(m_table, 1);
 

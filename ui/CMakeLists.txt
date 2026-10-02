@@ -17,6 +17,7 @@ target_link_libraries(mahali-ui
 target_sources(mahali-ui PRIVATE
     theme.cpp
     theme.h
+    theme_tokens.h
     main_window.cpp
     main_window.h
     server_controller.cpp

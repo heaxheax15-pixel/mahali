@@ -109,8 +109,7 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
 
     auto* toolbarCard = makeCard();
     auto* toolbarLayout = new QVBoxLayout(toolbarCard);
-    toolbarLayout->setContentsMargins(18, 16, 18, 16);
-    toolbarLayout->setSpacing(12);
+    padCardLayout(toolbarLayout);
     toolbarLayout->addLayout(toolbar);
 
     // ---- card 2: the grid ----
@@ -148,8 +147,7 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
 
     auto* gridCard = makeCard();
     auto* gridLayout = new QVBoxLayout(gridCard);
-    gridLayout->setContentsMargins(14, 12, 14, 12);
-    gridLayout->setSpacing(8);
+    padCardLayout(gridLayout);
     gridLayout->addWidget(makeCardTitle(tr("Catalogue")));
     gridLayout->addWidget(m_table, 1);
 

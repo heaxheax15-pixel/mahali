@@ -26,6 +26,7 @@
 #include "format_utils.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
+#include "theme_tokens.h"
 #include "widgets/ui_helpers.h"
 
 namespace app::ui {
@@ -118,8 +119,7 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
 
     auto* toolbarCard = makeCard();
     auto* toolbarLayout = new QVBoxLayout(toolbarCard);
-    toolbarLayout->setContentsMargins(18, 16, 18, 16);
-    toolbarLayout->setSpacing(12);
+    padCardLayout(toolbarLayout);
     toolbarLayout->addLayout(toolbar);
 
     // ---- card 2: the grid ----
@@ -134,15 +134,20 @@ CustomersPage::CustomersPage(app::data::Database& db, QWidget* parent)
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_table->horizontalHeader()->setStretchLastSection(false);
+    m_table->horizontalHeader()->setSectionResizeMode(kColName, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(kColPhone, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(kColBalance, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(kColLastOperation, QHeaderView::Fixed);
+    m_table->setColumnWidth(kColPhone, 140);
+    m_table->setColumnWidth(kColBalance, 120);
+    m_table->setColumnWidth(kColLastOperation, 170);
     m_table->verticalHeader()->setDefaultSectionSize(42);
     m_table->verticalHeader()->hide();
 
     auto* gridCard = makeCard();
     auto* gridLayout = new QVBoxLayout(gridCard);
-    gridLayout->setContentsMargins(18, 16, 18, 16);
-    gridLayout->setSpacing(12);
+    padCardLayout(gridLayout);
     gridLayout->addWidget(makeCardTitle(tr("Clients et soldes")));
     gridLayout->addWidget(m_table, 1);
 

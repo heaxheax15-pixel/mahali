@@ -9,6 +9,7 @@
 
 class QFrame;
 class QHBoxLayout;
+class QLayout;
 class QVBoxLayout;
 
 namespace app::ui {
@@ -30,5 +31,8 @@ QLabel* makeCardTitle(const QString& text, QWidget* parent = nullptr);
 
 // Adds margins to a page's root layout so content breathes.
 void padPageLayout(QVBoxLayout* layout);
+
+// Compact, consistent padding and spacing for card contents.
+void padCardLayout(QLayout* layout);
 
 } // namespace app::ui

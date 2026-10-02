@@ -1,10 +1,12 @@
 #include "ui_helpers.h"
 
 #include <QFrame>
+#include <QLayout>
 #include <QStyle>
 #include <QVBoxLayout>
 
 #include "app_icon.h"
+#include "theme_tokens.h"
 
 namespace app::ui {
 
@@ -54,8 +56,16 @@ QLabel* makeCardTitle(const QString& text, QWidget* parent)
 
 void padPageLayout(QVBoxLayout* layout)
 {
-    layout->setContentsMargins(20, 18, 20, 18);
-    layout->setSpacing(16);
+    layout->setContentsMargins(themeTokens::pageInset, themeTokens::pageInset,
+                               themeTokens::pageInset, themeTokens::pageInset);
+    layout->setSpacing(themeTokens::space12);
+}
+
+void padCardLayout(QLayout* layout)
+{
+    layout->setContentsMargins(themeTokens::space12, themeTokens::space12,
+                               themeTokens::space12, themeTokens::space12);
+    layout->setSpacing(themeTokens::space8);
 }
 
 } // namespace app::ui
