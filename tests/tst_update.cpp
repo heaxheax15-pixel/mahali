@@ -203,17 +203,17 @@ void UpdateTest::version_compare()
 
     // A patch bump is the difference between "up to date" and an update prompt,
     // so it has to be caught. The probe sits one patch above the build.
-    QVERIFY(app::core::isNewer({1, 0, 4}, app::core::currentVersion()));
+    QVERIFY(app::core::isNewer({1, 0, 5}, app::core::currentVersion()));
 }
 
 void UpdateTest::current_version_matches_macro()
 {
-    // Keeps the checker and the .rc in step: the build version is 1.0.3.
+    // Keeps the checker and the .rc in step: the build version is 1.0.4.
     const app::core::Version current = app::core::currentVersion();
     QCOMPARE(current.major, 1);
     QCOMPARE(current.minor, 0);
-    QCOMPARE(current.patch, 3);
-    QCOMPARE(QStringLiteral(MAHALI_VERSION), QStringLiteral("1.0.3"));
+    QCOMPARE(current.patch, 4);
+    QCOMPARE(QStringLiteral(MAHALI_VERSION), QStringLiteral("1.0.4"));
 }
 
 void UpdateTest::release_url_is_the_one_the_installer_publishes_to()
