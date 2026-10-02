@@ -8,6 +8,7 @@
 #include <QWidget>
 
 class QFrame;
+class QDialog;
 class QHBoxLayout;
 class QLayout;
 class QVBoxLayout;
@@ -34,5 +35,8 @@ void padPageLayout(QVBoxLayout* layout);
 
 // Compact, consistent padding and spacing for card contents.
 void padCardLayout(QLayout* layout);
+
+// Clamp a modal dialog to the screen's usable work area.
+void constrainDialogToAvailableGeometry(QDialog* dialog);
 
 } // namespace app::ui

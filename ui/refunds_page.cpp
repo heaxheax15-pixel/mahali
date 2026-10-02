@@ -64,7 +64,7 @@ QPushButton* makeRowRefundButton(QWidget* parent, const QColor& iconColor)
     button->setObjectName(QStringLiteral("rowRefundButton"));
     button->setIcon(appIcon(Icon::Return, iconColor, 16));
     button->setIconSize(QSize(16, 16));
-    button->setFixedSize(32, 32);
+    button->setFixedSize(40, 40);
     button->setCursor(Qt::PointingHandCursor);
     button->setToolTip(QCoreApplication::translate("RefundsPage", "Rembourser"));
     return button;

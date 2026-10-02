@@ -15,6 +15,8 @@ class QComboBox;
 class QLineEdit;
 class QPushButton;
 class QSortFilterProxyModel;
+class QSplitter;
+class QStackedWidget;
 class QTableView;
 class QTableWidget;
 
@@ -79,9 +81,11 @@ private slots:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private:
     void rebuildTable();
+    void adjustQuantity(int row, long long delta);
     void refreshTotals();
     bool syncFromTable();
     // Looks up by barcode first, then by exact name, since the entry field
@@ -92,7 +96,6 @@ private:
     void addProductToCart(const core::Product& product, long long quantity);
 
     void setNotice(const QString& text, bool ok);
-    void refreshSessionChip();
 
     app::data::Database& m_db;
     QVector<PosLine> m_lines;
@@ -100,8 +103,11 @@ private:
     QSortFilterProxyModel* m_productFilter = nullptr;
     QTableView* m_productTable = nullptr;
     QComboBox* m_unitFilter = nullptr;
+    QSplitter* m_workspace = nullptr;
+    QStackedWidget* m_cartStack = nullptr;
     QuickItemsBar* m_quickItems = nullptr;
     QLineEdit* m_entry;
+    QLineEdit* m_catalogSearch = nullptr;
     QPushButton* m_save;
     QTableWidget* m_table;
     QLabel* m_countLabel;
@@ -109,7 +115,6 @@ private:
     QLabel* m_paidLabel;
     QLabel* m_remainingLabel;
     QLabel* m_notice;
-    QLabel* m_sessionChip = nullptr;
     int m_lastSaleId = 0;
     bool m_updating = false;
 };

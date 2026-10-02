@@ -37,6 +37,7 @@
 #include "data/product_repository.h"
 #include "data/sale_service.h"
 #include "format_utils.h"
+#include "widgets/ui_helpers.h"
 #include "scan_safe_dialog.h"
 
 namespace app::ui {
@@ -218,6 +219,7 @@ bool collectDebtItems(QWidget* parent, app::data::Database& db, QVector<core::Sa
         }
     });
 
+    constrainDialogToAvailableGeometry(&dialog);
     if (dialog.exec() != QDialog::Accepted) {
         return false;
     }
@@ -287,6 +289,7 @@ std::optional<core::Customer> showCustomerInfoDialog(QWidget* parent, app::data:
     layout->addLayout(form);
     layout->addWidget(buttons);
 
+    constrainDialogToAvailableGeometry(&dialog);
     if (dialog.exec() != QDialog::Accepted) {
         return std::nullopt;
     }
@@ -750,6 +753,7 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
         dialog.accept();
     });
 
+    constrainDialogToAvailableGeometry(&dialog);
     dialog.exec();
     return changed && !deleted;
 }

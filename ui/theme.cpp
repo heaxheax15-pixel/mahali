@@ -38,6 +38,8 @@ QString loadThemeStylesheet(const QString& path, const themeTokens::ThemeColors&
     stylesheet.replace(QStringLiteral("@POSITIVE@"), hex(colors.positive));
     stylesheet.replace(QStringLiteral("@NEGATIVE@"), hex(colors.negative));
     stylesheet.replace(QStringLiteral("@WARNING@"), hex(colors.warning));
+    stylesheet.replace(QStringLiteral("@POSITIVE_SOFT@"), hex(colors.positiveSoft));
+    stylesheet.replace(QStringLiteral("@NEGATIVE_SOFT@"), hex(colors.negativeSoft));
     stylesheet.replace(QStringLiteral("%1"), QString::number(themeTokens::fontBodyPt));
     stylesheet.replace(QStringLiteral("%2"), QString::number(themeTokens::fontHeadingPt));
     stylesheet.replace(QStringLiteral("%3"), QString::number(themeTokens::fontNotePt));

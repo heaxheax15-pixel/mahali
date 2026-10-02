@@ -29,6 +29,7 @@
 #include "data/supplier_return_service.h"
 #include "format_utils.h"
 #include "scan_safe_dialog.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -320,6 +321,7 @@ SupplierReturnDialogResult showSupplierReturnDialog(QWidget* parent, app::data::
 
     applyMode();
 
+    constrainDialogToAvailableGeometry(&dialog);
     dialog.exec();
     return result;
 }

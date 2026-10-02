@@ -15,7 +15,9 @@ class QLabel;
 class QFrame;
 class QPropertyAnimation;
 class QPushButton;
+class QResizeEvent;
 class QStackedWidget;
+class QToolButton;
 class QVBoxLayout;
 class QWidget;
 
@@ -47,17 +49,10 @@ struct NavEntry {
     int pageIndex;
 };
 
-// A sidebar button paired with the page it opens, kept so the active one can be
-// repainted from the page the stacked widget is actually showing.
 struct NavButton {
-    QPushButton* button = nullptr;
+    QToolButton* button = nullptr;
     int pageIndex = 0;
 };
-
-// One page of the shell, held as how to make it rather than as the page itself.
-// Every page constructor reads the database and fills a table, so building all
-// fourteen up front cost half a second and nearly six thousand rows of table for
-// a window that shows one page at a time. The factory table is in the same order
 // as the page indices the sidebar uses; an entry is filled in the first time its
 // page is opened and the instance kept from then on, so opening a page twice
 // re-reads the same widget rather than building a second one.
@@ -98,6 +93,9 @@ public:
     void deactivateOccasion();
     QString occasionLabelText() const;
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private slots:
     void onPageChanged(int row);
     void onSwitchUserClicked();
@@ -128,6 +126,7 @@ private slots:
 
 private:
     void refreshOccasionLabel();
+    void refreshSessionLabel();
     void buildNavForRole(const QString& role);
     void showUpdateBar(const QString& tag);
     QWidget* buildTopBar();
@@ -171,21 +170,15 @@ private:
     // it and build the groups again without rebuilding the window.
     QVBoxLayout* m_sidebarGroupLayout = nullptr;
     QStackedWidget* m_pages;
-    // The four square buttons in the top bar, in the order they were built. Kept
-    // apart from m_navButtons because those are thrown away and rebuilt whenever
-    // the signed-in role changes, while these four are built once with the bar and
-    // must survive that: they are not role-dependent, so a role change has no
-    // reason to unhook the page switching.
-    std::vector<NavButton> m_quickNavButtons;
     // The strip above the sidebar and the pages. Kept so the icons on it can be
     // repainted when the theme changes, rather than only at construction.
     QWidget* m_topBar = nullptr;
-    QPushButton* m_themeToggle = nullptr;
-    QPushButton* m_settingsBtn = nullptr;
+    QToolButton* m_themeToggle = nullptr;
+    QToolButton* m_settingsBtn = nullptr;
     // The ☰ in the top bar. It lives in the window and not in the rail, because the
     // rail is the thing it hides: a control inside the thing it controls cannot
     // bring it back.
-    QPushButton* m_sidebarToggle = nullptr;
+    QToolButton* m_sidebarToggle = nullptr;
     // Created lazily, on the first newer release, so the app opens with no bar
     // at all rather than an empty one.
     QFrame* m_updateBar = nullptr;
@@ -197,7 +190,8 @@ private:
     QPushButton* m_updateRestartBtn = nullptr;
     // The signed-in user, as one string: the prefix and the name together, so
     // the layout cannot put the name on the wrong side of the colon.
-    QLabel* m_userLabel = nullptr;
+    QToolButton* m_userMenu = nullptr;
+    QLabel* m_sessionLabel = nullptr;
     // Shows the occasion running right now, and stays empty when there is none.
     // Always present rather than created on demand, so activation and
     // deactivation only have to change its text.

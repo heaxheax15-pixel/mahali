@@ -22,6 +22,7 @@
 #include "data/supplier_repository.h"
 #include "format_utils.h"
 #include "scan_safe_dialog.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -242,6 +243,7 @@ SupplierPaymentDialogResult showSupplierPaymentDialog(QWidget* parent, app::data
 
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
+    constrainDialogToAvailableGeometry(&dialog);
     dialog.exec();
     return result;
 }

@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include <QApplication>
+#include <QAction>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
@@ -8,21 +9,25 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QGuiApplication>
+#include <QElapsedTimer>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QShortcut>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMenu>
 #include <QProcess>
 #include <QPropertyAnimation>
+#include <QResizeEvent>
 #include <QPushButton>
 #include <QScreen>
 #include <QScrollArea>
 #include <QStackedWidget>
-#include <QStatusBar>
 #include <QStyle>
+#include <QToolButton>
 #include <QTimer>
+#include <QThread>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -31,6 +36,7 @@
 #include <memory>
 
 #include "core/session.h"
+#include "data/cash_session_repository.h"
 #include "core/update_checker.h"
 #include "core/update_downloader.h"
 #include "core/update_installer.h"
@@ -122,25 +128,6 @@ QWidget* makeStubPage(const QString& title, const QString& body)
 // every one of them and keep the theme's plain button look with no warning.
 // Plain button text also means no layout and no child labels inside, so nothing
 // has to be made transparent to the mouse.
-QPushButton* makeQuickNavButton(QLatin1Char letter, const QString& toolTip)
-{
-    auto* button = new QPushButton;
-    button->setObjectName(QStringLiteral("quickNavLetter"));
-    button->setText(QString(letter));
-    // 40x40 here as well as in the stylesheet's min/max: the stylesheet sets the
-    // box, and this pins it, so the button cannot be widened by a longer label
-    // or by a future translation of the tooltip.
-    button->setFixedSize(40, 40);
-    button->setCheckable(true);
-    button->setCursor(Qt::PointingHandCursor);
-    button->setToolTip(toolTip);
-    // Written before the first polish: the [active="true"] rule is matched when
-    // the widget is first styled, so leaving the property unset would paint the
-    // button in the default colours until the first page change came along.
-    button->setProperty("active", false);
-    return button;
-}
-
 // Qt's stylesheet has no pseudo-state for reading direction, so the direction
 // has to reach the stylesheet as an ordinary property it can match on. The
 // token is the direction the application is in right now, which core's
@@ -197,7 +184,11 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     // application, so a direction set here silently overrode the language for
     // every page below it no matter what the user had chosen.
 
-    setMinimumSize(900, 600);
+    setMinimumSize(900, 480);
+    if (QScreen* screen = QGuiApplication::primaryScreen()) {
+        const QRect available = screen->availableGeometry();
+        setGeometry(available);
+    }
 
     setWindowIcon(QIcon(QStringLiteral(":/mahali/icons/app.ico")));
 
@@ -307,16 +298,6 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
     // The bar carries the one action that has to be reachable from anywhere.
     // The sync and tally readouts that used to sit here were secondary, and a
     // bar of four counters is a bar nobody reads.
-    statusBar()->setContentsMargins(0, 0, 0, 0);
-    statusBar()->setFixedHeight(36);
-
-    auto* switchUserBtn = new QPushButton(tr("تبديل المستخدم"));
-    switchUserBtn->setObjectName("primary");
-    switchUserBtn->setCursor(Qt::PointingHandCursor);
-    switchUserBtn->setFixedHeight(32);
-    connect(switchUserBtn, &QPushButton::clicked, this, &MainWindow::onSwitchUserClicked);
-    statusBar()->addPermanentWidget(switchUserBtn);
-
     // The update check runs on a delay so it never competes with opening the
     // database, drawing the first page or whatever the user clicks first: the
     // bar is only shown if there is something to say, and a failure is silent.
@@ -449,13 +430,30 @@ UsersPage* MainWindow::usersPage()
 
 void MainWindow::onPageChanged(int row)
 {
+    static const char* const pageNames[] = {
+        "pos", "products", "customers", "suppliers", "cash-session", "sales", "expenses",
+        "reports", "refunds", "audit-log", "users", "purchases", "occasions", "settings", "stock"};
     // The page is built before it is shown, so the operator never sees a
     // placeholder, and the re-read below lands on the widget now in the stack.
+    const bool measureUi = qEnvironmentVariableIsSet("MAHALI_UI_PERF");
+    QElapsedTimer buildTimer;
+    buildTimer.start();
     ensurePage(row);
+    const qint64 pageBuildNs = buildTimer.nsecsElapsed();
     m_pages->setCurrentIndex(row);
     // Each page re-reads on entry, so what the operator sees is what is in the
     // database now rather than what it held when the window opened.
+    QElapsedTimer refreshTimer;
+    refreshTimer.start();
     refreshPage(row);
+    if (measureUi && row >= 0 && row < static_cast<int>(std::size(pageNames))) {
+        qInfo().noquote() << "PERF page_build_ns=" << QLatin1String(pageNames[row])
+                          << pageBuildNs;
+        qInfo().noquote() << "PERF page_refresh_ns=" << QLatin1String(pageNames[row])
+                          << refreshTimer.nsecsElapsed()
+                          << "main_thread=" << (QThread::currentThread() == qApp->thread());
+    }
+    refreshSessionLabel();
 
     if (m_fade) {
         m_fade->stop();
@@ -523,6 +521,9 @@ QWidget* MainWindow::buildTopBar()
 
     auto* brandTitle = new QLabel(tr("Mahali"));
     brandTitle->setObjectName(QStringLiteral("appTitle"));
+    QFont brandFont = brandTitle->font();
+    brandFont.setPointSize(14);
+    brandTitle->setFont(brandFont);
 
     auto* brandRow = new QHBoxLayout;
     brandRow->setContentsMargins(0, 0, 0, 0);
@@ -537,7 +538,7 @@ QWidget* MainWindow::buildTopBar()
     // lands next to the rail; in French it fills left to right and it lands there
     // too. At either end of the layout it would sit opposite the rail in one of the
     // two, which is where a control for something is least expected.
-    m_sidebarToggle = new QPushButton;
+    m_sidebarToggle = new QToolButton;
     m_sidebarToggle->setObjectName(QStringLiteral("sidebarToggle"));
     // A character rather than a drawn pixmap, like the two controls beside it: the
     // stylesheet sets a foreground colour and so can reach this one, which it
@@ -545,6 +546,8 @@ QWidget* MainWindow::buildTopBar()
     // needs no UTF-8 decoding to survive into the QString.
     m_sidebarToggle->setText(QString(QChar(0x2630)));
     m_sidebarToggle->setFixedSize(40, 40);
+    m_sidebarToggle->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    m_sidebarToggle->setAutoRaise(true);
     m_sidebarToggle->setCursor(Qt::PointingHandCursor);
     // One tooltip for both states rather than one that tracks the toggle: the mark
     // is a hamburger either way, and a tooltip that changed meaning on every click
@@ -556,45 +559,6 @@ QWidget* MainWindow::buildTopBar()
     // pages the sidebar lists, put where the eye already is: the sidebar is a
     // rail of fourteen items that has to be scrolled, and the quick sale is the
     // one page that must never be more than one click away.
-    auto* quickNav = new QWidget;
-    quickNav->setObjectName(QStringLiteral("quickNav"));
-    auto* quickNavLayout = new QHBoxLayout(quickNav);
-    quickNavLayout->setContentsMargins(0, 0, 0, 0);
-    // 7px is the gap between the four, chosen so the row reads as one block
-    // rather than as four separate controls.
-    quickNavLayout->setSpacing(themeTokens::space8);
-
-    struct QuickNavEntry {
-        QLatin1Char letter;
-        QString toolTip;
-        int pageIndex;
-    };
-    // The letters are Latin initialisms and deliberately not translated: they
-    // are mnemonics, not words, and a translated initial would stop matching the
-    // page it stands for. The tooltips are translated, and they carry the full
-    // name -- they are the only place the letter is given one, now that the
-    // caption under the icon is gone.
-    const std::vector<QuickNavEntry> quickEntries = {
-        {QLatin1Char('V'), tr("Vente rapide"), page::QuickSale},
-        {QLatin1Char('P'), tr("Produits"), page::Products},
-        {QLatin1Char('S'), tr("Stock"), page::Stock},
-        {QLatin1Char('R'), tr("Rapports"), page::Reports},
-    };
-    for (const QuickNavEntry& entry : quickEntries) {
-        QPushButton* button = makeQuickNavButton(entry.letter, entry.toolTip);
-        quickNavLayout->addWidget(button);
-        const int pageIndex = entry.pageIndex;
-        connect(button, &QPushButton::clicked, this, [this, pageIndex]() {
-            onPageChanged(pageIndex);
-        });
-        // Held like the sidebar's: the highlight has to be repainted from the
-        // page on screen, which cannot be done from a button the window no longer
-        // holds. No icon is kept alongside it, because there is no pixmap to
-        // redraw on a theme change -- the letter is the button's own text and the
-        // stylesheet colours it.
-        m_quickNavButtons.push_back({button, pageIndex});
-    }
-
     m_occasionLabel = new QLabel;
     m_occasionLabel->setObjectName(QStringLiteral("occasionLabel"));
     // Filled now so a shop that opens mid-occasion says so before the operator
@@ -604,20 +568,39 @@ QWidget* MainWindow::buildTopBar()
     // Prefix and name in one label: a single string is bidi-correct as a whole,
     // whereas two labels let the layout put the name on the wrong side of the
     // colon under a right-to-left direction.
-    m_userLabel = new QLabel;
-    m_userLabel->setObjectName(QStringLiteral("userLabel"));
-    m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
+    m_sessionLabel = new QLabel;
+    m_sessionLabel->setObjectName(QStringLiteral("topSessionLabel"));
+    refreshSessionLabel();
 
-    m_themeToggle = new QPushButton;
+    m_userMenu = new QToolButton;
+    m_userMenu->setObjectName(QStringLiteral("userMenu"));
+    m_userMenu->setText(app::core::Session::instance().actorName());
+    m_userMenu->setPopupMode(QToolButton::InstantPopup);
+    m_userMenu->setMinimumHeight(40);
+    m_userMenu->setMaximumHeight(40);
+    m_userMenu->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    m_userMenu->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_userMenu->setArrowType(Qt::DownArrow);
+    m_userMenu->setToolTip(tr("Utilisateur"));
+    auto* userMenu = new QMenu(m_userMenu);
+    QAction* switchUserAction = userMenu->addAction(tr("Changer d'utilisateur"));
+    connect(switchUserAction, &QAction::triggered, this, &MainWindow::onSwitchUserClicked);
+    m_userMenu->setMenu(userMenu);
+
+    m_themeToggle = new QToolButton;
     m_themeToggle->setObjectName(QStringLiteral("iconButton"));
-    m_themeToggle->setFixedSize(36, 36);
+    m_themeToggle->setFixedSize(40, 40);
+    m_themeToggle->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    m_themeToggle->setAutoRaise(true);
     m_themeToggle->setCursor(Qt::PointingHandCursor);
     m_themeToggle->setToolTip(tr("تبديل السمة"));
     connect(m_themeToggle, &QPushButton::clicked, this, &MainWindow::onThemeToggleClicked);
 
-    m_settingsBtn = new QPushButton;
+    m_settingsBtn = new QToolButton;
     m_settingsBtn->setObjectName(QStringLiteral("iconButton"));
-    m_settingsBtn->setFixedSize(36, 36);
+    m_settingsBtn->setFixedSize(40, 40);
+    m_settingsBtn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    m_settingsBtn->setAutoRaise(true);
     m_settingsBtn->setCursor(Qt::PointingHandCursor);
     m_settingsBtn->setToolTip(tr("الإعدادات"));
     // Characters, not painted pixmaps. The stroked icons were unreadable at this
@@ -637,17 +620,15 @@ QWidget* MainWindow::buildTopBar()
     // close the left end. The stretch takes up what is left, which is what holds
     // the two groups apart now that the bar carries no search field.
     auto* layout = new QHBoxLayout(m_topBar);
-    layout->setContentsMargins(themeTokens::space16, themeTokens::space8,
-                               themeTokens::space16, themeTokens::space8);
-    layout->setSpacing(themeTokens::space12);
+    layout->setContentsMargins(themeTokens::space8, 0,
+                               themeTokens::space8, 0);
+    layout->setSpacing(themeTokens::space8);
     layout->addLayout(brandRow);
     layout->addWidget(m_sidebarToggle);
-    layout->addSpacing(16);
-    layout->addWidget(quickNav);
-    layout->addSpacing(16);
     layout->addWidget(m_occasionLabel);
+    layout->addWidget(m_sessionLabel);
     layout->addStretch(1);
-    layout->addWidget(m_userLabel);
+    layout->addWidget(m_userMenu);
     layout->addWidget(m_themeToggle);
     layout->addWidget(m_settingsBtn);
     return m_topBar;
@@ -744,6 +725,8 @@ QWidget* MainWindow::buildSidebar()
     auto* about = new QPushButton(tr("حول محلي…"));
     about->setObjectName(QStringLiteral("about"));
     about->setCursor(Qt::PointingHandCursor);
+    about->setProperty("fullLabel", about->text());
+    about->setToolTip(about->text());
     connect(about, &QPushButton::clicked, this, [this]() {
         QMessageBox::about(
             this, tr("حول محلي"),
@@ -778,18 +761,24 @@ void MainWindow::addNavGroup(const QString& title, const std::vector<NavEntry>& 
 
     auto* heading = new QLabel(title);
     heading->setObjectName(QStringLiteral("navGroupTitle"));
+    heading->setProperty("fullLabel", title);
+    heading->setToolTip(title);
     groupLayout->addWidget(heading);
 
     for (const NavEntry& entry : entries) {
-        auto* button = new QPushButton(entry.label);
+        auto* button = new QToolButton;
+        button->setText(entry.label.section(QLatin1Char(' '), 0, 0));
+        button->setProperty("fullLabel", entry.label);
+        button->setToolTip(entry.label);
         button->setObjectName(QStringLiteral("navItem"));
         button->setCursor(Qt::PointingHandCursor);
         // The rail is a fixed 240px and the button fills what the group gives
         // it. Spelled out rather than left to the default (Minimum, Fixed),
         // because a minimum-based policy is what lets a layout shrink a label
         // below the text it is holding.
-        button->setMinimumWidth(0);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        button->setMinimumSize(themeTokens::buttonMinHeight, themeTokens::buttonMinHeight);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         button->setCheckable(true);
         // The active item is marked with a rule on the leading edge, and the
         // leading edge is the right in Arabic and the left in French. The token
@@ -877,22 +866,16 @@ void MainWindow::refreshNavActiveState()
     // mark the page on screen rather than the page that was asked for, so a
     // programmatic switch lights up both and they cannot disagree about which one
     // is showing.
-    for (const std::vector<NavButton>* row : {&m_navButtons, &m_quickNavButtons}) {
-        for (const NavButton& entry : *row) {
-            const bool active = entry.pageIndex == current;
-            if (entry.button->isChecked() == active) {
-                continue;
-            }
-            // setProperty alone does not restyle the button: the style has to be
-            // unpolished and polished again for the [active] rule to be re-read.
-            entry.button->setChecked(active);
-            entry.button->setProperty("active", active);
-            // A dynamic property only re-reads the stylesheet once the style is
-            // cleared, so unpolish/polish is what actually repaints the button.
-            entry.button->style()->unpolish(entry.button);
-            entry.button->style()->polish(entry.button);
-            entry.button->update();
+    for (const NavButton& entry : m_navButtons) {
+        const bool active = entry.pageIndex == current;
+        if (entry.button->isChecked() == active) {
+            continue;
         }
+        entry.button->setChecked(active);
+        entry.button->setProperty("active", active);
+        entry.button->style()->unpolish(entry.button);
+        entry.button->style()->polish(entry.button);
+        entry.button->update();
     }
 
     // The icon colour is tied to the same state, and it is a pixmap the
@@ -926,11 +909,14 @@ void MainWindow::refreshThemeIcons()
         m_brandIcon->setPixmap(appIcon(Icon::Shop, accent, 28).pixmap(28, 28));
     }
     if (m_settingsBtn) {
-        m_settingsBtn->setText(QString::fromUtf8("\xe2\x9a\x99"));
+        m_settingsBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        m_settingsBtn->setIconSize(QSize(20, 20));
+        m_settingsBtn->setIcon(appIcon(Icon::Gear, text, 20));
     }
     if (m_themeToggle) {
-        m_themeToggle->setText(dark ? QString::fromUtf8("\xe2\x98\x80")
-                                    : QString::fromUtf8("\xf0\x9f\x8c\x99"));
+        m_themeToggle->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        m_themeToggle->setIconSize(QSize(20, 20));
+        m_themeToggle->setIcon(appIcon(dark ? Icon::Sun : Icon::Moon, text, 20));
     }
 
     // The nav icons follow the button they sit on: the accent on the filled
@@ -950,6 +936,10 @@ void MainWindow::refreshThemeIcons()
         }
         const bool active = entry.pageIndex == current;
         entry.button->setIconSize(QSize(20, 20));
+        entry.button->setToolButtonStyle(width() < 1100
+                            ? Qt::ToolButtonIconOnly
+                            : Qt::ToolButtonTextUnderIcon);
+        entry.button->setToolTip(entry.button->property("fullLabel").toString());
         entry.button->setIcon(appIcon(m_navIcons[static_cast<qsizetype>(i)],
                                       active ? accent : text,
                                       20));
@@ -974,6 +964,41 @@ void MainWindow::onThemeToggleClicked()
     // The stylesheet has already been swapped; this redraws the pixmaps, which
     // the new stylesheet could not have reached on its own.
     refreshThemeIcons();
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+    const bool compact = width() < 1100;
+    for (const NavButton& entry : m_navButtons) {
+        if (!entry.button) {
+            continue;
+        }
+        entry.button->setToolButtonStyle(compact ? Qt::ToolButtonIconOnly
+                                                 : Qt::ToolButtonTextUnderIcon);
+        const QString fullLabel = entry.button->property("fullLabel").toString();
+          const QString shortLabel = fullLabel.section(QLatin1Char(' '), 0, 0);
+          entry.button->setText(compact
+                            ? QString()
+                            : QFontMetrics(entry.button->font()).elidedText(
+                                shortLabel, Qt::ElideRight, 48));
+        entry.button->setToolTip(fullLabel);
+    }
+    for (QLabel* heading : findChildren<QLabel*>(QStringLiteral("navGroupTitle"))) {
+        heading->setVisible(!compact);
+        heading->setText(QFontMetrics(heading->font()).elidedText(
+            heading->property("fullLabel").toString(), Qt::ElideRight,
+            qMax(0, heading->contentsRect().width() - 8)));
+        const QString fullLabel = heading->property("fullLabel").toString();
+        heading->setText(QFontMetrics(heading->font()).elidedText(
+            fullLabel, Qt::ElideRight, qMax(0, heading->contentsRect().width() - 8)));
+    }
+    if (QPushButton* about = findChild<QPushButton*>(QStringLiteral("about"))) {
+        const QString fullLabel = about->property("fullLabel").toString();
+        about->setText(QFontMetrics(about->font()).elidedText(
+            fullLabel, Qt::ElideRight, qMax(24, about->width() - 12)));
+    }
+    refreshNavActiveState();
 }
 
 void MainWindow::rebuildNav()
@@ -1001,9 +1026,22 @@ void MainWindow::refreshOccasionLabel()
         QString text = occasion->icon.isEmpty() ? QString() : occasion->icon + QStringLiteral(" ");
         text += occasion->name;
         m_occasionLabel->setText(text);
+        m_occasionLabel->setVisible(true);
     } else {
         m_occasionLabel->clear();
+        m_occasionLabel->setVisible(false);
     }
+}
+
+void MainWindow::refreshSessionLabel()
+{
+    if (!m_sessionLabel) {
+        return;
+    }
+    const auto session = data::CashSessionRepository(m_db).findOpen();
+    m_sessionLabel->setText(session
+                                ? tr("Session ouverte #%1").arg(session->id)
+                                : tr("Aucune session ouverte"));
 }
 
 QString MainWindow::occasionLabelText() const
@@ -1045,8 +1083,8 @@ void MainWindow::onSwitchUserClicked()
         for (int row = 0; row < m_pageFactories.size(); ++row) {
             refreshPage(row);
         }
-        if (m_userLabel) {
-            m_userLabel->setText(tr("المستخدم: %1").arg(app::core::Session::instance().actorName()));
+        if (m_userMenu) {
+            m_userMenu->setText(app::core::Session::instance().actorName());
         }
         rebuildNav();
         show();

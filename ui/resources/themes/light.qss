@@ -42,10 +42,10 @@ QDialog QPushButton {
     color: @TEXT@;
     border: 1px solid @BORDER@;
     border-radius: 7px;
-    padding: 14px 21px;
+    padding: 8px 12px;
     font-size: %1pt;
     font-weight: 600;
-    min-height: 35px;
+    min-height: 48px;
 }
 
 QDialog QPushButton:hover {
@@ -72,7 +72,7 @@ QLabel {
    now, so it is set a step above the page titles it sits beside. */
 QLabel#appTitle {
     color: @TEXT@;
-    font-size: %2pt;
+    font-size: 14pt;
     font-weight: bold;
 }
 
@@ -153,7 +153,7 @@ QLabel#setupError {
 
 QLabel#heroValue {
     color: @TEXT@;
-    font-size: %2pt;
+    font-size: 30pt;
     font-weight: bold;
 }
 
@@ -188,7 +188,7 @@ QLabel#statLabel {
 }
 
 QLabel#noticeOk {
-    background: rgba(22, 163, 74, 0.12);
+    background: @POSITIVE_SOFT@;
     color: @POSITIVE@;
     border-radius: 14px;
     padding: 14px 21px;
@@ -197,7 +197,7 @@ QLabel#noticeOk {
 }
 
 QLabel#noticeErr {
-    background: rgba(220, 38, 38, 0.10);
+    background: @NEGATIVE_SOFT@;
     color: @NEGATIVE@;
     border-radius: 14px;
     padding: 14px 21px;
@@ -207,7 +207,7 @@ QLabel#noticeErr {
 
 QLabel#infoBar {
     background: @ACCENT_SOFT@;
-    color: #1d4ed8;
+    color: @ACCENT@;
     border-radius: 14px;
     padding: 14px 21px;
     font-size: %3pt;
@@ -215,7 +215,7 @@ QLabel#infoBar {
 }
 
 QLabel[state="ok"] {
-    background: rgba(22, 163, 74, 0.14);
+    background: @POSITIVE_SOFT@;
     color: @POSITIVE@;
     border-radius: 999px;
     padding: 7px 14px;
@@ -224,7 +224,7 @@ QLabel[state="ok"] {
 }
 
 QLabel[state="danger"] {
-    background: rgba(220, 38, 38, 0.12);
+    background: @NEGATIVE_SOFT@;
     color: @NEGATIVE@;
     border-radius: 999px;
     padding: 7px 14px;
@@ -256,8 +256,8 @@ QPushButton {
     color: @SURFACE@;
     border: 1px solid @ACCENT@;
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
+    min-height: 40px;
+    padding: 8px 12px;
     font-size: %1pt;
     font-weight: 600;
 }
@@ -283,10 +283,10 @@ QPushButton#primary {
     color: @SURFACE@;
     border: 1px solid #1d4ed8;
     border-radius: 7px;
-    padding: 14px 21px;
+    padding: 8px 12px;
     font-size: %1pt;
     font-weight: 700;
-    min-height: 42px;
+    min-height: 40px;
 }
 
 QPushButton#primary:hover {
@@ -300,7 +300,8 @@ QPushButton#secondary {
     border-color: @BORDER@;
     font-size: %1pt;
     font-weight: 600;
-    padding: 14px 21px;
+    min-height: 40px;
+    padding: 8px 12px;
 }
 
 QPushButton#secondary:hover {
@@ -346,7 +347,7 @@ QPushButton#danger {
     border-color: @NEGATIVE@;
     font-size: %1pt;
     font-weight: 700;
-    padding: 14px 21px;
+    padding: 8px 12px;
 }
 
 QPushButton#danger:hover {
@@ -359,8 +360,8 @@ QPushButton#userButton {
     color: @TEXT@;
     border: 1px solid @BORDER@;
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
+    min-height: 40px;
+    padding: 8px 12px;
     font-size: %1pt;
     font-weight: 600;
     text-align: left;
@@ -376,8 +377,8 @@ QToolButton {
     color: @TEXT@;
     border: 1px solid @BORDER@;
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
+    min-height: 40px;
+    padding: 8px 12px;
     font-size: %1pt;
     font-weight: 600;
 }
@@ -424,8 +425,8 @@ QTextEdit {
     color: @TEXT@;
     border: 1px solid @BORDER@;
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
+    min-height: 22px;
+    padding: 8px 12px;
     font-size: %1pt;
     selection-background-color: @ACCENT@;
     selection-color: @SURFACE@;
@@ -453,8 +454,8 @@ QComboBox:disabled {
 
 QLineEdit#searchField {
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
+    min-height: 22px;
+    padding: 8px 12px;
 }
 
 QLineEdit#posBarcodeField {
@@ -473,8 +474,8 @@ QLineEdit#setupConfirmInput {
     color: @TEXT@;
     border: 1px solid @BORDER@;
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
+    min-height: 22px;
+    padding: 8px 12px;
     font-size: %1pt;
 }
 
@@ -493,8 +494,8 @@ QComboBox#languageCombo:focus {
     color: @TEXT@;
     border: 1px solid @BORDER@;
     border-radius: 7px;
-    min-height: 42px;
-    padding: 14px 21px;
+    min-height: 22px;
+    padding: 8px 12px;
     font-size: %1pt;
 }
 
@@ -712,11 +713,11 @@ QWidget#sidebar[direction="ltr"] {
    accent colour so it still looks like something you can press. */
 QPushButton#about {
     background: transparent;
-    min-height: 0px;
+    min-height: 40px;
     color: @TEXT_SECONDARY@;
     border: none;
     border-radius: 7px;
-    padding: 8px 21px;
+    padding: 4px;
     font-size: %3pt;
     font-weight: 500;
     text-align: left;
@@ -747,10 +748,10 @@ QWidget#topBar {
    opens the glyphs apart the way small caps do. */
 QLabel#navGroupTitle {
     color: @TEXT_SECONDARY@;
-    font-size: %3pt;
+    font-size: 9pt;
     font-weight: 800;
-    letter-spacing: 1.5px;
-    padding: 21px 14px 7px 14px;
+    letter-spacing: 0;
+    padding: 8px 4px 4px 4px;
     background: transparent;
 }
 
@@ -770,26 +771,26 @@ QWidget#navScrollViewport {
    the fallback matters: a nav item built before this change, or one that somehow
    never got the token, still gets a rule and a matching inset instead of losing
    both. */
-QPushButton#navItem {
+QToolButton#navItem {
     background: transparent;
     color: @TEXT_SECONDARY@;
     border: none;
     border-right: 3px solid transparent;
     border-radius: 0;
-    text-align: left;
-    padding: 0 21px 0 14px;
-    font-size: %1pt;
+    text-align: center;
+    padding: 4px 2px;
+    font-size: 10pt;
     font-weight: 500;
-    min-height: 42px;
+    min-height: 40px;
 }
 
-QPushButton#navItem[direction="ltr"] {
+QToolButton#navItem[direction="ltr"] {
     border-left: 3px solid transparent;
     border-right: none;
-    padding: 0 14px 0 21px;
+    padding: 2px;
 }
 
-QPushButton#navItem:hover {
+QToolButton#navItem:hover {
     background: #e2e8f0;
     color: @TEXT@;
 }
@@ -799,13 +800,13 @@ QPushButton#navItem:hover {
    leading edge is the right under RTL and the left under LTR, so the LTR rule
    both draws its bar on the left and clears the right-hand one the fallback
    above put there, otherwise the item would be marked on both sides. */
-QPushButton#navItem[active="true"][direction="rtl"] {
+QToolButton#navItem[active="true"][direction="rtl"] {
     background: @ACCENT_SOFT@;
     color: @ACCENT@;
     border-right: 3px solid @ACCENT@;
     font-weight: 700;
 }
-QPushButton#navItem[active="true"][direction="ltr"] {
+QToolButton#navItem[active="true"][direction="ltr"] {
     background: @ACCENT_SOFT@;
     color: @ACCENT@;
     border-left: 3px solid @ACCENT@;
@@ -832,19 +833,93 @@ QLabel#occasionLabel {
 /* The two controls in the top bar that carry a character instead of a pixmap.
    Without an explicit size the glyphs fall back to the app's 9pt and read as
    specks next to the wordmark. */
-QPushButton#iconButton {
+QToolButton#iconButton {
     background: transparent;
     border: 1px solid @BORDER@;
     border-radius: 7px;
-    min-height: 0;
-    padding: 7px;
+    min-width: 38px;
+    min-height: 38px;
+    max-width: 38px;
+    max-height: 38px;
+    padding: 0;
     color: @TEXT@;
     font-size: %1pt;
 }
 
-QPushButton#iconButton:hover {
+QToolButton#iconButton:hover {
     background: #e2e8f0;
     border-color: @BORDER@;
+}
+
+QToolButton#userMenu {
+    background: transparent;
+    color: @TEXT@;
+    border: none;
+    min-height: 32px;
+    max-height: 32px;
+    padding: 4px 8px;
+    font-size: %1pt;
+}
+
+QLabel#topSessionLabel {
+    background: @ACCENT_SOFT@;
+    color: @ACCENT@;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: %3pt;
+    font-weight: 700;
+}
+
+QLabel#reportSectionTitle {
+    color: @TEXT@;
+    font-size: %1pt;
+    font-weight: 700;
+    padding-top: 4px;
+}
+
+QLabel#metricCaption {
+    color: @MUTED@;
+    font-size: %3pt;
+}
+
+QLabel#reportMetricValue {
+    color: @TEXT@;
+    font-size: 24pt;
+    font-weight: 700;
+}
+
+QLabel#reportMetricValue[deltaState="positive"] {
+    color: @POSITIVE@;
+}
+
+QLabel#reportMetricValue[deltaState="negative"] {
+    color: @NEGATIVE@;
+}
+
+QLabel#metricDetail {
+    color: @TEXT_SECONDARY@;
+    font-size: %3pt;
+}
+
+QLabel#emptyReportState {
+    background: @SURFACE@;
+    color: @MUTED@;
+    font-size: %1pt;
+    padding: 16px;
+}
+
+QPushButton#periodButton {
+    background: @SURFACE@;
+    color: @TEXT@;
+    border: 1px solid @BORDER@;
+    min-height: 40px;
+    padding: 6px 8px;
+}
+
+QPushButton#periodButton:checked {
+    background: @ACCENT@;
+    color: @SURFACE@;
+    border-color: @ACCENT@;
 }
 
 /* ---------- 7. البطاقات ---------- */
@@ -867,8 +942,7 @@ QFrame#invoiceBar {
     border-top: 1px solid @BORDER@;
     border-radius: 0;
     padding: 8px;
-    min-height: 104px;
-    max-height: 120px;
+    min-height: 264px;
 }
 
 QLabel#invoiceSecondary {
@@ -877,16 +951,48 @@ QLabel#invoiceSecondary {
 }
 
 QFrame#invoiceBar QPushButton {
-    min-height: 0;
-    max-height: 36px;
-    padding: 2px 4px;
-    font-size: %3pt;
+    min-height: 40px;
+}
+
+QFrame#invoiceBar QPushButton#primary {
+    min-height: 56px;
+    font-size: 16pt;
+}
+
+QFrame#invoiceBar QPushButton#posSaleButton {
+    background: @POSITIVE@;
+    color: #ffffff;
+    border-color: @POSITIVE@;
+    min-height: 56px;
+    font-size: 16pt;
+}
+
+QPushButton#cartQuantityDecrease,
+QPushButton#cartQuantityIncrease,
+QPushButton#cartRemoveLine {
+    min-width: 36px;
+    min-height: 36px;
+    max-width: 40px;
+    max-height: 40px;
+    padding: 0;
+}
+
+QPushButton#cartRemoveLine {
+    color: @NEGATIVE@;
+}
+
+QLabel#emptyCartHint {
+    background: @SURFACE@;
+    color: @MUTED@;
+    border: 1px dashed @BORDER@;
+    font-size: %1pt;
+    padding: 16px;
 }
 
 /* The icon well inside a stat card. Without a rule the label is a bare
    pixmap on the card, which reads as a smudge rather than as a mark. */
 QFrame#statCard QLabel#statIcon {
-    background: rgba(0, 0, 0, 0.04);
+    background: @ACCENT_SOFT@;
     border-radius: 14px;
     padding: 7px;
 }
@@ -1133,44 +1239,17 @@ QWidget#quickNav {
     background: transparent;
 }
 
-QPushButton#quickNavLetter {
-    background: transparent;
-    border: 1px solid @BORDER@;
-    border-radius: 7px;
-    color: @TEXT_SECONDARY@;
-    font-size: %1pt;
-    font-weight: 800;
-    min-width: 40px;
-    max-width: 40px;
-    min-height: 40px;
-    max-height: 40px;
-}
-
-QPushButton#quickNavLetter:hover {
-    background: #e2e8f0;
-    border-color: @BORDER@;
-    color: @TEXT@;
-}
-
-/* The page on screen. Set as a property rather than a pseudo-class because the
-   state has to be written from refreshNavActiveState, which reads the stacked
-   widget rather than the click that asked for the change. */
-QPushButton#quickNavLetter[active="true"] {
-    background: @ACCENT_SOFT@;
-    color: @ACCENT@;
-    border-color: @ACCENT@;
-}
-
 /* ---------- زر القائمة الجانبية ---------- */
 /* The ☰ in the top bar. Transparent like the other top-bar controls, so the row
    reads as one strip; the border is drawn on all sides because this one has to
    keep a visible edge on hover -- it has no label to fall back on. */
-QPushButton#sidebarToggle {
+QToolButton#sidebarToggle {
     background: transparent;
     border: 1px solid @BORDER@;
     border-radius: 7px;
     color: @TEXT_SECONDARY@;
     font-size: %1pt;
+    padding: 0;
     min-width: 40px;
     max-width: 40px;
     min-height: 40px;

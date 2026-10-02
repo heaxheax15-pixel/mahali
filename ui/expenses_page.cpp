@@ -67,7 +67,8 @@ ExpensesPage::ExpensesPage(app::data::Database& db, QWidget* parent)
     m_summary = new QLabel;
     m_summary->setObjectName(QStringLiteral("infoBar"));
     m_summary->setVisible(false);
-    m_summary->setMinimumHeight(46);
+    m_summary->setMinimumHeight(64);
+    m_summary->setAlignment(Qt::AlignVCenter | Qt::AlignLeading);
 
     m_notice = new QLabel;
     m_notice->setWordWrap(true);

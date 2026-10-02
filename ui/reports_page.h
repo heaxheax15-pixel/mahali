@@ -1,13 +1,16 @@
 #pragma once
 
 #include <QWidget>
+#include <QVector>
 
 #include "data/database.h"
 #include "data/report_service.h"
 
 class QDateEdit;
 class QLabel;
+class QButtonGroup;
 class QPushButton;
+class QStackedWidget;
 class QTableWidget;
 
 namespace app::ui {
@@ -40,9 +43,11 @@ private:
     app::data::Database& m_db;
     QDateEdit* m_fromEdit = nullptr;
     QDateEdit* m_toEdit = nullptr;
-    QLabel* m_summary;
-    QLabel* m_costs;
-    QLabel* m_bottom;
+    QButtonGroup* m_periodButtons = nullptr;
+    QLabel* m_salesDetail = nullptr;
+    QVector<QLabel*> m_metricValues;
+    QVector<QPushButton*> m_periodControls;
+    QStackedWidget* m_tableStack = nullptr;
     QTableWidget* m_cashTable;
     data::StoreReport m_report;
 };

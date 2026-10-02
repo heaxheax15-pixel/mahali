@@ -1,7 +1,10 @@
 #include "ui_helpers.h"
 
 #include <QFrame>
+#include <QDialog>
+#include <QGuiApplication>
 #include <QLayout>
+#include <QScreen>
 #include <QStyle>
 #include <QVBoxLayout>
 
@@ -66,6 +69,23 @@ void padCardLayout(QLayout* layout)
     layout->setContentsMargins(themeTokens::space12, themeTokens::space12,
                                themeTokens::space12, themeTokens::space12);
     layout->setSpacing(themeTokens::space8);
+}
+
+void constrainDialogToAvailableGeometry(QDialog* dialog)
+{
+    if (!dialog) {
+        return;
+    }
+    QScreen* screen = dialog->screen();
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (!screen) {
+        return;
+    }
+    const QSize available = screen->availableGeometry().size() - QSize(32, 32);
+    dialog->setMaximumSize(available);
+    dialog->resize(dialog->size().boundedTo(available));
 }
 
 } // namespace app::ui

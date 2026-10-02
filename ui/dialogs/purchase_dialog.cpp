@@ -10,6 +10,7 @@
 #include <QDialogButtonBox>
 #include <QFont>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -19,6 +20,8 @@
 #include <QMessageBox>
 #include <QPoint>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScreen>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTableWidget>
@@ -41,6 +44,7 @@
 #include "data/supplier_repository.h"
 #include "format_utils.h"
 #include "scan_safe_dialog.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -245,14 +249,32 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
     cancelBtn->setObjectName(QStringLiteral("secondary"));
     disarmDefaults(buttons);
 
+    auto* content = new QWidget;
+    QVBoxLayout* contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(12);
+    contentLayout->addWidget(headerCard);
+    contentLayout->addLayout(searchRow);
+    contentLayout->addWidget(itemsTable, 1);
+    contentLayout->addLayout(totalsGrid);
+
+    auto* scroll = new QScrollArea;
+    scroll->setObjectName(QStringLiteral("purchaseContentScroll"));
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll->setMinimumSize(0, 0);
+    scroll->setSizeAdjustPolicy(QScrollArea::AdjustIgnored);
+    scroll->setWidget(content);
+
     QVBoxLayout* root = new QVBoxLayout(&dialog);
     root->setContentsMargins(18, 18, 18, 18);
     root->setSpacing(12);
-    root->addWidget(headerCard);
-    root->addLayout(searchRow);
-    root->addWidget(itemsTable, 1);
-    root->addLayout(totalsGrid);
+    root->addWidget(scroll, 1);
     root->addWidget(buttons);
+
+    constrainDialogToAvailableGeometry(&dialog);
 
     // ---- the lines ----
 
@@ -641,6 +663,7 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
     addRow();
     recompute();
 
+    constrainDialogToAvailableGeometry(&dialog);
     dialog.exec();
     return result;
 }

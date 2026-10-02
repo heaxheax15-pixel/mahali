@@ -1455,6 +1455,28 @@
         <source>وعاء الزكاة: %1  |  الزكاة (2.5%): %2   —   جلسات في الفترة: %3 (رأس الفتح: %4)   —   ديون العملاء المستحقة اليوم: %5</source>
         <translation type="unfinished"></translation>
     </message>
+    <message><source>From:</source><translation>From:</translation></message>
+    <message><source>To:</source><translation>To:</translation></message>
+    <message><source>Période sélectionnée</source><translation>Selected period</translation></message>
+    <message><source>Ventes</source><translation>Sales</translation></message>
+    <message><source>Nombre d'opérations et net</source><translation>Transaction count and net</translation></message>
+    <message><source>Bénéfice brut</source><translation>Gross profit</translation></message>
+    <message><source>Bénéfice net</source><translation>Net profit</translation></message>
+    <message><source>Coût des ventes</source><translation>Cost of sales</translation></message>
+    <message><source>Dépenses</source><translation>Expenses</translation></message>
+    <message><source>Retraits</source><translation>Withdrawals</translation></message>
+    <message><source>État actuel (indépendant de la période)</source><translation>Current state (independent of period)</translation></message>
+    <message><source>Dettes clients dues aujourd'hui</source><translation>Customer debts due today</translation></message>
+    <message><source>Base de la Zakat</source><translation>Zakat base</translation></message>
+    <message><source>Zakat (2,5 %)</source><translation>Zakat (2.5%)</translation></message>
+    <message><source>Sessions sur la période</source><translation>Sessions in period</translation></message>
+    <message><source>Fonds de départ</source><translation>Opening float</translation></message>
+    <message><source>Net : %1</source><translation>Net: %1</translation></message>
+    <message><source>Opération</source><translation>Operation</translation></message>
+    <message><source>Nombre</source><translation>Count</translation></message>
+    <message><source>Somme</source><translation>Amount</translation></message>
+    <message><source>Aucune opération sur cette période</source><translation>No operations in this period</translation></message>
+    <message><source>Total</source><translation>Total</translation></message>
 </context>
 <context>
     <name>app::ui::SalesPage</name>

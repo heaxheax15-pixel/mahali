@@ -37,6 +37,7 @@
 #include "data/supplier_repository.h"
 #include "data/supplier_return_repository.h"
 #include "format_utils.h"
+#include "widgets/ui_helpers.h"
 #include "purchase_dialog.h"
 #include "scan_safe_dialog.h"
 #include "supplier_payment_dialog.h"
@@ -178,6 +179,7 @@ std::optional<core::Supplier> showSupplierInfoDialog(QWidget* parent, app::data:
     layout->addLayout(form);
     layout->addWidget(buttons);
 
+    constrainDialogToAvailableGeometry(&dialog);
     if (dialog.exec() != QDialog::Accepted) {
         return std::nullopt;
     }
@@ -543,6 +545,7 @@ void showSupplierCardDialog(QWidget* parent, app::data::Database& db, int suppli
         dialog.accept();
     });
 
+    constrainDialogToAvailableGeometry(&dialog);
     dialog.exec();
 }
 

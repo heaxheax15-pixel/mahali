@@ -22,6 +22,7 @@
 #include "data/product_repository.h"
 #include "format_utils.h"
 #include "scan_safe_dialog.h"
+#include "widgets/ui_helpers.h"
 
 namespace app::ui {
 
@@ -71,7 +72,7 @@ QFrame* buildNotice(QWidget* parent, QPushButton** fillOut)
     close->setObjectName(QStringLiteral("noticeClose"));
     close->setAutoDefault(false);
     close->setDefault(false);
-    close->setFixedSize(26, 26);
+    close->setFixedSize(40, 40);
     head->addWidget(close);
 
     auto* details = new QLabel;
@@ -282,6 +283,7 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     layout->addWidget(notice);
     layout->addWidget(buttons);
 
+    constrainDialogToAvailableGeometry(&dialog);
     if (dialog.exec() != QDialog::Accepted) {
         return std::nullopt;
     }

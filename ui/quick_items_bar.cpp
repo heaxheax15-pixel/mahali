@@ -18,7 +18,7 @@ namespace app::ui {
 
 namespace {
 
-constexpr int kBarHeight = 60;
+constexpr int kBarHeight = 56;
 constexpr int kCardWidth = 140;
 constexpr int kCardHeight = 44;
 constexpr int kSearchWidth = 220;
@@ -82,6 +82,7 @@ QuickAddCard::QuickAddCard(QWidget* parent)
     setFixedSize(kCardWidth, kCardHeight);
     setCursor(Qt::PointingHandCursor);
     setToolTip(tr("Ajouter un produit"));
+    setAccessibleName(tr("Ajouter un produit"));
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);

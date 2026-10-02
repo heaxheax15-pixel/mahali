@@ -1455,6 +1455,28 @@
         <source>وعاء الزكاة: %1  |  الزكاة (2.5%): %2   —   جلسات في الفترة: %3 (رأس الفتح: %4)   —   ديون العملاء المستحقة اليوم: %5</source>
         <translation type="unfinished"></translation>
     </message>
+    <message><source>From:</source><translation>من:</translation></message>
+    <message><source>To:</source><translation>إلى:</translation></message>
+    <message><source>Période sélectionnée</source><translation>الفترة المحددة</translation></message>
+    <message><source>Ventes</source><translation>المبيعات</translation></message>
+    <message><source>Nombre d'opérations et net</source><translation>عدد العمليات والصافي</translation></message>
+    <message><source>Bénéfice brut</source><translation>الربح الإجمالي</translation></message>
+    <message><source>Bénéfice net</source><translation>صافي الربح</translation></message>
+    <message><source>Coût des ventes</source><translation>تكلفة المبيعات</translation></message>
+    <message><source>Dépenses</source><translation>المصاريف</translation></message>
+    <message><source>Retraits</source><translation>السحوبات</translation></message>
+    <message><source>État actuel (indépendant de la période)</source><translation>الحالة الحالية (مستقلة عن الفترة)</translation></message>
+    <message><source>Dettes clients dues aujourd'hui</source><translation>ديون العملاء المستحقة اليوم</translation></message>
+    <message><source>Base de la Zakat</source><translation>وعاء الزكاة</translation></message>
+    <message><source>Zakat (2,5 %)</source><translation>الزكاة (2.5%)</translation></message>
+    <message><source>Sessions sur la période</source><translation>الجلسات خلال الفترة</translation></message>
+    <message><source>Fonds de départ</source><translation>رأس المال الافتتاحي</translation></message>
+    <message><source>Net : %1</source><translation>الصافي: %1</translation></message>
+    <message><source>Opération</source><translation>العملية</translation></message>
+    <message><source>Nombre</source><translation>العدد</translation></message>
+    <message><source>Somme</source><translation>المجموع</translation></message>
+    <message><source>Aucune opération sur cette période</source><translation>لا توجد عمليات خلال هذه الفترة</translation></message>
+    <message><source>Total</source><translation>الإجمالي</translation></message>
 </context>
 <context>
     <name>app::ui::SalesPage</name>

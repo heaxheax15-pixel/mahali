@@ -19,6 +19,8 @@ StatCard::StatCard(const QString& caption, QWidget* parent)
 
     m_caption = new QLabel(caption);
     m_caption->setObjectName(QStringLiteral("statLabel"));
+    m_caption->setWordWrap(true);
+    m_caption->setToolTip(caption);
 
     m_value = new QLabel(QStringLiteral("—"));
     m_value->setObjectName(QStringLiteral("statValue"));

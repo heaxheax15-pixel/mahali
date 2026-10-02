@@ -5,10 +5,12 @@
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScreen>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -105,15 +107,29 @@ LoginDialog::LoginDialog(app::data::Database& db, QWidget* parent)
     m_errorLabel = makeErrorLabel();
 
     m_stack = new QStackedWidget;
-    mainLayout->addWidget(m_stack, 1);
+    auto* screenScroll = new QScrollArea;
+    screenScroll->setObjectName(QStringLiteral("loginContentScroll"));
+    screenScroll->setWidgetResizable(true);
+    screenScroll->setFrameShape(QFrame::NoFrame);
+    screenScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    screenScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    screenScroll->setMinimumSize(0, 0);
+    screenScroll->setSizeAdjustPolicy(QScrollArea::AdjustIgnored);
+    screenScroll->setWidget(m_stack);
+    mainLayout->addWidget(screenScroll, 1);
     // The pages are added in the order of the State enum.
     m_stack->addWidget(buildConnexionPage());
     m_stack->addWidget(buildConfigurationPage());
     m_stack->addWidget(buildRecuperationPage());
 
-    // All three screens are known, so the frame is fixed: a wider dialog would
-    // only spread the content over empty space.
-    setFixedSize(520, 620);
+        QSize dialogSize(520, 620);
+        if (QScreen* screen = QGuiApplication::primaryScreen()) {
+            const QSize available = screen->availableGeometry().size();
+            dialogSize = dialogSize.boundedTo(available - QSize(32, 32));
+        }
+        setMinimumSize(qMin(400, dialogSize.width()), qMin(480, dialogSize.height()));
+        setMaximumSize(dialogSize);
+        resize(dialogSize);
 
     // No profile yet means the first administrator still has to be created.
     data::UserRepository repo(m_db);
