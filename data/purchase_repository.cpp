@@ -32,12 +32,15 @@ core::Purchase purchaseFromQuery(const QSqlQuery& query)
         purchase.occasionId = occasion;
     }
     purchase.createdAt = query.value(11).toString();
+    purchase.method = core::parseSupplierPaymentMethod(query.value(12).toString())
+                          .value_or(core::SupplierPaymentMethod::Cash);
+    purchase.reversedId = query.value(13).toInt();
     return purchase;
 }
 
 const char* kPurchaseColumns =
     "id, supplier_id, invoice_number, purchased_at, subtotal_cents, "
-    "vat_cents, total_cents, paid_cents, add_to_stock, note, occasion_id, created_at";
+    "vat_cents, total_cents, paid_cents, method, add_to_stock, note, occasion_id, created_at, reversed_id";
 
 } // namespace
 
@@ -128,19 +131,16 @@ int PurchaseRepository::insert(const core::Purchase& purchase)
     query.prepare(QStringLiteral(
         "INSERT INTO purchases (supplier_id, invoice_number, purchased_at, "
         "subtotal_cents, vat_cents, total_cents, paid_cents, "
-        "add_to_stock, note, occasion_id, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "method, add_to_stock, note, occasion_id, created_at, reversed_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(purchase.supplierId);
-    // invoice_number, purchased_at, note and created_at are all NOT NULL. A null
-    // QString is bound as SQL NULL rather than as the empty string the column
-    // defaults to, so a caller that never touched the field would otherwise be
-    // turned away by the driver instead of getting the blank it meant.
     query.addBindValue(purchase.invoiceNumber.isNull() ? QStringLiteral("") : purchase.invoiceNumber);
     query.addBindValue(purchase.purchasedAt.isNull() ? QStringLiteral("") : purchase.purchasedAt);
     query.addBindValue(purchase.subtotalCents);
     query.addBindValue(purchase.vatCents);
     query.addBindValue(purchase.totalCents);
     query.addBindValue(purchase.paidCents);
+    query.addBindValue(core::supplierPaymentMethodName(purchase.method));
     query.addBindValue(purchase.addToStock ? 1 : 0);
     query.addBindValue(purchase.note.isNull() ? QStringLiteral("") : purchase.note);
     if (purchase.occasionId.has_value()) {
@@ -149,6 +149,7 @@ int PurchaseRepository::insert(const core::Purchase& purchase)
         query.addBindValue(QVariant());
     }
     query.addBindValue(purchase.createdAt.isNull() ? QStringLiteral("") : purchase.createdAt);
+    query.addBindValue(purchase.reversedId);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("PurchaseRepository::insert"));
         return 0;
@@ -167,18 +168,6 @@ bool PurchaseRepository::updateMeta(int id, long long paidCents, const QString& 
     query.addBindValue(id);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("PurchaseRepository::updateMeta"));
-        return false;
-    }
-    return query.numRowsAffected() > 0;
-}
-
-bool PurchaseRepository::remove(int id)
-{
-    QSqlQuery query(m_db.handle());
-    query.prepare(QStringLiteral("DELETE FROM purchases WHERE id = ?"));
-    query.addBindValue(id);
-    if (!query.exec()) {
-        m_db.recordError(query.lastError(), QStringLiteral("PurchaseRepository::remove"));
         return false;
     }
     return query.numRowsAffected() > 0;

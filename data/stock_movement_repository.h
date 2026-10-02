@@ -19,7 +19,6 @@ public:
     long long sumByProductId(int productId) const;
 
     int insert(const core::StockMovement& movement);
-    void reverse(int originalMovementId, const QString& reason);
 
 private:
     Database& m_db;

@@ -31,6 +31,12 @@ struct NewDebt {
     QString createdAt;
 };
 
+struct DailyCashLine {
+    QString type;
+    int count = 0;
+    long long sumCents = 0;
+};
+
 // One day of trading, from takings to the till. Kept as one report because the
 // numbers are only meaningful together: a day's profit says nothing about whether
 // the cash for it was ever counted.
@@ -66,6 +72,7 @@ struct DailyReport {
 
     QVector<TopProduct> topProducts;
     QVector<NewDebt> newDebts;
+    QVector<DailyCashLine> cashLines;
 };
 
 class DailyReportService {

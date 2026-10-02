@@ -29,6 +29,8 @@
 
 #include "core/barcode_utils.h"
 #include "core/product.h"
+#include "core/supplier_payment.h"
+#include "data/cash_session_repository.h"
 #include "data/date_utils.h"
 #include "data/purchase_item_repository.h"
 #include "data/purchase_repository.h"
@@ -214,6 +216,22 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
     totalsGrid->addWidget(paidField, 1, 3);
     totalsGrid->addWidget(caption(tr("Reste")), 2, 2);
     totalsGrid->addWidget(resteValue, 2, 3);
+    // How the amount in "Montant payé" left the shop. Only consulted when that
+    // amount is above zero — an invoice paid on the account has no money to move
+    // and so nothing to book — which is why the row is disabled with it. Cash is
+    // the one that has to reach the drawer, and until this was recorded nothing
+    // downstream could tell it from a payment settled on the account.
+    auto* methodCombo = new QComboBox;
+    methodCombo->addItem(tr("Espèces (sorti du tiroir)"), static_cast<int>(core::SupplierPaymentMethod::Cash));
+    methodCombo->addItem(tr("À crédit (sur le compte fournisseur)"),
+                         static_cast<int>(core::SupplierPaymentMethod::Credit));
+    methodCombo->addItem(tr("Par banque / chèque"), static_cast<int>(core::SupplierPaymentMethod::Bank));
+    methodCombo->setCurrentIndex(0);
+    methodCombo->setEnabled(false);
+    methodCombo->setToolTip(
+        tr("Les espèces sortent du tiroir et doivent être imputées à une session ouverte."));
+    totalsGrid->addWidget(caption(tr("Mode de règlement")), 3, 2);
+    totalsGrid->addWidget(methodCombo, 3, 3);
     totalsGrid->setColumnStretch(1, 1);
     totalsGrid->setColumnStretch(3, 1);
 
@@ -277,6 +295,9 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
         }
         const long long paid = parseMoney(paidField->text()).value_or(0);
         resteValue->setText(formatMoney(total - paid));
+        // The method only describes money that is actually changing hands, so the
+        // row follows the amount: nothing paid, nothing to choose a method for.
+        methodCombo->setEnabled(paid > 0);
     };
 
     // A row is identified by the widget sitting in it, not by a number captured
@@ -565,6 +586,25 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
         const long long total = subtotal + vat;
         const long long paid = paidAll->isChecked() ? total : parseMoney(paidField->text()).value_or(0);
 
+        const auto method = static_cast<core::SupplierPaymentMethod>(methodCombo->currentData().toInt());
+        // Only money that comes out of the drawer needs a drawer to come out of.
+        // The session is found here, in the interface, and handed over as an id:
+        // the service never goes looking for an open session, so a payment cannot
+        // be booked against whichever till happened to be running at the time.
+        // Asked for only when there is cash actually leaving, which is what keeps
+        // an unpaid invoice recordable with no till open at all.
+        std::optional<int> cashSessionId;
+        if (paid > 0 && core::isCashPayment(method)) {
+            const std::optional<core::CashSession> open = data::CashSessionRepository(db).findOpen();
+            if (!open.has_value()) {
+                QMessageBox::warning(&dialog, tr("Erreur"),
+                                     tr("Aucun tiroir ouvert. Ouvrez une session de caisse, ou indiquez "
+                                        "que la facture est réglée sur le compte ou par banque."));
+                return;
+            }
+            cashSessionId = open->id;
+        }
+
         core::Purchase purchase;
         purchase.supplierId = chosenSupplier;
         purchase.invoiceNumber = invoiceNumber->text().trimmed();
@@ -585,7 +625,7 @@ PurchaseDialogResult showPurchaseDialog(QWidget* parent, app::data::Database& db
         data::SupplierPaymentRepository supplierPayments(db);
         data::PurchaseService service(db, purchases, purchaseItems, products, stockMovements,
                                       suppliers, supplierPayments);
-        const data::PurchaseResult recorded = service.recordPurchase(purchase, lines);
+        const data::PurchaseResult recorded = service.recordPurchase(purchase, lines, method, cashSessionId);
         if (!recorded.ok) {
             QMessageBox::warning(&dialog, tr("Erreur"),
                                  tr("Enregistrement impossible : %1").arg(recorded.error));

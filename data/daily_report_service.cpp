@@ -89,6 +89,21 @@ DailyReport DailyReportService::forDay(const QString& dayIso) const
         }
     }
 
+    query.prepare(QStringLiteral(
+        "SELECT type, COUNT(*), COALESCE(SUM(amount_cents), 0) FROM cash_movements "
+        "WHERE created_at >= ? AND created_at <= ? GROUP BY type ORDER BY MIN(created_at)"));
+    query.addBindValue(from);
+    query.addBindValue(to);
+    if (query.exec()) {
+        while (query.next()) {
+            DailyCashLine line;
+            line.type = query.value(0).toString();
+            line.count = query.value(1).toInt();
+            line.sumCents = query.value(2).toLongLong();
+            report.cashLines.push_back(line);
+        }
+    }
+
     // Best sellers by units, five of them. sale_items stores no line total, so
     // revenue is worked out from the quantity and the price the line was sold at.
     query.prepare(QStringLiteral(

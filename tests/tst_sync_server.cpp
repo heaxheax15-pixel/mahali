@@ -10,6 +10,7 @@
 
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
+#include "data/audit_log_repository.h"
 #include "data/customer_repository.h"
 #include "data/customer_transaction_repository.h"
 #include "data/product_repository.h"
@@ -39,6 +40,8 @@ private slots:
     void duplicateInsideSingleBatchAppliesOnce();
     void zeroOpIdRejected();
     void emptyDeviceIdRejected();
+    void invalidLegacyNumberIsReturnedAsOperationError();
+    void sync_audit_actor_uses_device_id();
     void processJsonReplayAlreadyApplied();
     void httpPostAppliesBatch();
     void cleanup();
@@ -176,9 +179,32 @@ void SyncServerTest::hmacValidProcessesBatch()
     const QByteArray body = QJsonDocument(ops).toJson(QJsonDocument::Compact);
     const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
 
+    {
+        FILE* f = fopen("/tmp/sync_debug.txt", "a");
+        if (f) {
+            fprintf(f, "DEBUG: about to call process\n");
+            fclose(f);
+        }
+    }
     const network::SyncBatchResult result = processor.process(body, signature, m_key);
-    QVERIFY(result.hmacValid);
-    QVERIFY(result.batchValid);
+    {
+        FILE* f = fopen("/tmp/sync_debug.txt", "a");
+        if (f) {
+            fprintf(f, "DEBUG: hmacValid=%d batchValid=%d applied=%zu errors=%zu error=%s\n",
+                    result.hmacValid, result.batchValid, result.applied.size(), result.errors.size(),
+                    qPrintable(result.error));
+            if (result.applied.empty()) {
+                QString errors;
+                for (const auto& e : result.errors) {
+                    errors += QString(" opId=%1 class=%2 msg=%3").arg(e.opId).arg(int(e.errorClass)).arg(e.message);
+                }
+                fprintf(f, "Errors: %s\n", qPrintable(errors));
+            }
+            fclose(f);
+        }
+    }
+    QVERIFY2(result.hmacValid, qPrintable(QString("HMAC invalid: %1").arg(result.error)));
+    QVERIFY2(result.batchValid, qPrintable(QString("Batch invalid: %1").arg(result.error)));
     QCOMPARE(result.applied.size(), 1);
     QVERIFY(result.errors.isEmpty());
     QCOMPARE(result.applied[0].type, QStringLiteral("sale"));
@@ -294,6 +320,12 @@ void SyncServerTest::paymentRequiresOpenSession()
     const QByteArray signature = network::SyncProtocol::hmacSha256(body, m_key);
 
     const network::SyncBatchResult result = processor.process(body, signature, m_key);
+    QVERIFY2(!result.applied.empty(),
+             qPrintable(QString("payment: applied empty, errors=%1 first=%2 hmacValid=%3 batchValid=%4")
+                        .arg(result.errors.size())
+                        .arg(result.errors.empty() ? QString("none") : result.errors[0].message)
+                        .arg(result.hmacValid)
+                        .arg(result.batchValid)));
     QVERIFY(result.hmacValid);
     QVERIFY(result.batchValid);
     QCOMPARE(result.applied.size(), 1);
@@ -349,6 +381,39 @@ void SyncServerTest::emptyDeviceIdRejected()
     const network::SyncBatchResult direct = processor.processJson(ops);
     QVERIFY(direct.applied.isEmpty());
     QCOMPARE(direct.errors.size(), 1);
+}
+
+void SyncServerTest::invalidLegacyNumberIsReturnedAsOperationError()
+{
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
+    network::SyncProcessor processor(db);
+    QJsonObject op = paymentOp(71, m_customerId, 100, QByteArrayLiteral("bad amount"), m_deviceId);
+    op.insert(QStringLiteral("amountCents"), 100.7);
+    const network::SyncBatchResult result = processor.processJson(QJsonArray{op});
+    QCOMPARE(result.errors.size(), 1);
+    QCOMPARE(result.applied.size(), 0);
+    QCOMPARE(result.errors.first().errorClass, network::SyncErrorClass::Permanent);
+    QVERIFY2(result.errors.first().message.contains(QStringLiteral("fractional")),
+             qPrintable(result.errors.first().message));
+}
+
+void SyncServerTest::sync_audit_actor_uses_device_id()
+{
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
+    network::SyncProcessor processor(db);
+    QJsonArray ops;
+    ops.append(saleOp(72, m_deviceId, m_productId, 1, 12000));
+    ops.append(paymentOp(73, m_customerId, 1000, QByteArrayLiteral("payment"), m_deviceId));
+
+    const network::SyncBatchResult result = processor.processJson(ops);
+    QCOMPARE(result.applied.size(), 2);
+    QVERIFY(result.errors.isEmpty());
+
+    const auto entries = data::AuditLogRepository(db).findAll();
+    QCOMPARE(entries.size(), std::size_t(2));
+    for (const core::AuditLogEntry& entry : entries) {
+        QCOMPARE(entry.actor, QString::fromUtf8(m_deviceId));
+    }
 }
 
 void SyncServerTest::processJsonReplayAlreadyApplied()

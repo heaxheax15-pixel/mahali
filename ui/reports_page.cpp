@@ -16,6 +16,7 @@
 #include "widgets/page_header.h"
 #include "widgets/ui_helpers.h"
 
+#include "core/cash_movement.h"
 #include "data/report_service.h"
 #include "format_utils.h"
 #include "theme.h"
@@ -26,19 +27,22 @@ namespace {
 
 QString cashTypeLabel(const QString& type)
 {
-    if (type == QLatin1String("sale")) {
+    if (type == core::cashMovementType::kSale) {
         return QCoreApplication::translate("app::ui::ReportsPage", "بيع");
     }
-    if (type == QLatin1String("customer_payment")) {
+    if (type == core::cashMovementType::kCustomerPayment) {
         return QCoreApplication::translate("app::ui::ReportsPage", "دفع عميل");
     }
-    if (type == QLatin1String("expense")) {
+    if (type == core::cashMovementType::kExpense) {
         return QCoreApplication::translate("app::ui::ReportsPage", "مصروف");
     }
-    if (type == QLatin1String("drawing")) {
+    if (type == core::cashMovementType::kDrawing) {
         return QCoreApplication::translate("app::ui::ReportsPage", "سحب مالك");
     }
-    if (type == QLatin1String("refund")) {
+    if (type == core::cashMovementType::kSupplierPayment) {
+        return QCoreApplication::translate("app::ui::ReportsPage", "سداد مورد");
+    }
+    if (type == core::cashMovementType::kRefund) {
         return QCoreApplication::translate("app::ui::ReportsPage", "استرداد");
     }
     return type;

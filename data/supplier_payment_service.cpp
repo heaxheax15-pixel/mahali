@@ -2,6 +2,8 @@
 
 #include <QSqlQuery>
 
+#include "audit_log_repository.h"
+#include "cash_drawer.h"
 #include "date_utils.h"
 #include "format_utils.h"
 
@@ -38,7 +40,9 @@ SupplierPaymentResult SupplierPaymentService::recordPayment(int supplierId,
                                                             std::optional<int> purchaseId,
                                                             long long amountCents,
                                                             const QString& paidAt,
-                                                            const QString& note)
+                                                            const QString& note,
+                                                            core::SupplierPaymentMethod method,
+                                                            std::optional<int> cashSessionId)
 {
     SupplierPaymentResult result;
 
@@ -51,6 +55,16 @@ SupplierPaymentResult SupplierPaymentService::recordPayment(int supplierId,
     }
     if (!m_suppliers.findById(supplierId).has_value()) {
         result.error = QStringLiteral("supplier not found");
+        return result;
+    }
+    // Cash is the only method that reaches the drawer, so it is the only one that
+    // needs a session to name. Settling the account or paying through the bank
+    // moves the supplier's balance and leaves the till as it is, and refusing
+    // those for want of a session would stop a shop recording how it really paid.
+    if (core::isCashPayment(method) && !cashSessionId.has_value()) {
+        result.error = QStringLiteral(
+            "a cash payment to a supplier has to be booked against an open cash session, so that the money "
+            "leaving the drawer is counted. Choose cash with a session open, or record it as credit or bank.");
         return result;
     }
 
@@ -101,6 +115,7 @@ SupplierPaymentResult SupplierPaymentService::recordPayment(int supplierId,
     payment.purchaseId = purchaseId;
     payment.amountCents = amountCents;
     payment.paidAt = paidAt.isEmpty() ? nowIso() : paidAt;
+    payment.method = method;
     payment.note = note;
     payment.createdAt = nowIso();
 
@@ -109,6 +124,56 @@ SupplierPaymentResult SupplierPaymentService::recordPayment(int supplierId,
     if (paymentId == 0) {
         m_db.rollback();
         result.error = stepError(m_db, QStringLiteral("inserting the supplier payment"));
+        return result;
+    }
+
+    // E. The drawer, for a payment that came out of it. This is the write that was
+    // missing: the payment settled the supplier's balance and nothing else, so
+    // money left the drawer without a trace of it and the session reconciled as
+    // though it had never been paid. Inside the transaction above, so the drawer
+    // and the payment cannot come apart.
+    if (core::isCashPayment(method)) {
+        QString sessionError;
+        // Read after the transaction opens: the session may have been closed by
+        // another window since the form was filled in, and a payment booked
+        // against a closed till would land in a session nobody is counting.
+        const std::optional<core::CashSession> session =
+            cashDrawer::stillOpen(m_db, *cashSessionId, QStringLiteral("a cash payment to a supplier"),
+                                  &sessionError);
+        if (!session.has_value()) {
+            m_db.rollback();
+            result.error = sessionError;
+            return result;
+        }
+
+        QString movementError;
+        const std::optional<int> movementId = cashDrawer::recordMoneyOut(
+            m_db, session->id, core::cashMovementType::kSupplierPayment, amountCents,
+            note.isEmpty() ? QStringLiteral("Supplier #%1").arg(supplierId) : note,
+            QStringLiteral("the payment to supplier #%1").arg(supplierId),
+            QStringLiteral("supplier_payment"), paymentId, &movementError);
+        if (!movementId.has_value()) {
+            m_db.rollback();
+            result.error = movementError;
+            return result;
+        }
+    }
+
+    // Inside the transaction, so the audit line and the payment it describes
+    // commit or roll back together. Written by the service rather than the form
+    // that asked for it: a payment the operator saw accepted but that was rolled
+    // back would otherwise leave an audit row saying the supplier was paid.
+    AuditLogRepository audit(m_db);
+    if (audit.record(QStringLiteral("supplier_payment"),
+                     QStringLiteral("payment %1, supplier %2, %3")
+                         .arg(paymentId)
+                         .arg(supplierId)
+                         .arg(core::supplierPaymentMethodName(method)))
+        == 0) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the payment could not be recorded in the audit log")
+            : m_db.lastError();
         return result;
     }
 
@@ -121,6 +186,99 @@ SupplierPaymentResult SupplierPaymentService::recordPayment(int supplierId,
 
     result.ok = true;
     result.paymentId = paymentId;
+    return result;
+}
+
+SupplierPaymentResult SupplierPaymentService::reversePayment(int paymentId, std::optional<int> cashSessionId)
+{
+    SupplierPaymentResult result;
+
+    const auto original = m_payments.findById(paymentId);
+    if (!original.has_value()) {
+        result.error = QStringLiteral("payment not found");
+        return result;
+    }
+    if (original->reversedId != 0) {
+        result.error = QStringLiteral("already reversed");
+        return result;
+    }
+
+    // A second reversal is prevented by the service guard above and by the
+    // partial unique index on reversed_id (migration 3). Written here inside
+    // the transaction so the check and the row it guards commit as one.
+    if (!m_db.beginTransaction()) {
+        result.error = stepError(m_db, QStringLiteral("opening the transaction"));
+        return result;
+    }
+
+    // The supplier's balance is the sum of all payments (including reversals).
+    // Writing a negative row against the original restores it exactly.
+    core::SupplierPayment reversal;
+    reversal.supplierId = original->supplierId;
+    reversal.purchaseId = original->purchaseId;
+    reversal.amountCents = -original->amountCents;
+    reversal.paidAt = nowIso();
+    reversal.method = original->method;
+    reversal.note = QStringLiteral("reversal of #%1").arg(paymentId);
+    reversal.createdAt = nowIso();
+    reversal.reversedId = paymentId;
+    const int reversalId = m_payments.insert(reversal);
+    if (reversalId == 0) {
+        m_db.rollback();
+        result.error = stepError(m_db, QStringLiteral("inserting the reversal"));
+        return result;
+    }
+
+    // Cash originally left the drawer, so the reversal puts it back.
+    if (core::isCashPayment(original->method)) {
+        QString sessionError;
+        if (!cashSessionId.has_value()) {
+            m_db.rollback();
+            result.error = QStringLiteral(
+                "a cash reversal needs the session the money returns to");
+            return result;
+        }
+        const std::optional<core::CashSession> session =
+            cashDrawer::stillOpen(m_db, *cashSessionId, QStringLiteral("a cash payment reversal"),
+                                  &sessionError);
+        if (!session.has_value()) {
+            m_db.rollback();
+            result.error = sessionError;
+            return result;
+        }
+
+        QString movementError;
+        const std::optional<int> movementId = cashDrawer::recordMoneyIn(
+            m_db, session->id, core::cashMovementType::kSupplierPaymentReversal, original->amountCents,
+            reversal.note,
+            QStringLiteral("reversal of payment #%1").arg(paymentId),
+            QStringLiteral("supplier_payment"), paymentId, &movementError);
+        if (!movementId.has_value()) {
+            m_db.rollback();
+            result.error = movementError;
+            return result;
+        }
+    }
+
+    // Audit the reversal inside the same transaction.
+    AuditLogRepository audit(m_db);
+    if (audit.record(QStringLiteral("supplier_payment_reversal"),
+                     QStringLiteral("payment %1, supplier %2").arg(reversalId).arg(original->supplierId))
+        == 0) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the reversal could not be recorded in the audit log")
+            : m_db.lastError();
+        return result;
+    }
+
+    if (!m_db.commit()) {
+        result.error = m_db.lastError();
+        return result;
+    }
+
+    result.ok = true;
+    result.paymentId = reversalId;
     return result;
 }
 

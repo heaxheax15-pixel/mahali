@@ -13,6 +13,8 @@
 #include <QVBoxLayout>
 
 #include "core/purchase.h"
+#include "core/supplier_payment.h"
+#include "data/cash_session_repository.h"
 #include "data/date_utils.h"
 #include "data/purchase_repository.h"
 #include "data/supplier_payment_repository.h"
@@ -109,6 +111,25 @@ SupplierPaymentDialogResult showSupplierPaymentDialog(QWidget* parent, app::data
     dateEdit->setDisplayFormat(QStringLiteral("dd/MM/yyyy"));
     dateEdit->setDate(QDate::currentDate());
 
+    // How the money left the shop. This is not a detail: only cash comes out of
+    // the drawer, and until the choice was recorded nothing could tell the two
+    // apart, so a payment taken at the counter was invisible to the till and the
+    // day closed short by it.
+    //
+    // The first entry carries no value and stays selected until the operator
+    // replaces it, so the form never assumes a method on the operator's behalf.
+    // The service would take cash as its default, which is exactly the
+    // assumption that made the drawer and the ledger disagree.
+    auto* methodCombo = new QComboBox;
+    methodCombo->addItem(tr("Comment le paiement a été réglé ?"), QVariant());
+    methodCombo->addItem(tr("Espèces (sorti du tiroir)"), static_cast<int>(core::SupplierPaymentMethod::Cash));
+    methodCombo->addItem(tr("À crédit (sur le compte fournisseur)"),
+                         static_cast<int>(core::SupplierPaymentMethod::Credit));
+    methodCombo->addItem(tr("Par banque / chèque"), static_cast<int>(core::SupplierPaymentMethod::Bank));
+    methodCombo->setCurrentIndex(0);
+    methodCombo->setToolTip(
+        tr("Les espèces sortent du tiroir et doivent être imputées à une session ouverte."));
+
     auto* noteField = new QLineEdit;
 
     // Refusals land here rather than in a dialog box: a rejected amount is
@@ -130,6 +151,7 @@ SupplierPaymentDialogResult showSupplierPaymentDialog(QWidget* parent, app::data
     form->addRow(balanceLabel);
     form->addRow(tr("Facture liée"), invoiceCombo);
     form->addRow(tr("Montant"), amountField);
+    form->addRow(tr("Mode de règlement"), methodCombo);
     form->addRow(tr("Date"), dateEdit);
     form->addRow(tr("Note"), noteField);
 
@@ -178,13 +200,37 @@ SupplierPaymentDialogResult showSupplierPaymentDialog(QWidget* parent, app::data
         const QVariant chosen = invoiceCombo->currentData();
         const std::optional<int> against = chosen.isValid() ? std::optional<int>(chosen.toInt())
                                                             : std::nullopt;
+        // Same shape on the method combo: the invalid entry is the "not chosen
+        // yet" one, and it is not a payment method.
+        const QVariant chosenMethod = methodCombo->currentData();
+        if (!chosenMethod.isValid()) {
+            fail(tr("Choisissez comment le paiement a été réglé"));
+            methodCombo->setFocus();
+            return;
+        }
+        const auto method = static_cast<core::SupplierPaymentMethod>(chosenMethod.toInt());
+        // The session is looked up here, in the interface, and handed over as an
+        // id: the service never finds a session on its own, so a payment cannot
+        // be booked against whichever till happened to be running. Only a cash
+        // payment needs one, and asking for it here rather than always keeps a
+        // settled-on-account payment recordable with no till open.
+        std::optional<int> cashSessionId;
+        if (core::isCashPayment(method)) {
+            const std::optional<core::CashSession> open = data::CashSessionRepository(db).findOpen();
+            if (!open.has_value()) {
+                fail(tr("Aucun tiroir ouvert. Ouvrez une session de caisse, ou enregistrez le paiement "
+                        "sur le compte ou par banque."));
+                return;
+            }
+            cashSessionId = open->id;
+        }
         // The date is the operator's; the clock of the moment is carried over so
         // the payment sorts the same way an invoice stamped today would.
         const QString paidAt = data::toIso(
             QDateTime(dateEdit->date(), QDateTime::currentDateTime().time()));
 
-        const data::SupplierPaymentResult recorded =
-            service.recordPayment(supplierId, against, *amount, paidAt, noteField->text().trimmed());
+        const data::SupplierPaymentResult recorded = service.recordPayment(
+            supplierId, against, *amount, paidAt, noteField->text().trimmed(), method, cashSessionId);
         if (!recorded.ok) {
             fail(recorded.error);
             return;

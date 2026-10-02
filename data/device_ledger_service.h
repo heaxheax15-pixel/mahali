@@ -13,6 +13,9 @@
 #include "sale_item_repository.h"
 #include "sale_repository.h"
 #include "stock_movement_repository.h"
+#include "occasion_repository.h"
+#include "occasion_service.h"
+#include "setting_repository.h"
 #include "sync_outbox_repository.h"
 #include "sync_sequence_repository.h"
 
@@ -78,6 +81,12 @@ private:
     PaymentRepository m_payments;
     SyncSequenceRepository m_syncSequence;
     SyncOutboxRepository m_outbox;
+    // Occasions are read-only context for a sale, so they are built here off the
+    // same database rather than injected: there is nothing to configure and no
+    // call site to change. See the note at the same place in SaleService.
+    OccasionRepository m_occasions;
+    SettingRepository m_settings;
+    OccasionService m_occasionService;
 };
 
 } // namespace app::data

@@ -1272,10 +1272,22 @@ void UiTest::entryReversal()
     QVERIFY(cash.reverseDrawing(drawing.entryId, sessionId).ok);
     QCOMPARE(data::CashMovementRepository(db).sumBySessionId(sessionId), 0LL);
 
+    // Every one of the four operations left a row of its own. The count is not
+    // asserted as a total: the point is that each movement is audited by the
+    // service that made it, inside that movement's own transaction, so the
+    // reversals above cannot be missing from the log the way a UI-written entry
+    // could when the transaction rolled back after the page believed it had
+    // succeeded.
     data::AuditLogRepository audit(db);
     const auto entries = audit.findBetween(dayStart, QDateTime::currentDateTime());
-    QCOMPARE(static_cast<long long>(entries.size()), 1);
-    QCOMPARE(entries[0].action, QStringLiteral("entry_reversal"));
+    QStringList actions;
+    for (const core::AuditLogEntry& entry : entries) {
+        actions << entry.action;
+    }
+    QCOMPARE(actions.size(), 4);
+    QCOMPARE(actions.filter(QStringLiteral("expense")).size(), 1);
+    QCOMPARE(actions.filter(QStringLiteral("owner_drawing")).size(), 1);
+    QCOMPARE(actions.filter(QStringLiteral("entry_reversal")).size(), 2);
 }
 
 void UiTest::login_basic()

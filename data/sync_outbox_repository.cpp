@@ -43,12 +43,17 @@ core::SyncOutboxEntry entryFromQuery(const QSqlQuery& query)
     const QByteArray opJson = query.value(1).toByteArray();
     core::SyncOutboxEntry entry;
     entry.id = query.value(0).toInt();
-    if (const auto restored = core::SyncOpCodec::deserialize(QJsonDocument::fromJson(opJson).object())) {
-        entry.op = *restored;
-    }
     entry.status = statusFromString(query.value(2).toString());
     entry.attempts = query.value(3).toInt();
     entry.lastError = query.value(4).toString();
+    QString decodeError;
+    if (const auto restored = core::SyncOpCodec::deserialize(
+            QJsonDocument::fromJson(opJson).object(), &decodeError)) {
+        entry.op = *restored;
+    } else {
+        entry.status = core::SyncOutboxStatus::PermanentFailed;
+        entry.lastError = QStringLiteral("invalid stored sync operation: %1").arg(decodeError);
+    }
     return entry;
 }
 
@@ -86,9 +91,10 @@ std::optional<core::SyncOutboxEntry> SyncOutboxRepository::findById(int id) cons
     return entryFromQuery(query);
 }
 
-std::vector<core::SyncOutboxEntry> SyncOutboxRepository::findPending(int limit) const
+std::vector<core::SyncOutboxEntry> SyncOutboxRepository::findPending(int limit)
 {
     std::vector<core::SyncOutboxEntry> entries;
+    QVector<QPair<int, QString>> invalidEntries;
     QSqlQuery query(m_db.handle());
     query.prepare(QStringLiteral("SELECT %1 FROM sync_outbox "
                                  "WHERE status = 'pending' ORDER BY id LIMIT ?")
@@ -99,7 +105,16 @@ std::vector<core::SyncOutboxEntry> SyncOutboxRepository::findPending(int limit) 
         return entries;
     }
     while (query.next()) {
-        entries.push_back(entryFromQuery(query));
+        core::SyncOutboxEntry entry = entryFromQuery(query);
+        if (entry.status == core::SyncOutboxStatus::PermanentFailed) {
+            invalidEntries.push_back({entry.id, entry.lastError});
+            continue;
+        }
+        entries.push_back(std::move(entry));
+    }
+    query.finish();
+    for (const auto& [id, error] : invalidEntries) {
+        markPermanentFailed(id, error);
     }
     return entries;
 }

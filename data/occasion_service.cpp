@@ -1,5 +1,6 @@
 #include "occasion_service.h"
 
+#include "audit_log_repository.h"
 #include "date_utils.h"
 
 namespace app::data {
@@ -17,6 +18,7 @@ OccasionService::OccasionService(Database& db,
     : m_db(db)
     , m_occasions(occasions)
     , m_settings(settings)
+    , m_audit(db)
 {
 }
 
@@ -50,23 +52,56 @@ bool OccasionService::activate(int occasionId)
     if (!occasion.has_value()) {
         return false;
     }
-    // Stamping sales with a disabled occasion would attribute a day's takings to
-    // an event the shop has turned off, so the switch is checked here.
     if (!occasion->active) {
         return false;
     }
 
+    if (!m_db.beginTransaction()) {
+        return false;
+    }
+
     m_settings.set(QString::fromLatin1(kActiveOccasionKey), QString::number(occasionId));
-    // set() reports through the database rather than a return value, so the row is
-    // read back to be sure the occasion really is the one that will be reported.
+
+    // Inside the transaction: the setting and its audit entry commit or roll
+    // back together. An activation that survives a rollback would show an
+    // occasion running that never actually ran.
+    if (m_audit.record(QStringLiteral("occasion_activate"),
+                       QStringLiteral("occasion %1 (%2)")
+                           .arg(occasionId)
+                           .arg(occasion->name))
+        == 0) {
+        m_db.rollback();
+        return false;
+    }
+
+    if (!m_db.commit()) {
+        return false;
+    }
+
     const std::optional<QString> stored =
         m_settings.value(QString::fromLatin1(kActiveOccasionKey));
     return stored.has_value() && stored->toInt() == occasionId;
 }
 
-void OccasionService::deactivate()
+bool OccasionService::deactivate()
 {
+    if (!m_db.beginTransaction()) {
+        return false;
+    }
+
     m_settings.remove(QString::fromLatin1(kActiveOccasionKey));
+
+    if (m_audit.record(QStringLiteral("occasion_deactivate"),
+                       QStringLiteral("occasion cleared"))
+        == 0) {
+        m_db.rollback();
+        return false;
+    }
+
+    if (!m_db.commit()) {
+        return false;
+    }
+    return true;
 }
 
 bool OccasionService::isWithinRange(const core::Occasion& o, const QString& nowIso) const

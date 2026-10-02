@@ -7,6 +7,12 @@
 
 namespace app::data {
 
+struct CashSessionViolation {
+    QString description;
+    int entityId = 0; // sale_id, movement_id, etc.
+    QString entityType; // "sale", "movement", etc.
+};
+
 class CashSessionRepository {
 public:
     explicit CashSessionRepository(Database& db);
@@ -28,6 +34,17 @@ public:
     // variance is a real result — a till that came up short.
     int open(long long openingFloatCents);
     bool close(int sessionId, long long closingCountedCents, long long expectedCents, long long varianceCents);
+
+    // Validates the session's cash movements against the originating documents.
+    // Returns a list of violations. Does NOT prevent closing — the violations
+    // are displayed to the operator who decides whether to proceed.
+    // Checks:
+    //   * Every non-voided sale: sum of its cash_movements == sales.total_cents
+    //   * Every voided sale: net cash_movements sum to 0
+    //   * Any movement with empty ref_type/ref_id is a violation
+    //   * No movement references a customer_transactions row (debts don't touch the till)
+    QVector<CashSessionViolation> validateForClose(int sessionId) const;
+    int unreferencedMovementCount(int sessionId) const;
 
 private:
     Database& m_db;

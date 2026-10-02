@@ -110,19 +110,4 @@ int StockMovementRepository::insert(const core::StockMovement& movement)
     return query.lastInsertId().toInt();
 }
 
-void StockMovementRepository::reverse(int originalMovementId, const QString& reason)
-{
-    const std::optional<core::StockMovement> original = findById(originalMovementId);
-    if (!original.has_value()) {
-        return;
-    }
-    core::StockMovement reversal;
-    reversal.productId = original->productId;
-    reversal.delta = -original->delta;
-    reversal.reason = reason;
-    reversal.createdAt = QDateTime::currentDateTime();
-    reversal.reversedId = originalMovementId;
-    insert(reversal);
-}
-
 } // namespace app::data

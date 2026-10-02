@@ -5,6 +5,7 @@
 
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
+#include "data/audit_log_repository.h"
 #include "data/customer_repository.h"
 #include "data/device_ledger_service.h"
 #include "data/product_repository.h"
@@ -27,6 +28,7 @@ private slots:
     void durableOpIdSurvivesReopen();
     void debtQueuesWithoutCashMovement();
     void paymentRequiresOpenSession();
+    void device_audit_actor_uses_device_id();
     void cleanup();
 
 private:
@@ -240,6 +242,26 @@ void DeviceLedgerTest::paymentRequiresOpenSession()
     QCOMPARE(outbox.countPending(), 0);
     data::PaymentRepository payments(db);
     QCOMPARE(payments.findByCustomerId(m_customerId).size(), 0);
+}
+
+void DeviceLedgerTest::device_audit_actor_uses_device_id()
+{
+    data::Database db(m_dbPath);
+    data::DeviceLedgerService service(db, m_deviceId);
+    core::SaleItem item;
+    item.productId = m_productId;
+    item.quantity = 1;
+
+    QVERIFY2(service.recordSale({item}, m_openSessionId).ok, "device sale should be recorded");
+    QVERIFY2(service.recordCustomerDebt(m_customerId, {item}).ok, "device debt should be recorded");
+    QVERIFY2(service.recordCustomerPayment(m_customerId, 1000, m_openSessionId, QString()).ok,
+             "device payment should be recorded");
+
+    const auto entries = data::AuditLogRepository(db).findAll();
+    QCOMPARE(entries.size(), std::size_t(3));
+    for (const core::AuditLogEntry& entry : entries) {
+        QCOMPARE(entry.actor, m_deviceId);
+    }
 }
 
 QTEST_GUILESS_MAIN(DeviceLedgerTest)

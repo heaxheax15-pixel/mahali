@@ -14,6 +14,8 @@ struct PurchaseItem {
     QString unit = QStringLiteral("piece");
     long long unitPriceCents = 0;
     long long totalCents = 0;
+    // Links a void item to the original. 0 means "not a void item".
+    int reversedId = 0;
 };
 
 } // namespace app::core

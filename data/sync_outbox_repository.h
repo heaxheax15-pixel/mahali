@@ -19,7 +19,7 @@ public:
 
     int enqueue(const core::SyncOperation& op);
     std::optional<core::SyncOutboxEntry> findById(int id) const;
-    std::vector<core::SyncOutboxEntry> findPending(int limit) const;
+    std::vector<core::SyncOutboxEntry> findPending(int limit);
     int countPending() const;
 
     bool markApplied(int id);

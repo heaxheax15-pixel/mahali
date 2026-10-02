@@ -18,7 +18,9 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSet>
 #include <QSpinBox>
+#include <QSqlQuery>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -404,6 +406,95 @@ bool showSettleDebtDialog(QWidget* parent, app::data::Database& db, int customer
     return true;
 }
 
+// The transactions a cancellation is allowed to act on: positive rows that have
+// not already been cancelled. A payment on the ledger is negative and a
+// cancellation is negative, and both are excluded for the same reason — neither
+// is a sale that can be given back.
+QVector<core::CustomerTransaction> cancellableCreditSales(app::data::Database& db, int customerId)
+{
+    QVector<core::CustomerTransaction> candidates;
+    app::data::CustomerTransactionRepository transactions(db);
+    QSqlQuery cancelled(db.handle());
+    cancelled.prepare(QStringLiteral(
+        "SELECT DISTINCT reversed_transaction_id FROM customer_transactions "
+        "WHERE reversed_transaction_id IS NOT NULL"));
+    QSet<int> alreadyCancelled;
+    if (cancelled.exec()) {
+        while (cancelled.next()) {
+            alreadyCancelled.insert(cancelled.value(0).toInt());
+        }
+    }
+    const auto all = transactions.findByCustomerId(customerId);
+    for (const core::CustomerTransaction& tx : all) {
+        if (tx.amountCents > 0 && !alreadyCancelled.contains(tx.id)) {
+            candidates.push_back(tx);
+        }
+    }
+    return candidates;
+}
+
+bool showCancelDebtDialog(QWidget* parent, app::data::Database& db, int customerId)
+{
+    if (customerId <= 0) {
+        return false;
+    }
+    const QVector<core::CustomerTransaction> candidates = cancellableCreditSales(db, customerId);
+    if (candidates.isEmpty()) {
+        QMessageBox::information(
+            parent, QCoreApplication::translate("CustomerDialog", "Annuler une vente"),
+            QCoreApplication::translate("CustomerDialog",
+                                        "Aucune vente à crédit à annuler pour ce client."));
+        return false;
+    }
+
+    // Named by date and amount rather than by row number: the operator is looking
+    // at the ledger above and has to be able to match what they see here to what
+    // they see there.
+    QStringList labels;
+    labels.reserve(candidates.size());
+    for (const core::CustomerTransaction& tx : candidates) {
+        labels << QStringLiteral("%1 — %2")
+                      .arg(shortDate(tx.createdAt), formatMoney(tx.amountCents));
+    }
+    bool ok = false;
+    const QString chosen = QInputDialog::getItem(
+        parent, QCoreApplication::translate("CustomerDialog", "Annuler une vente"),
+        QCoreApplication::translate("CustomerDialog", "Vente à annuler :"), labels, 0, false, &ok);
+    if (!ok) {
+        return false;
+    }
+    const int index = labels.indexOf(chosen);
+    if (index < 0) {
+        return false;
+    }
+    const int transactionId = candidates[index].id;
+
+    // Asked up front, because the answer is not obvious and finding out halfway
+    // is how a stock count ends up short. The sale stays on the ledger as a
+    // negative line — nothing is deleted — and the goods go back on the shelf.
+    const auto confirmed = QMessageBox::question(
+        parent, QCoreApplication::translate("CustomerDialog", "Confirmer l'annulation"),
+        QCoreApplication::translate(
+            "CustomerDialog",
+            "Annuler %1 ?\n\nLa vente reste visible avec un montant négatif et les produits retournent "
+            "en stock.")
+            .arg(formatMoney(candidates[index].amountCents)));
+    if (confirmed != QMessageBox::Yes) {
+        return false;
+    }
+
+    app::data::SaleService sales(db);
+    const app::data::SaleReverseResult result = sales.reverseCustomerDebt(transactionId);
+    if (!result.ok) {
+        QMessageBox::warning(
+            parent, QCoreApplication::translate("CustomerDialog", "Erreur"),
+            QCoreApplication::translate("CustomerDialog", "Annulation impossible : %1")
+                .arg(result.error));
+        return false;
+    }
+    return true;
+}
+
 bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core::Customer& customer)
 {
     ScanSafeDialog dialog(parent);
@@ -463,14 +554,27 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
     // ---- tab 2: ventes à crédit ----
     auto* salesTab = new QWidget;
     auto* salesLayout = new QVBoxLayout(salesTab);
+    auto* salesButtons = new QHBoxLayout;
     auto* newDebtButton =
         new QPushButton(QCoreApplication::translate("CustomerDialog", "Nouvelle vente à crédit"));
     newDebtButton->setObjectName(QStringLiteral("primary"));
+    // Cancels a sale already on the ledger. Sits beside the create button rather
+    // than in a menu: once a credit sale is cancelled the customer no longer owes
+    // it, and that is a thing the operator does have to reach for.
+    auto* cancelDebtButton =
+        new QPushButton(QCoreApplication::translate("CustomerDialog", "Annuler une vente"));
+    cancelDebtButton->setToolTip(QCoreApplication::translate(
+        "CustomerDialog",
+        "Annule une vente à crédit : elle reste visible avec un montant négatif, et les produits "
+        "retournent en stock."));
+    salesButtons->addWidget(newDebtButton);
+    salesButtons->addWidget(cancelDebtButton);
+    salesButtons->addStretch(1);
     auto* salesTable = makeLedgerTable({QCoreApplication::translate("CustomerDialog", "Date"),
                                         QCoreApplication::translate("CustomerDialog", "Produits"),
                                         QCoreApplication::translate("CustomerDialog", "Total"),
                                         QCoreApplication::translate("CustomerDialog", "Note")});
-    salesLayout->addWidget(newDebtButton);
+    salesLayout->addLayout(salesButtons);
     salesLayout->addWidget(salesTable, 1);
 
     // ---- tab 3: remboursements ----
@@ -573,6 +677,12 @@ bool showCustomerCardDialog(QWidget* parent, app::data::Database& db, const core
 
     QObject::connect(newDebtButton, &QPushButton::clicked, &dialog, [&]() {
         if (showNewDebtDialog(&dialog, db, customer.id)) {
+            changed = true;
+            reload();
+        }
+    });
+    QObject::connect(cancelDebtButton, &QPushButton::clicked, &dialog, [&]() {
+        if (showCancelDebtDialog(&dialog, db, customer.id)) {
             changed = true;
             reload();
         }

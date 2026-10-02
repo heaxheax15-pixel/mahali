@@ -23,6 +23,8 @@ core::CashMovement movementFromQuery(const QSqlQuery& query)
     movement.amountCents = query.value(3).toLongLong();
     movement.createdAt = fromIso(query.value(4).toString()).value_or(QDateTime());
     movement.note = query.value(5).toString();
+    movement.refType = query.value(6).toString();
+    movement.refId = query.value(7).toInt();
     return movement;
 }
 
@@ -33,7 +35,7 @@ std::vector<core::CashMovement> CashMovementRepository::findBySessionId(int sess
     std::vector<core::CashMovement> movements;
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("SELECT id, session_id, type, amount_cents, created_at, note "
+        QStringLiteral("SELECT id, session_id, type, amount_cents, created_at, note, ref_type, ref_id "
                        "FROM cash_movements WHERE session_id = ? ORDER BY created_at"));
     query.addBindValue(sessionId);
     if (!query.exec()) {
@@ -61,13 +63,15 @@ int CashMovementRepository::insert(const core::CashMovement& movement)
 {
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("INSERT INTO cash_movements (session_id, type, amount_cents, created_at, note) "
-                       "VALUES (?, ?, ?, ?, ?)"));
+        QStringLiteral("INSERT INTO cash_movements (session_id, type, amount_cents, created_at, note, ref_type, ref_id) "
+                       "VALUES (?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(movement.sessionId);
     query.addBindValue(movement.type);
     query.addBindValue(movement.amountCents);
     query.addBindValue(toIso(movement.createdAt.isValid() ? movement.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(movement.note.isNull() ? QStringLiteral("") : movement.note);
+    query.addBindValue(movement.refType.isNull() ? QStringLiteral("") : movement.refType);
+    query.addBindValue(movement.refId);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("CashMovementRepository::insert"));
         return 0;

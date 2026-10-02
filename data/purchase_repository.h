@@ -23,8 +23,6 @@ public:
     // Does not allow changing supplier_id or total_cents after creation.
     bool updateMeta(int id, long long paidCents, const QString& note, bool addToStock);
 
-    bool remove(int id);
-
 private:
     Database& m_db;
 };

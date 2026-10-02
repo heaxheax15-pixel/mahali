@@ -3,6 +3,7 @@
 #include <QSqlQuery>
 #include <QVariant>
 
+#include "core/session.h"
 #include "date_utils.h"
 
 namespace app::data {
@@ -88,6 +89,25 @@ int AuditLogRepository::insert(const core::AuditLogEntry& entry)
         return 0;
     }
     return query.lastInsertId().toInt();
+}
+
+int AuditLogRepository::record(const QString& action, const QString& target)
+{
+    // The actor is who is signed in here and now, read at the moment of writing
+    // rather than passed in: a service has no business asking its caller who they
+    // are, and a caller that got it wrong would put someone else's name on a
+    // movement they did not make.
+    return recordAs(core::Session::instance().actorName(), action, target);
+}
+
+int AuditLogRepository::recordAs(const QString& actor, const QString& action, const QString& target)
+{
+    core::AuditLogEntry entry;
+    entry.actor = actor;
+    entry.action = action;
+    entry.target = target;
+    entry.createdAt = QDateTime::currentDateTime();
+    return insert(entry);
 }
 
 } // namespace app::data

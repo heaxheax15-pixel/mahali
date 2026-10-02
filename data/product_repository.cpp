@@ -211,7 +211,7 @@ void ProductRepository::adjustStock(int productId, long long delta, const QStrin
     query.addBindValue(productId);
     query.addBindValue(delta);
     query.addBindValue(reason);
-    query.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
+    query.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODateWithMs));
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::adjustStock"));
         return;

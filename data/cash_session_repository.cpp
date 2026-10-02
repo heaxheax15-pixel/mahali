@@ -125,6 +125,15 @@ bool CashSessionRepository::close(int sessionId, long long closingCountedCents, 
         return false;
     }
 
+    // Validate before closing. Violations are reported but do not block the close.
+    const auto violations = validateForClose(sessionId);
+    if (!violations.isEmpty()) {
+        qWarning() << "Cash session" << sessionId << "has" << violations.size() << "reconciliation violation(s):";
+        for (const auto& v : violations) {
+            qWarning() << "  [" << v.entityType << "#" << v.entityId << "] " << v.description;
+        }
+    }
+
     // status = 'open' in the WHERE clause is what makes a second close of the
     // same session report failure instead of rewriting a day that is already
     // settled.
@@ -150,6 +159,123 @@ bool CashSessionRepository::close(int sessionId, long long closingCountedCents, 
         return false;
     }
     return true;
+}
+
+QVector<CashSessionViolation> CashSessionRepository::validateForClose(int sessionId) const
+{
+    QVector<CashSessionViolation> violations;
+
+    // 1. Movements without a reference (ref_type or ref_id is NULL/0).
+    // Old rows before the ref columns were added will have NULL/0.
+    QSqlQuery unreferenced(m_db.handle());
+    unreferenced.prepare(QStringLiteral(
+        "SELECT id, type, amount_cents, ref_type, ref_id "
+        "FROM cash_movements "
+        "WHERE session_id = ? AND (ref_type IS NULL OR ref_type = '' OR ref_id IS NULL OR ref_id <= 0)"));
+    unreferenced.addBindValue(sessionId);
+    if (unreferenced.exec()) {
+        while (unreferenced.next()) {
+            CashSessionViolation v;
+            v.description = QStringLiteral("حركة صندوق بدون مرجع مستند: النوع=%1 المبلغ=%2")
+                                .arg(unreferenced.value(1).toString())
+                                .arg(unreferenced.value(2).toLongLong());
+            v.entityId = unreferenced.value(0).toInt();
+            v.entityType = QStringLiteral("movement");
+            violations.push_back(v);
+        }
+    }
+
+    // 2. Non-voided sales: sum of their cash movements must equal sales.total_cents.
+    // A sale is "non-voided" if sales.reversed_sale_id = 0.
+    // Cash movements linked to a sale have ref_type = 'sale' and ref_id = sale_id.
+    QSqlQuery sales(m_db.handle());
+    sales.prepare(QStringLiteral(
+        "SELECT s.id, s.total_cents, "
+        "COALESCE(SUM(cm.amount_cents), 0) AS movement_sum "
+        "FROM sales s "
+        "JOIN cash_sessions cs ON cs.id = ? "
+        "LEFT JOIN cash_movements cm ON cm.ref_type = 'sale' AND cm.ref_id = s.id "
+        "WHERE s.reversed_sale_id = 0 AND ("
+        "  (s.created_at >= cs.opened_at AND (cs.closed_at IS NULL OR s.created_at <= cs.closed_at)) "
+        "  OR EXISTS (SELECT 1 FROM cash_movements own WHERE own.session_id = cs.id "
+        "            AND own.ref_type = 'sale' AND own.ref_id = s.id)) "
+        "GROUP BY s.id"));
+    sales.addBindValue(sessionId);
+    if (sales.exec()) {
+        while (sales.next()) {
+            const long long saleTotal = sales.value(1).toLongLong();
+            const long long movementSum = sales.value(2).toLongLong();
+            if (movementSum != saleTotal) {
+                CashSessionViolation v;
+                v.description = QStringLiteral("مجموع حركات البيع لا يساوي المجموع الكلي: البيع=%1 الحركات=%2")
+                                    .arg(saleTotal)
+                                    .arg(movementSum);
+                v.entityId = sales.value(0).toInt();
+                v.entityType = QStringLiteral("sale");
+                violations.push_back(v);
+            }
+        }
+    }
+
+    // 3. Voided sales (reversed_sale_id != 0): net cash movements must sum to 0.
+    // The reversal writes a negative movement, so original + reversal = 0.
+    QSqlQuery voidedSales(m_db.handle());
+    voidedSales.prepare(QStringLiteral(
+        "SELECT s.id, COALESCE(SUM(cm.amount_cents), 0) AS net_sum "
+        "FROM sales s "
+        "JOIN cash_sessions cs ON cs.id = ? "
+        "LEFT JOIN cash_movements cm ON cm.ref_type = 'sale' AND cm.ref_id = s.id "
+        "WHERE s.reversed_sale_id != 0 AND ("
+        "  (s.created_at >= cs.opened_at AND (cs.closed_at IS NULL OR s.created_at <= cs.closed_at)) "
+        "  OR EXISTS (SELECT 1 FROM cash_movements own WHERE own.session_id = cs.id "
+        "            AND own.ref_type = 'sale' AND own.ref_id = s.id)) "
+        "GROUP BY s.id"));
+    voidedSales.addBindValue(sessionId);
+    if (voidedSales.exec()) {
+        while (voidedSales.next()) {
+            const long long netSum = voidedSales.value(1).toLongLong();
+            if (netSum != 0) {
+                CashSessionViolation v;
+                v.description = QStringLiteral("صافي حركات البيع الملغى غير صفر: %1").arg(netSum);
+                v.entityId = voidedSales.value(0).toInt();
+                v.entityType = QStringLiteral("sale");
+                violations.push_back(v);
+            }
+        }
+    }
+
+    // 4. No movement should reference a customer_transactions row (debts don't touch the till).
+    QSqlQuery debtRefs(m_db.handle());
+    debtRefs.prepare(QStringLiteral(
+        "SELECT id, ref_type, ref_id FROM cash_movements "
+        "WHERE session_id = ? AND ref_type IN ('customer_debt', 'customer_transaction', 'customer_transactions')"));
+    debtRefs.addBindValue(sessionId);
+    if (debtRefs.exec()) {
+        while (debtRefs.next()) {
+            CashSessionViolation v;
+            v.description = QStringLiteral("حركة صندوق تشير إلى قيد دين (غير مسموح): المرجع=%1/%2")
+                                .arg(debtRefs.value(1).toString())
+                                .arg(debtRefs.value(2).toInt());
+            v.entityId = debtRefs.value(0).toInt();
+            v.entityType = QStringLiteral("movement");
+            violations.push_back(v);
+        }
+    }
+
+    return violations;
+}
+
+int CashSessionRepository::unreferencedMovementCount(int sessionId) const
+{
+    QSqlQuery query(m_db.handle());
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM cash_movements "
+        "WHERE session_id = ? AND (ref_type IS NULL OR ref_type = '' OR ref_id IS NULL OR ref_id <= 0)"));
+    query.addBindValue(sessionId);
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toInt();
 }
 
 } // namespace app::data

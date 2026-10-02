@@ -14,8 +14,8 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
-#include "core/cash_session_calculator.h"
 #include "core/cash_movement.h"
+#include "core/cash_session_calculator.h"
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
 #include "format_utils.h"
@@ -30,19 +30,22 @@ namespace {
 
 QString movementTypeLabel(const QString& type)
 {
-    if (type == QLatin1String("sale")) {
+    if (type == core::cashMovementType::kSale) {
         return QCoreApplication::translate("app::ui::CashSessionPage", "بيع");
     }
-    if (type == QLatin1String("customer_payment")) {
+    if (type == core::cashMovementType::kCustomerPayment) {
         return QCoreApplication::translate("app::ui::CashSessionPage", "دفعة عميل");
     }
-    if (type == QLatin1String("expense")) {
+    if (type == core::cashMovementType::kExpense) {
         return QCoreApplication::translate("app::ui::CashSessionPage", "مصروف");
     }
-    if (type == QLatin1String("drawing")) {
+    if (type == core::cashMovementType::kDrawing) {
         return QCoreApplication::translate("app::ui::CashSessionPage", "سحب");
     }
-    if (type == QLatin1String("refund")) {
+    if (type == core::cashMovementType::kSupplierPayment) {
+        return QCoreApplication::translate("app::ui::CashSessionPage", "سداد مورد");
+    }
+    if (type == core::cashMovementType::kRefund) {
         return QCoreApplication::translate("app::ui::CashSessionPage", "استرداد");
     }
     return type;
@@ -164,6 +167,7 @@ void CashSessionPage::refresh()
 
     data::CashMovementRepository movements(m_db);
     const long long movementSum = movements.sumBySessionId(session->id);
+    const int unreferencedCount = data::CashSessionRepository(m_db).unreferencedMovementCount(session->id);
     m_expectedCents = core::CashSessionCalculator::expectedTotalCents(session->openingFloatCents, movementSum);
     m_header->setSubtitle(tr("الجلسة #%1 مفتوحة منذ %2")
                               .arg(session->id)
@@ -172,11 +176,12 @@ void CashSessionPage::refresh()
     m_movementsCard->setCents(movementSum);
     m_expectedCard->setCents(m_expectedCents);
     m_varianceCard->setValue(m_hasOpen ? tr("جارية") : tr("—"));
-    m_summary->setText(tr("الجلسة #%1 — مفتوحة: %2  |  %3  |  %4")
+    m_summary->setText(tr("الجلسة #%1 — مفتوحة: %2  |  %3  |  %4  |  حركات قديمة بلا مرجع: %5")
                            .arg(session->id)
                            .arg(formatMoney(session->openingFloatCents))
                            .arg(formatMoney(movementSum))
-                           .arg(formatMoney(m_expectedCents)));
+                           .arg(formatMoney(m_expectedCents))
+                           .arg(unreferencedCount));
     m_summary->setVisible(!m_summary->text().isEmpty());
 
     for (const core::CashMovement& movement : movements.findBySessionId(session->id)) {
@@ -248,6 +253,7 @@ void CashSessionPage::closeSession(long long closingCountedCents)
     const long long movementSum = movements.sumBySessionId(session->id);
     const long long expected = core::CashSessionCalculator::expectedTotalCents(session->openingFloatCents, movementSum);
     const long long variance = core::CashSessionCalculator::varianceCents(closingCountedCents, expected);
+    const QVector<data::CashSessionViolation> violations = sessions.validateForClose(session->id);
     if (!sessions.close(session->id, closingCountedCents, expected, variance)) {
         m_summary->setText(tr("تعذر إغلاق الجلسة."));
         m_summary->setVisible(!m_summary->text().isEmpty());
@@ -261,6 +267,20 @@ void CashSessionPage::closeSession(long long closingCountedCents)
                                  variance < 0 ? tr("عجز في الصندوق") : tr("زيادة في الصندوق")));
     m_variance->setVisible(!m_variance->text().isEmpty());
     refresh();
+    if (!violations.isEmpty()) {
+        QStringList descriptions;
+        descriptions.reserve(violations.size());
+        for (const data::CashSessionViolation& violation : violations) {
+            descriptions.push_back(QStringLiteral("[%1 #%2] %3")
+                                       .arg(violation.entityType)
+                                       .arg(violation.entityId)
+                                       .arg(violation.description));
+        }
+        m_summary->setText(tr("أُغلقت الجلسة مع %1 مخالفة تدقيق:\n%2")
+                               .arg(violations.size())
+                               .arg(descriptions.join(QLatin1Char('\n'))));
+        m_summary->setVisible(true);
+    }
 }
 
 bool CashSessionPage::amountFromInput(const QString& text, long long* cents) const

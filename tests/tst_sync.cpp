@@ -1,7 +1,9 @@
 #include <QtTest/QtTest>
 
 #include <QJsonDocument>
+#include <QJsonObject>
 
+#include "core/sync_operation_codec.h"
 #include "network/sync_protocol.h"
 
 class SyncTest : public QObject
@@ -12,6 +14,8 @@ private slots:
     void hmacSha256IsDeterministic();
     void hmacSha256DiffersAcrossKeys();
     void serializeDeserializeRoundTrip();
+    void deserializeLegacyNumericAmount();
+    void rejectInvalidLegacyNumericAmounts();
     void batchSizeLimits();
     void errorClassForStatus();
 };
@@ -57,6 +61,41 @@ void SyncTest::serializeDeserializeRoundTrip()
     QCOMPARE(restored->occurredAt, op.occurredAt);
     QCOMPARE(restored->note, QStringLiteral("debt note"));
     QCOMPARE(restored->deviceId, QStringLiteral("device-1"));
+}
+
+void SyncTest::deserializeLegacyNumericAmount()
+{
+    QJsonObject legacy;
+    legacy.insert(QStringLiteral("opId"), 1);
+    legacy.insert(QStringLiteral("type"), static_cast<int>(app::core::SyncOpType::CustomerPayment));
+    legacy.insert(QStringLiteral("entityId"), 2);
+    legacy.insert(QStringLiteral("amountCents"), 9007199254740992.0);
+    QString error;
+    const auto restored = app::core::SyncOpCodec::deserialize(legacy, &error);
+    QVERIFY2(restored.has_value(), qPrintable(error));
+    QCOMPARE(restored->amountCents, app::core::SyncOpCodec::kMaxExactJsonNumber);
+    QVERIFY(error.isEmpty());
+}
+
+void SyncTest::rejectInvalidLegacyNumericAmounts()
+{
+    QJsonObject legacy;
+    legacy.insert(QStringLiteral("opId"), 1);
+    legacy.insert(QStringLiteral("type"), static_cast<int>(app::core::SyncOpType::CustomerPayment));
+    legacy.insert(QStringLiteral("entityId"), 2);
+
+    const auto rejectedWithError = [&legacy](const QJsonValue& amount, const QString& expectedMessage) {
+        legacy.insert(QStringLiteral("amountCents"), amount);
+        QString error;
+        const auto restored = app::core::SyncOpCodec::deserialize(legacy, &error);
+        QVERIFY(!restored.has_value());
+        QVERIFY2(!error.isEmpty(), "Rejected amount must expose a reason");
+        QVERIFY2(error.contains(expectedMessage), qPrintable(error));
+    };
+
+    rejectedWithError(QJsonValue(100.7), QStringLiteral("fractional"));
+    rejectedWithError(QJsonValue(1e300), QStringLiteral("range"));
+    rejectedWithError(QJsonValue(QStringLiteral("not-a-number")), QStringLiteral("whole number"));
 }
 
 void SyncTest::batchSizeLimits()

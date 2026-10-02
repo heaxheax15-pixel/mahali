@@ -27,10 +27,16 @@ core::SupplierPayment paymentFromQuery(const QSqlQuery& query)
     payment.paidAt = query.value(4).toString();
     payment.note = query.value(5).toString();
     payment.createdAt = query.value(6).toString();
+    payment.method =
+        core::parseSupplierPaymentMethod(query.value(7).toString()).value_or(core::SupplierPaymentMethod::Credit);
+    payment.reversedId = query.value(8).toInt();
+    payment.isPurchaseInitialPayment = query.value(9).toInt() != 0;
     return payment;
 }
 
-const char* kPaymentColumns = "id, supplier_id, purchase_id, amount_cents, paid_at, note, created_at";
+const char* kPaymentColumns =
+    "id, supplier_id, purchase_id, amount_cents, paid_at, note, created_at, method, reversed_id, "
+    "is_purchase_initial_payment";
 
 } // namespace
 
@@ -110,7 +116,8 @@ int SupplierPaymentRepository::insert(const core::SupplierPayment& payment)
     QSqlQuery query(m_db.handle());
     query.prepare(
         QStringLiteral("INSERT INTO supplier_payments (supplier_id, purchase_id, amount_cents, paid_at, note, "
-                       "created_at) VALUES (?, ?, ?, ?, ?, ?)"));
+                       "created_at, method, reversed_id, is_purchase_initial_payment) "
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(payment.supplierId);
     if (payment.purchaseId.has_value()) {
         query.addBindValue(*payment.purchaseId);
@@ -118,12 +125,12 @@ int SupplierPaymentRepository::insert(const core::SupplierPayment& payment)
         query.addBindValue(QVariant());
     }
     query.addBindValue(payment.amountCents);
-    // paid_at, note and created_at are all NOT NULL, and a null QString is bound
-    // as SQL NULL, which the driver refuses. Callers that never set them hold
-    // exactly such a null, so the blank the column defaults to is filled in here.
     query.addBindValue(payment.paidAt.isNull() ? QStringLiteral("") : payment.paidAt);
     query.addBindValue(payment.note.isNull() ? QStringLiteral("") : payment.note);
     query.addBindValue(payment.createdAt.isNull() ? QStringLiteral("") : payment.createdAt);
+    query.addBindValue(core::supplierPaymentMethodName(payment.method));
+    query.addBindValue(payment.reversedId);
+    query.addBindValue(payment.isPurchaseInitialPayment ? 1 : 0);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("SupplierPaymentRepository::insert"));
         return 0;

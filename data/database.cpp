@@ -1,5 +1,7 @@
 #include "database.h"
 
+#include "schema_migrations.h"
+
 #include <QPair>
 
 #include <QCryptographicHash>
@@ -297,6 +299,10 @@ Database::Database(const QString& filePath, DatabaseMode mode)
     }
     applyPragmas();
     createSchema();
+    // A fresh install gets the whole current shape from createSchema() above and
+    // has nothing to replay. A database carried over from an older build gets the
+    // shape it was created with and is walked forward from here.
+    runSchemaMigrations(m_db);
 }
 
 Database::~Database()
@@ -531,7 +537,9 @@ void Database::createSchema()
             "type TEXT NOT NULL,"
             "amount_cents INTEGER NOT NULL,"
             "created_at TEXT NOT NULL,"
-            "note TEXT NOT NULL DEFAULT '');"),
+            "note TEXT NOT NULL DEFAULT '',"
+            "ref_type TEXT,"
+            "ref_id INTEGER);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS users ("
@@ -614,10 +622,15 @@ void Database::createSchema()
             "vat_cents INTEGER NOT NULL DEFAULT 0,"
             "total_cents INTEGER NOT NULL,"
             "paid_cents INTEGER NOT NULL DEFAULT 0,"
+            // How the paid part was settled. Cash means a cash_movements row was
+            // written; Credit/Bank settled the balance without touching the drawer.
+            "method TEXT NOT NULL DEFAULT 'cash',"
             "add_to_stock INTEGER NOT NULL DEFAULT 1,"
             "note TEXT NOT NULL DEFAULT '',"
             "occasion_id INTEGER,"
             "created_at TEXT NOT NULL,"
+            // Links a void to the original purchase. 0 means "not a void".
+            "reversed_id INTEGER NOT NULL DEFAULT 0,"
             "FOREIGN KEY (supplier_id) REFERENCES suppliers(id));"),
 
         QStringLiteral(
@@ -630,6 +643,8 @@ void Database::createSchema()
             "unit TEXT NOT NULL DEFAULT 'piece',"
             "unit_price_cents INTEGER NOT NULL,"
             "total_cents INTEGER NOT NULL,"
+            // Links a void item to the original. 0 means "not a void item".
+            "reversed_id INTEGER NOT NULL DEFAULT 0,"
             "FOREIGN KEY (purchase_id) REFERENCES purchases(id),"
             "FOREIGN KEY (product_id) REFERENCES products(id));"),
 
@@ -640,6 +655,17 @@ void Database::createSchema()
             "purchase_id INTEGER,"
             "amount_cents INTEGER NOT NULL,"
             "paid_at TEXT NOT NULL,"
+            // How the money left the shop: 'cash' came out of the drawer and has
+            // a cash_movements row behind it, 'credit' was settled against the
+            // account and 'bank' went through the bank. Both of the last two
+            // settle the supplier balance without touching the till, which is
+            // what kept them from being told apart before.
+            "method TEXT NOT NULL DEFAULT 'cash',"
+            // Links a reversal to the original payment. 0 means "not a reversal".
+            // The partial unique index (migration 3) guarantees at most one
+            // reversal per original.
+            "reversed_id INTEGER NOT NULL DEFAULT 0,"
+            "is_purchase_initial_payment INTEGER NOT NULL DEFAULT 0,"
             "note TEXT NOT NULL DEFAULT '',"
             "created_at TEXT NOT NULL,"
             "FOREIGN KEY (supplier_id) REFERENCES suppliers(id),"
@@ -677,6 +703,14 @@ void Database::createSchema()
             "AFTER INSERT ON stock_movements "
             "BEGIN "
             "  UPDATE products SET quantity = quantity + NEW.delta WHERE id = NEW.product_id; "
+            "END;"),
+
+        QStringLiteral(
+            "CREATE TRIGGER IF NOT EXISTS trg_stock_before_insert_guard "
+            "BEFORE INSERT ON stock_movements "
+            "WHEN COALESCE((SELECT quantity FROM products WHERE id = NEW.product_id), 0) + NEW.delta < 0 "
+            "BEGIN "
+            "  SELECT RAISE(ABORT, 'stock quantity cannot be negative'); "
             "END;"),
 
         QStringLiteral(

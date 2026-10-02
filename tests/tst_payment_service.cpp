@@ -2,6 +2,11 @@
 
 #include <QTemporaryDir>
 
+#include "core/cash_movement.h"
+#include "core/cash_session_calculator.h"
+#include "core/supplier_payment.h"
+#include "data/cash_session_repository.h"
+#include "data/cash_movement_repository.h"
 #include "data/database.h"
 #include "data/date_utils.h"
 #include "data/purchase_repository.h"
@@ -23,6 +28,13 @@ struct Fixture {
         , purchases(db)
         , service(db, payments, suppliers, purchases)
     {
+        // Every fixture opens a till. These cases are about the supplier's
+        // balance, but they pay cash — the method the form leads with, and the
+        // one that has to name a session so the money leaving the drawer is
+        // counted. Nothing below is about the drawer itself; that is what
+        // tst_purchase_service's cash tests and the supplier-cash cases here
+        // cover.
+        sessionId = data::CashSessionRepository(db).open(100000);
     }
 
     data::Database db;
@@ -30,6 +42,7 @@ struct Fixture {
     data::SupplierRepository suppliers;
     data::PurchaseRepository purchases;
     data::SupplierPaymentService service;
+    int sessionId = 0;
 };
 
 int addSupplier(data::SupplierRepository& suppliers, const QString& name, long long openingBalanceCents = 0)
@@ -75,6 +88,11 @@ private slots:
     void unpaid_invoices_excludes_fully_paid();
     void unpaid_invoices_ordered_by_date();
     void balance_matches_payments();
+    void cash_payment_lowers_the_expected_till();
+    void cash_payment_without_a_session_is_refused();
+    void cash_payment_refuses_a_closed_session();
+    void credit_and_bank_touch_no_cash();
+    void method_round_trips_through_the_column();
 };
 
 void SupplierPaymentServiceTest::record_payment_simple()
@@ -88,7 +106,7 @@ void SupplierPaymentServiceTest::record_payment_simple()
     // no invoice and no opening debt there is nothing owed, so paying puts the
     // supplier in credit by exactly the amount paid.
     const data::SupplierPaymentResult result =
-        f.service.recordPayment(supplierId, std::nullopt, 5000, data::nowIso(), QStringLiteral("test"));
+        f.service.recordPayment(supplierId, std::nullopt, 5000, data::nowIso(), QStringLiteral("test"), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(result.ok, qPrintable(result.error));
     QVERIFY(result.paymentId > 0);
 
@@ -113,7 +131,7 @@ void SupplierPaymentServiceTest::record_payment_linked_to_purchase()
     QCOMPARE(f.service.balanceFor(supplierId), 50000LL);
 
     const data::SupplierPaymentResult result =
-        f.service.recordPayment(supplierId, purchaseId, 20000, data::nowIso(), QStringLiteral("دفعة"));
+        f.service.recordPayment(supplierId, purchaseId, 20000, data::nowIso(), QStringLiteral("دفعة"), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(result.ok, qPrintable(result.error));
 
     const auto stored = f.payments.findById(result.paymentId);
@@ -144,7 +162,7 @@ void SupplierPaymentServiceTest::payment_above_invoice_remaining_fails()
     // 50000 is what the invoice is worth, so 50001 against it is not a payment:
     // it would leave a credit the balance then reports as a debt.
     const data::SupplierPaymentResult result =
-        f.service.recordPayment(supplierId, purchaseId, 50000LL + 1LL, data::nowIso(), QString());
+        f.service.recordPayment(supplierId, purchaseId, 50000LL + 1LL, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY(!result.ok);
     QVERIFY(!result.error.isEmpty());
     QCOMPARE(f.service.balanceFor(supplierId), 50000LL);
@@ -162,7 +180,7 @@ void SupplierPaymentServiceTest::record_payment_above_balance_allowed()
 
     // The invoice is paid, so the balance is back to nothing owed.
     const data::SupplierPaymentResult settled =
-        f.service.recordPayment(supplierId, purchaseId, 50000, data::nowIso(), QString());
+        f.service.recordPayment(supplierId, purchaseId, 50000, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(settled.ok, qPrintable(settled.error));
     QCOMPARE(f.service.balanceFor(supplierId), 0LL);
 
@@ -170,7 +188,7 @@ void SupplierPaymentServiceTest::record_payment_above_balance_allowed()
     // the shop paid for goods before they arrived, so the supplier is in credit
     // and the balance says so. A general payment is not capped at the balance.
     const data::SupplierPaymentResult advance =
-        f.service.recordPayment(supplierId, std::nullopt, 20000, data::nowIso(), QString());
+        f.service.recordPayment(supplierId, std::nullopt, 20000, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(advance.ok, qPrintable(advance.error));
     QCOMPARE(f.service.balanceFor(supplierId), -20000LL);
     QCOMPARE(f.service.unpaidInvoicesFor(supplierId).size(), 0);
@@ -184,7 +202,7 @@ void SupplierPaymentServiceTest::record_payment_rejects_zero()
     QVERIFY(supplierId > 0);
 
     const data::SupplierPaymentResult result =
-        f.service.recordPayment(supplierId, std::nullopt, 0, data::nowIso(), QString());
+        f.service.recordPayment(supplierId, std::nullopt, 0, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY(!result.ok);
     QCOMPARE(result.error, QStringLiteral("amount must be positive"));
     QCOMPARE(f.payments.findBySupplierId(supplierId).size(), std::size_t(0));
@@ -200,7 +218,7 @@ void SupplierPaymentServiceTest::record_payment_rejects_negative()
     // A negative payment would be read as money owed to the supplier rather than
     // paid to them, so it is refused instead of quietly reversing the sign.
     const data::SupplierPaymentResult result =
-        f.service.recordPayment(supplierId, std::nullopt, -100, data::nowIso(), QString());
+        f.service.recordPayment(supplierId, std::nullopt, -100, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY(!result.ok);
     QCOMPARE(result.error, QStringLiteral("amount must be positive"));
     QCOMPARE(f.payments.findBySupplierId(supplierId).size(), std::size_t(0));
@@ -221,7 +239,7 @@ void SupplierPaymentServiceTest::record_payment_rejects_wrong_supplier()
     // Paying B against A's invoice would reduce B's balance with money that
     // settled A's debt, so the two have to agree before anything is written.
     const data::SupplierPaymentResult result =
-        f.service.recordPayment(supplierB, purchaseId, 100, data::nowIso(), QString());
+        f.service.recordPayment(supplierB, purchaseId, 100, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY(!result.ok);
     QCOMPARE(result.error, QStringLiteral("purchase does not belong to supplier"));
 
@@ -242,7 +260,7 @@ void SupplierPaymentServiceTest::unpaid_invoices_excludes_fully_paid()
     QVERIFY(unpaidId > 0);
 
     const data::SupplierPaymentResult result =
-        f.service.recordPayment(supplierId, paidId, 30000, data::nowIso(), QString());
+        f.service.recordPayment(supplierId, paidId, 30000, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(result.ok, qPrintable(result.error));
 
     // The settled invoice drops out, the other one stays, and the two together
@@ -298,7 +316,7 @@ void SupplierPaymentServiceTest::balance_matches_payments()
     };
     for (const auto& [target, amountCents] : payments) {
         const data::SupplierPaymentResult result =
-            f.service.recordPayment(supplierId, target, amountCents, data::nowIso(), QString());
+            f.service.recordPayment(supplierId, target, amountCents, data::nowIso(), QString(), core::SupplierPaymentMethod::Cash, f.sessionId);
         QVERIFY2(result.ok, qPrintable(result.error));
     }
 
@@ -315,6 +333,162 @@ void SupplierPaymentServiceTest::balance_matches_payments()
     // off the balance but are not tied to any invoice, so they do not settle
     // this one, which is why 25000 here is 2500 higher than the 22500 balance.
     QCOMPARE(unpaid[0].remainingCents, 25000LL);
+}
+
+
+void SupplierPaymentServiceTest::cash_payment_lowers_the_expected_till()
+{
+    // The defect this covers: paying a supplier settled their balance and wrote
+    // nothing else, so money left the drawer without a trace and the session
+    // reconciled as though it had never been paid. The operator saw a phantom
+    // shortfall the size of the payment and no receipt to explain it.
+    QTemporaryDir m_dir;
+    Fixture f(m_dir.filePath(QStringLiteral("cash_payment_lowers_the_expected_till.sqlite")));
+    QVERIFY(f.sessionId > 0);
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد نقدي"), 80000);
+    QVERIFY(supplierId > 0);
+
+    data::CashMovementRepository movements(f.db);
+    QCOMPARE(movements.sumBySessionId(f.sessionId), 0LL);
+
+    const data::SupplierPaymentResult result =
+        f.service.recordPayment(supplierId, std::nullopt, 30000, data::nowIso(), QString(),
+                                core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    // The drawer is down by exactly what was paid: the movements sum goes to
+    // -30000 and the expected total to 100000 - 30000.
+    QCOMPARE(movements.sumBySessionId(f.sessionId), -30000LL);
+    QCOMPARE(core::CashSessionCalculator::expectedTotalCents(100000, movements.sumBySessionId(f.sessionId)),
+             70000LL);
+
+    // One row, negative, and labelled: an operator reading the till list sees a
+    // supplier payment and not a bare figure to work out themselves.
+    const auto rows = movements.findBySessionId(f.sessionId);
+    QCOMPARE(rows.size(), std::size_t(1));
+    QCOMPARE(rows[0].type, core::cashMovementType::kSupplierPayment);
+    QCOMPARE(rows[0].amountCents, -30000LL);
+
+    // And the day closes square against it: counted what was expected, variance
+    // nil. Nothing to reconcile by hand afterwards.
+    QVERIFY(data::CashSessionRepository(f.db).close(f.sessionId, 70000, 70000, 0));
+    const auto session = data::CashSessionRepository(f.db).findById(f.sessionId);
+    QVERIFY(session.has_value());
+    QCOMPARE(session->varianceCents, 0LL);
+
+    // The supplier's balance still moved exactly as before the drawer did.
+    QCOMPARE(f.service.balanceFor(supplierId), 50000LL);
+}
+
+void SupplierPaymentServiceTest::cash_payment_without_a_session_is_refused()
+{
+    // cash_movements.session_id is NOT NULL, so a cash payment with no session
+    // cannot be written at all. Refused with a reason rather than recorded
+    // silently: a payment nobody can reconcile is worse than one not taken.
+    QTemporaryDir m_dir;
+    Fixture f(m_dir.filePath(QStringLiteral("cash_payment_without_a_session_is_refused.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد بلا وردية"), 80000);
+    QVERIFY(supplierId > 0);
+
+    const data::SupplierPaymentResult result =
+        f.service.recordPayment(supplierId, std::nullopt, 30000, data::nowIso(), QString(),
+                                core::SupplierPaymentMethod::Cash, std::nullopt);
+    QVERIFY(!result.ok);
+    QVERIFY(!result.error.isEmpty());
+
+    // Nothing landed: no payment, no movement, balance untouched.
+    QCOMPARE(f.payments.findBySupplierId(supplierId).size(), std::size_t(0));
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), 0LL);
+    QCOMPARE(f.service.balanceFor(supplierId), 80000LL);
+}
+
+void SupplierPaymentServiceTest::cash_payment_refuses_a_closed_session()
+{
+    // The till was closed while the form was open. The session is checked at the
+    // moment of writing, not when the dialog was built, so a payment cannot land
+    // in a session nobody is counting any more.
+    QTemporaryDir m_dir;
+    Fixture f(m_dir.filePath(QStringLiteral("cash_payment_refuses_a_closed_session.sqlite")));
+    QVERIFY(f.sessionId > 0);
+    data::CashSessionRepository sessions(f.db);
+    QVERIFY(sessions.close(f.sessionId, 100000, 100000, 0));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد وردية مغلقة"), 80000);
+    QVERIFY(supplierId > 0);
+
+    const data::SupplierPaymentResult result =
+        f.service.recordPayment(supplierId, std::nullopt, 30000, data::nowIso(), QString(),
+                                core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY(!result.ok);
+    QVERIFY(!result.error.isEmpty());
+    // The reason names the closed session, so an operator can tell this apart
+    // from the drawer being broken.
+    QVERIFY(result.error.contains(QString::number(f.sessionId)));
+
+    QCOMPARE(f.payments.findBySupplierId(supplierId).size(), std::size_t(0));
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), 0LL);
+    QCOMPARE(f.service.balanceFor(supplierId), 80000LL);
+}
+
+void SupplierPaymentServiceTest::credit_and_bank_touch_no_cash()
+{
+    // Settled on the account and paid through the bank: the supplier's balance
+    // moves, the drawer does not. Neither needs a session, so neither is refused
+    // for want of one.
+    QTemporaryDir m_dir;
+    Fixture f(m_dir.filePath(QStringLiteral("credit_and_bank_touch_no_cash.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد غير نقدي"), 100000);
+    QVERIFY(supplierId > 0);
+
+    const data::SupplierPaymentResult credit =
+        f.service.recordPayment(supplierId, std::nullopt, 30000, data::nowIso(), QStringLiteral("آجل"),
+                                core::SupplierPaymentMethod::Credit, std::nullopt);
+    QVERIFY2(credit.ok, qPrintable(credit.error));
+    const data::SupplierPaymentResult bank =
+        f.service.recordPayment(supplierId, std::nullopt, 20000, data::nowIso(), QStringLiteral("بنك"),
+                                core::SupplierPaymentMethod::Bank, std::nullopt);
+    QVERIFY2(bank.ok, qPrintable(bank.error));
+
+    QCOMPARE(f.service.balanceFor(supplierId), 50000LL);
+    // The drawer saw nothing at all.
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), 0LL);
+
+    // And the method read back is the one that was chosen, not the column default.
+    QCOMPARE(f.payments.findById(credit.paymentId)->method, core::SupplierPaymentMethod::Credit);
+    QCOMPARE(f.payments.findById(bank.paymentId)->method, core::SupplierPaymentMethod::Bank);
+}
+
+void SupplierPaymentServiceTest::method_round_trips_through_the_column()
+{
+    // The column is what every other reader gets the method from, so what goes in
+    // has to be what comes back, spelled the way the ledger stores it.
+    QTemporaryDir m_dir;
+    Fixture f(m_dir.filePath(QStringLiteral("method_round_trips_through_the_column.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+
+    const core::SupplierPaymentMethod methods[] = {core::SupplierPaymentMethod::Cash,
+                                                   core::SupplierPaymentMethod::Credit,
+                                                   core::SupplierPaymentMethod::Bank};
+    for (core::SupplierPaymentMethod method : methods) {
+        const data::SupplierPaymentResult result =
+            f.service.recordPayment(supplierId, std::nullopt, 100, data::nowIso(), QString(), method,
+                                    core::isCashPayment(method) ? std::optional<int>(f.sessionId)
+                                                                : std::nullopt);
+        QVERIFY2(result.ok, qPrintable(result.error));
+        const auto stored = f.payments.findById(result.paymentId);
+        QVERIFY(stored.has_value());
+        QCOMPARE(stored->method, method);
+        QCOMPARE(core::supplierPaymentMethodName(stored->method), core::supplierPaymentMethodName(method));
+        QCOMPARE(core::parseSupplierPaymentMethod(core::supplierPaymentMethodName(method)), method);
+    }
+
+    // A spelling this build does not know reads back as "did not come out of the
+    // drawer" rather than as cash, so a row written by a future build cannot
+    // invent a drawer movement on the way in.
+    QVERIFY(!core::parseSupplierPaymentMethod(QStringLiteral("cheque")).has_value());
+    QCOMPARE(core::parseSupplierPaymentMethod(QStringLiteral("cheque"))
+                 .value_or(core::SupplierPaymentMethod::Credit),
+             core::SupplierPaymentMethod::Credit);
 }
 
 QTEST_GUILESS_MAIN(SupplierPaymentServiceTest)

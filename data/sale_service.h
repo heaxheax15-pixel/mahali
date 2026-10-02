@@ -49,6 +49,17 @@ public:
 
     SaleReverseResult reverseSale(int saleId, int cashSessionId);
 
+    // Cancels a credit sale. Same shape as reverseSale and for the same reason:
+    // nothing is deleted or edited, a negative row is written against the
+    // original and the goods go back on the shelf.
+    //
+    // Deliberately unlike reverseSale, there is no cashSessionId parameter. A
+    // credit sale never put money in the drawer, so there is nothing to refund
+    // and no till to count — taking a session here would invite a caller to name
+    // one and then write a refund into a drawer that never gained the money in
+    // the first place.
+    SaleReverseResult reverseCustomerDebt(int transactionId);
+
 private:
     bool insertAppliedOp(const core::SyncApplyToken& token, core::SyncOpType opType, int entityId,
                          long long totalCents, long long cogsCents, QString* error);

@@ -1,12 +1,37 @@
 #include "sale_service.h"
 
 #include <QDateTime>
+#include <QDebug>
 #include <QSqlQuery>
 
+#include "core/cash_movement.h"
+#include "cash_drawer.h"
 #include "date_utils.h"
+#include "audit_log_repository.h"
 #include "sale_rules.h"
 
 namespace app::data {
+
+namespace {
+
+// The audit entry for one sale-shaped operation. A free function because it needs
+// nothing but the database, and writing it the same way in all four places is the
+// point: an operation that forgot to log would be invisible rather than merely
+// wrong.
+bool writeSaleAudit(Database& db, const QString& action, const QString& target, const QString& deviceId = {})
+{
+    AuditLogRepository audit(db);
+    const int id = deviceId.isEmpty() ? audit.record(action, target)
+                                      : audit.recordAs(deviceId, action, target);
+    if (id != 0) {
+        return true;
+    }
+    qWarning() << "audit log write failed for" << action << target;
+    return false;
+}
+
+} // namespace
+
 
 SaleService::SaleService(Database& db)
     : m_db(db)
@@ -142,6 +167,18 @@ QString error;
         }
     }
 
+    if (!writeSaleAudit(m_db, QStringLiteral("customer_debt"),
+                        QStringLiteral("transaction %1, customer %2")
+                            .arg(transactionId)
+                            .arg(customerId),
+                        applyToken ? applyToken->deviceId : QString())) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the credit sale could not be recorded in the audit log")
+            : m_db.lastError();
+        return result;
+    }
+
     if (!m_db.commit()) {
         result.error = m_db.lastError();
         return result;
@@ -242,14 +279,14 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
         return result;
     }
 
-    core::CashMovement movement;
-    movement.sessionId = session->id;
-    movement.type = QStringLiteral("sale");
-    movement.amountCents = total;
-    movement.createdAt = QDateTime::currentDateTime();
-    if (m_cashMovements.insert(movement) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyIn(
+        m_db, session->id, core::cashMovementType::kSale, total,
+        QStringLiteral("Sale #%1").arg(saleId), QStringLiteral("the sale"),
+        QStringLiteral("sale"), saleId, &movementError);
+    if (!movementId.has_value()) {
         m_db.rollback();
-        result.error = m_db.lastError();
+        result.error = movementError;
         return result;
     }
 
@@ -262,6 +299,16 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
             }
             return result;
         }
+    }
+
+    if (!writeSaleAudit(m_db, QStringLiteral("sale"),
+                        QStringLiteral("sale %1, session %2").arg(saleId).arg(cashSessionId),
+                        applyToken ? applyToken->deviceId : QString())) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the sale could not be recorded in the audit log")
+            : m_db.lastError();
+        return result;
     }
 
     if (!m_db.commit()) {
@@ -327,6 +374,7 @@ SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
     reversal.createdAt = QDateTime::currentDateTime();
     reversal.totalCents = -original->totalCents;
     reversal.deviceId = original->deviceId;
+    reversal.occasionId = original->occasionId;
     reversal.reversedSaleId = saleId;
     const int reversalId = m_sales.insert(reversal);
     if (reversalId == 0) {
@@ -366,15 +414,22 @@ SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
         }
     }
 
-    core::CashMovement cashReversal;
-    cashReversal.sessionId = session->id;
-    cashReversal.type = QStringLiteral("refund");
-    cashReversal.amountCents = -original->totalCents;
-    cashReversal.createdAt = QDateTime::currentDateTime();
-    if (m_cashMovements.insert(cashReversal) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyOut(
+        m_db, session->id, core::cashMovementType::kRefund, original->totalCents,
+        QStringLiteral("Refund of Sale #%1").arg(saleId), QStringLiteral("the refund"),
+        QStringLiteral("sale"), saleId, &movementError);
+    if (!movementId.has_value()) {
+        m_db.rollback();
+        r.error = movementError;
+        return r;
+    }
+
+    if (!writeSaleAudit(m_db, QStringLiteral("sale_refund"),
+                        QStringLiteral("sale %1, session %2").arg(saleId).arg(cashSessionId))) {
         m_db.rollback();
         r.error = m_db.lastError().isEmpty()
-            ? QStringLiteral("reverseSale: could not write the refund cash movement")
+            ? QStringLiteral("the refund could not be recorded in the audit log")
             : m_db.lastError();
         return r;
     }
@@ -383,6 +438,124 @@ SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
         r.error = m_db.lastError().isEmpty()
             ? QStringLiteral("reverseSale: could not commit the transaction")
             : m_db.lastError();
+        return r;
+    }
+    r.ok = true;
+    return r;
+}
+
+SaleReverseResult SaleService::reverseCustomerDebt(int transactionId)
+{
+    SaleReverseResult r;
+
+    const auto original = m_customerTransactions.findById(transactionId);
+    if (!original.has_value()) {
+        r.error = m_db.lastError().isEmpty() ? QStringLiteral("the credit sale does not exist")
+                                             : m_db.lastError();
+        return r;
+    }
+
+    // A payment settles debt by writing a negative row here, and one of those is
+    // not a credit sale waiting to be cancelled. Only a positive row is a sale.
+    // Reversing one would book a second amount onto a ledger that was already
+    // credited — the customer's debt would shrink by the payment as well.
+    if (original->amountCents <= 0) {
+        r.error = QStringLiteral("only a credit sale can be cancelled, and this is not one");
+        return r;
+    }
+
+    if (!m_db.beginTransaction()) {
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("could not start the transaction")
+            : m_db.lastError();
+        return r;
+    }
+
+    // Same reason as in reverseSale, and the same placement: inside the
+    // transaction, so the check and the rows it guards commit together. No
+    // unique index backs reversed_transaction_id yet, so this lookup is the only
+    // thing stopping a second cancellation of the same sale.
+    QSqlQuery existing(m_db.handle());
+    existing.prepare(
+        QStringLiteral("SELECT 1 FROM customer_transactions WHERE reversed_transaction_id = ? LIMIT 1"));
+    existing.addBindValue(transactionId);
+    if (!existing.exec()) {
+        m_db.rollback();
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("could not check for an earlier reversal")
+            : m_db.lastError();
+        return r;
+    }
+    if (existing.next()) {
+        m_db.rollback();
+        r.error = QStringLiteral("this credit sale has already been cancelled");
+        return r;
+    }
+
+    core::CustomerTransaction reversal;
+    reversal.customerId = original->customerId;
+    reversal.amountCents = -original->amountCents;
+    reversal.createdAt = QDateTime::currentDateTime();
+    reversal.reversedTransactionId = transactionId;
+    const int reversalId = m_customerTransactions.insert(reversal);
+    if (reversalId == 0) {
+        m_db.rollback();
+        r.error = m_db.lastError().isEmpty() ? QStringLiteral("could not write the cancellation")
+                                             : m_db.lastError();
+        return r;
+    }
+
+    // The goods come back, at the cost they went out at — the reversal carries
+    // its own items so the negative quantity and the negative total can never
+    // drift apart.
+    const auto originalItems = m_customerTransactionItems.findByTransactionId(transactionId);
+    for (const core::CustomerTransactionItem& originalItem : originalItems) {
+        core::CustomerTransactionItem reversalItem = originalItem;
+        reversalItem.id = 0;
+        reversalItem.customerTransactionId = reversalId;
+        reversalItem.quantity = -originalItem.quantity;
+        reversalItem.reversedId = originalItem.id;
+        if (m_customerTransactionItems.insert(reversalItem) == 0) {
+            m_db.rollback();
+            r.error = m_db.lastError().isEmpty()
+                ? QStringLiteral("could not write the cancelled sale item")
+                : m_db.lastError();
+            return r;
+        }
+
+        core::StockMovement movement;
+        movement.productId = originalItem.productId;
+        movement.delta = originalItem.quantity;
+        movement.reason = QStringLiteral("customer_debt_reversal");
+        movement.createdAt = QDateTime::currentDateTime();
+        if (m_stockMovements.insert(movement) == 0) {
+            m_db.rollback();
+            r.error = m_db.lastError().isEmpty()
+                ? QStringLiteral("could not write the stock movement")
+                : m_db.lastError();
+            return r;
+        }
+    }
+
+    // No cash movement, and the omission is the point. The sale was on account:
+    // no money entered the drawer when it was taken, so there is nothing to take
+    // out now. Writing a refund here would show the till short by the whole sale
+    // for goods that were never in it.
+
+    if (!writeSaleAudit(m_db, QStringLiteral("customer_debt_cancellation"),
+                        QStringLiteral("transaction %1, customer %2")
+                            .arg(transactionId)
+                            .arg(original->customerId))) {
+        m_db.rollback();
+        r.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the cancellation could not be recorded in the audit log")
+            : m_db.lastError();
+        return r;
+    }
+
+    if (!m_db.commit()) {
+        r.error = m_db.lastError().isEmpty() ? QStringLiteral("could not commit the transaction")
+                                             : m_db.lastError();
         return r;
     }
     r.ok = true;

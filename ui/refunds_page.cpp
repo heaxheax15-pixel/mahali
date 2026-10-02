@@ -18,8 +18,6 @@
 #include <vector>
 
 #include "core/audit_log_entry.h"
-#include "core/session.h"
-#include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/payment_repository.h"
@@ -37,14 +35,20 @@ namespace app::ui {
 
 namespace {
 
-void writeAudit(app::data::Database& db, const QString& action, const QString& target)
+// The data layer speaks one language and the page speaks the operator's, so the
+// few reasons a refund can be refused that an operator can actually do something
+// about are named here rather than shown as raw English. Anything not listed
+// falls through untouched: a driver error still has to reach the operator, and a
+// translation layer that silently dropped it would be worse than an English one.
+QString refundErrorText(const QString& error)
 {
-    core::AuditLogEntry entry;
-    entry.actor = app::core::Session::instance().actorName();
-    entry.action = action;
-    entry.target = target;
-    entry.createdAt = QDateTime::currentDateTime();
-    app::data::AuditLogRepository(db).insert(entry);
+    if (error == QLatin1String("this payment has already been refunded")) {
+        return QCoreApplication::translate("RefundsPage", "سبق استرداد هذا السداد");
+    }
+    if (error == QLatin1String("payment is not refundable")) {
+        return QCoreApplication::translate("RefundsPage", "هذا السداد غير قابل للاسترداد");
+    }
+    return error;
 }
 
 // The one button on a row: a symbol rather than the word, because the column is
@@ -355,11 +359,6 @@ void RefundsPage::refundSale(int saleId)
         m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
-    data::SaleRepository sales(m_db);
-    const auto original = sales.findById(saleId);
-    writeAudit(m_db, QStringLiteral("sale_refund"),
-original ? tr("مبيع #%1 (%2)").arg(saleId).arg(formatMoney(original->totalCents))
-                         : tr("مبيع #%1").arg(saleId));
     m_notice->setText(tr("تم الاسترداد وعادت البضاعة للرف"));
     m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();
@@ -379,12 +378,10 @@ void RefundsPage::refundPayment(int paymentId, const QString& note)
     data::PaymentService service(m_db);
     const data::PaymentResult result = service.refundCustomerPayment(paymentId, session->id, note);
     if (!result.ok) {
-        m_notice->setText(tr("تعذر استرداد السداد: %1").arg(result.error));
+        m_notice->setText(tr("تعذر استرداد السداد: %1").arg(refundErrorText(result.error)));
         m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
-    writeAudit(m_db, QStringLiteral("customer_payment_refund"),
-               tr("سداد #%1").arg(paymentId));
     m_notice->setText(tr("تم استرداد السداد"));
     m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();

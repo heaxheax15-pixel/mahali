@@ -129,6 +129,15 @@ Updates cost_cents for each product (PMP).
 
 Supplier payment:
 
+Carries a `method`: `cash`, `credit` or `bank`.
+
+`cash` names the open cash session it is paid out of and writes a
+`cash_movements` row of type `supplier_payment` carrying a **negative** amount.
+Without a session there is no way to know which day the money left on, so a cash
+payment that names no open session is refused rather than recorded.
+
+`credit` and `bank` need no session and write no cash movement.
+
 Deducts from linked invoice, or oldest-first (FIFO).
 
 Reduces supplier balance.
@@ -152,6 +161,28 @@ Credit sale invoice:
 Increases customer balance.
 
 On payment, reduces balance.
+
+A repayment is written as a negative row on the same ledger, which is why the
+balance sums every row with no filter on the sign: filtering to positive would
+drop both repayments and cancellations and leave a settled or cancelled sale
+still showing as debt.
+
+Cancelling a credit sale:
+
+`reverseCustomerDebt` writes a negative `customer_transactions` row carrying
+`reversed_transaction_id` against the original, and negative
+`customer_transaction_items` rows carrying `reversed_id` against each original
+item, at the same prices and costs. Nothing is updated or deleted.
+
+The goods go back on the shelf through a `stock_movements` row of reason
+`customer_debt_reversal`.
+
+No cash movement: a credit sale never put money in the drawer, so cancelling it
+takes none out.
+
+A sale can be cancelled once — a lookup on `reversed_transaction_id` refuses the
+second attempt — and a negative row (a repayment, or an earlier cancellation) is
+not a sale and cannot be cancelled.
 
 11. Reports
 Daily (automatic on session close):

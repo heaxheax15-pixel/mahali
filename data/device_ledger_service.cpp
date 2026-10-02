@@ -2,10 +2,23 @@
 
 #include <QDateTime>
 
+#include "core/cash_movement.h"
+#include "audit_log_repository.h"
+#include "cash_drawer.h"
 #include "device_identity.h"
 #include "sale_rules.h"
 
 namespace app::data {
+
+namespace {
+
+bool writeDeviceAudit(Database& db, const QString& deviceId, const QString& action, int entityId)
+{
+    AuditLogRepository audit(db);
+    return audit.recordAs(deviceId, action, QStringLiteral("%1 #%2").arg(action).arg(entityId)) != 0;
+}
+
+} // namespace
 
 DeviceLedgerService::DeviceLedgerService(Database& db, const QString& deviceId)
     : m_db(db)
@@ -21,6 +34,9 @@ DeviceLedgerService::DeviceLedgerService(Database& db, const QString& deviceId)
     , m_payments(db)
     , m_syncSequence(db)
     , m_outbox(db)
+    , m_occasions(db)
+    , m_settings(db)
+    , m_occasionService(db, m_occasions, m_settings)
 {
 }
 
@@ -105,8 +121,7 @@ DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& it
         return result;
     }
 
-    NSStringLocal:
-QString resolveError;
+    QString resolveError;
     const QVector<core::SaleItem> resolved = resolveSaleItems(m_products, items, /*allowOversold=*/false,
                                                               &resolveError);
     if (resolved.isEmpty()) {
@@ -137,6 +152,14 @@ QString resolveError;
     sale.totalCents = total;
     sale.deviceId = m_deviceId;
     sale.oversold = false;
+    // Stamped with whatever occasion is running, exactly as the server-side sale
+    // service stamps it. A device that skipped this wrote sales that belonged to
+    // no event at all, and the occasion report then showed a shortfall that was
+    // only an omission here — the takings were in the daily total and missing
+    // from the event they belonged to.
+    if (const std::optional<core::Occasion> occasion = m_occasionService.current()) {
+        sale.occasionId = occasion->id;
+    }
     const int saleId = m_sales.insert(sale);
     if (saleId == 0) {
         m_db.rollback();
@@ -160,14 +183,14 @@ QString resolveError;
         return result;
     }
 
-    core::CashMovement movement;
-    movement.sessionId = session->id;
-    movement.type = QStringLiteral("sale");
-    movement.amountCents = total;
-    movement.createdAt = QDateTime::currentDateTime();
-    if (m_cashMovements.insert(movement) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyIn(
+        m_db, session->id, core::cashMovementType::kSale, total,
+        QStringLiteral("Sale #%1").arg(saleId), QStringLiteral("the sale"),
+        QStringLiteral("sale"), saleId, &movementError);
+    if (!movementId.has_value()) {
         m_db.rollback();
-        result.error = m_db.lastError();
+        result.error = movementError;
         return result;
     }
 
@@ -177,6 +200,14 @@ QString resolveError;
     if (opId == 0) {
         m_db.rollback();
         result.error = error;
+        return result;
+    }
+
+    if (!writeDeviceAudit(m_db, m_deviceId, QStringLiteral("sale"), saleId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the sale could not be recorded in the audit log")
+            : m_db.lastError();
         return result;
     }
 
@@ -279,6 +310,14 @@ DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVe
         return result;
     }
 
+    if (!writeDeviceAudit(m_db, m_deviceId, QStringLiteral("customer_debt"), transactionId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the debt could not be recorded in the audit log")
+            : m_db.lastError();
+        return result;
+    }
+
     if (!m_db.commit()) {
         result.error = m_db.lastError();
         return result;
@@ -332,15 +371,14 @@ DeviceOpResult DeviceLedgerService::recordCustomerPayment(int customerId, long l
         return result;
     }
 
-    core::CashMovement movement;
-    movement.sessionId = session->id;
-    movement.type = QStringLiteral("customer_payment");
-    movement.amountCents = amountCents;
-    movement.createdAt = payment.createdAt;
-    movement.note = note;
-    if (m_cashMovements.insert(movement) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyIn(
+        m_db, session->id, core::cashMovementType::kCustomerPayment, amountCents,
+        note, QStringLiteral("the customer payment"),
+        QStringLiteral("payment"), paymentId, &movementError);
+    if (!movementId.has_value()) {
         m_db.rollback();
-        result.error = m_db.lastError();
+        result.error = movementError;
         return result;
     }
 
@@ -351,6 +389,14 @@ DeviceOpResult DeviceLedgerService::recordCustomerPayment(int customerId, long l
     if (opId == 0) {
         m_db.rollback();
         result.error = error;
+        return result;
+    }
+
+    if (!writeDeviceAudit(m_db, m_deviceId, QStringLiteral("customer_payment"), paymentId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the payment could not be recorded in the audit log")
+            : m_db.lastError();
         return result;
     }
 

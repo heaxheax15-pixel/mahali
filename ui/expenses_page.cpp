@@ -12,8 +12,6 @@
 #include <QVBoxLayout>
 
 #include "core/audit_log_entry.h"
-#include "core/session.h"
-#include "data/audit_log_repository.h"
 #include "data/cash_entry_service.h"
 #include "data/cash_session_repository.h"
 #include "data/expense_repository.h"
@@ -32,16 +30,6 @@ namespace {
 // displayed: reading the visible label instead would break the moment it is translated.
 const QString kExpenseType = QStringLiteral("expense");
 const QString kDrawingType = QStringLiteral("drawing");
-
-void writeAudit(app::data::Database& db, const QString& action, const QString& target)
-{
-    core::AuditLogEntry entry;
-    entry.actor = app::core::Session::instance().actorName();
-    entry.action = action;
-    entry.target = target;
-    entry.createdAt = QDateTime::currentDateTime();
-    data::AuditLogRepository(db).insert(entry);
-}
 
 } // namespace
 
@@ -314,11 +302,6 @@ void ExpensesPage::reverseRow(int row)
         m_notice->setVisible(!m_notice->text().isEmpty());
         return;
     }
-    writeAudit(m_db, QStringLiteral("entry_reversal"),
-               QStringLiteral("%1 #%2 (%3)")
-                   .arg(typeLabel)
-                   .arg(entryId)
-                   .arg(formatMoney(result.amountCents)));
     m_notice->setText(tr("أُلغي: %1").arg(formatMoney(result.amountCents)));
     m_notice->setVisible(!m_notice->text().isEmpty());
     refresh();

@@ -96,12 +96,38 @@ int PaymentRepository::insert(const core::Payment& payment)
     return query.lastInsertId().toInt();
 }
 
+bool PaymentRepository::hasReversalOf(int originalPaymentId) const
+{
+    QSqlQuery existing(m_db.handle());
+    existing.prepare(QStringLiteral("SELECT 1 FROM payments WHERE reversed_id = ? LIMIT 1"));
+    existing.addBindValue(originalPaymentId);
+    if (!existing.exec()) {
+        m_db.recordError(existing.lastError(), QStringLiteral("PaymentRepository::hasReversalOf"));
+        return false;
+    }
+    return existing.next();
+}
+
 bool PaymentRepository::reverse(int originalPaymentId, long long amountCents, const QString& note)
 {
     const std::optional<core::Payment> original = findById(originalPaymentId);
     if (!original.has_value()) {
         return false;
     }
+    // Nothing stops the same payment being refunded twice, and reversed_id has
+    // no unique index at this level, so the guard has to be a lookup. Without it
+    // a second click writes a second mirrored row and returns the money to the
+    // till twice. The caller (PaymentService::refundCustomerPayment) still
+    // refuses a row that is itself a reversal, but this does not rely on every
+    // caller to check.
+    //
+    // The lookup and the insert it protects share the caller's transaction on
+    // purpose: a second refund that arrives while the first is still running
+    // cannot pass the check against a snapshot that is about to change.
+    if (hasReversalOf(originalPaymentId)) {
+        return false;
+    }
+
     core::Payment reversal;
     reversal.customerId = original->customerId;
     reversal.amountCents = -amountCents;

@@ -9,6 +9,7 @@
 #include "barcode_utils.h"
 #include "database.h"
 #include "applied_op_repository.h"
+#include "schema_migrations.h"
 #include "product_repository.h"
 #include "sale_repository.h"
 #include "sale_item_repository.h"
@@ -18,15 +19,20 @@
 #include "customer_transaction_item_repository.h"
 #include "supplier_repository.h"
 #include "supplier_payment_repository.h"
+#include "supplier_payment_service.h"
 #include "supplier_return_repository.h"
 #include "supplier_return_item_repository.h"
 #include "purchase_repository.h"
 #include "payment_repository.h"
+#include "payment_service.h"
+#include "audit_log_repository.h"
 #include "expense_repository.h"
 #include "owner_drawing_repository.h"
 #include "stock_movement_repository.h"
 #include "cash_session_repository.h"
 #include "cash_movement_repository.h"
+#include "cash_drawer.h"
+#include "cash_entry_service.h"
 #include "user_repository.h"
 #include "admin_secret_repository.h"
 #include "device_repository.h"
@@ -73,6 +79,19 @@ private slots:
     void saleInsertAndItems();
     void customerTransactionAndItems();
     void customer_balance_uses_opening_and_transactions();
+    void reverse_customer_debt_offsets_the_ledger_and_returns_stock();
+    void reverse_customer_debt_touches_no_cash();
+    void reverse_customer_debt_refuses_a_second_reversal();
+    void reverse_customer_debt_refuses_a_payment_row();
+    void reverse_customer_debt_refuses_a_missing_sale();
+    void unique_indexes_reject_a_second_reversal();
+    void unique_indexes_never_reject_an_ordinary_row();
+    void audit_row_is_written_by_the_service_not_the_caller();
+    void audit_row_rolls_back_with_the_movement_it_describes();
+    void migration_skips_the_index_when_the_ledger_holds_a_duplicate();
+    void cash_movements_carry_correct_reference();
+    void close_validation_detects_violations();
+    void cash_reference_migration_keeps_legacy_null_and_adds_index();
     void customer_active_filter();
     void paymentInsert();
     void expenseAndDrawingInsert();
@@ -96,6 +115,7 @@ private slots:
     void journalModeMatchesDatabaseRole();
     void pruneOnlyExpiredAcknowledgedOutboxRows();
     void appliedOpsJournalPrunesBoundedly();
+    void invalid_outbox_payload_is_permanently_failed_with_error();
     void user_pin_roundtrip();
     void admin_master_roundtrip();
     void language_setting_persists();
@@ -103,6 +123,8 @@ private slots:
     void last_error_clears_on_success();
     void reverseSale_returns_error_on_missing_sale();
     void payment_reverse_returns_false_on_missing();
+    void payment_reverse_refuses_a_second_reversal();
+    void refund_customer_payment_refuses_a_second_refund();
     void reverseSale_refuses_double_reversal();
     void overflow_guard();
     void overflow_guard_cogs();
@@ -746,6 +768,435 @@ void DataLayerTest::customerTransactionAndItems()
     const auto txs = txRepo.findByCustomerId(customerId);
     QCOMPARE(txs.size(), 1);
     QCOMPARE(txs[0].amountCents, 70000LL);
+}
+
+
+// A helper that puts one credit sale on a ledger, so the reversal cases below
+// each start from the same shape: a positive transaction, its items, and the
+// stock already gone out.
+namespace {
+
+struct DebtFixture {
+    data::Database db;
+    int customerId = 0;
+    int productId = 0;
+    int transactionId = 0;
+
+    explicit DebtFixture(const QString& path)
+        : db(path)
+    {
+        core::Product product;
+        product.name = QStringLiteral("شاي");
+        product.salePriceCents = 7000;
+        product.costPriceCents = 5000;
+        data::ProductRepository products(db);
+        productId = products.save(product);
+        products.adjustStock(productId, 10, QStringLiteral("opening"));
+
+        core::Customer customer;
+        customer.name = QStringLiteral("زبون");
+        customerId = data::CustomerRepository(db).save(customer);
+
+        core::CustomerTransaction tx;
+        tx.customerId = customerId;
+        tx.amountCents = 14000;
+        transactionId = data::CustomerTransactionRepository(db).insert(tx);
+
+        core::CustomerTransactionItem item;
+        item.customerTransactionId = transactionId;
+        item.productId = productId;
+        item.quantity = 2;
+        item.unitPriceCents = 7000;
+        item.unitCostCents = 5000;
+        data::CustomerTransactionItemRepository(db).insert(item);
+
+        data::StockMovementRepository movements(db);
+        movements.insert([] {
+            core::StockMovement movement;
+            movement.productId = 0;
+            movement.delta = -2;
+            movement.reason = QStringLiteral("customer_debt");
+            movement.createdAt = QDateTime::currentDateTime();
+            return movement;
+        }());
+    }
+
+    long long stock()
+    {
+        const auto product = data::ProductRepository(db).findById(productId);
+        return product.has_value() ? product->quantity : -1;
+    }
+
+    long long cashSum()
+    {
+        return data::CashMovementRepository(db).sumBySessionId(1);
+    }
+};
+
+} // namespace
+
+void DataLayerTest::reverse_customer_debt_offsets_the_ledger_and_returns_stock()
+{
+    // The defect this covers: a credit sale could be taken on the ledger and never
+    // given back. Cancelling it is what puts the goods back and takes the amount
+    // off the customer's debt, and until now there was no way to do it.
+    DebtFixture f(m_dir.filePath(QStringLiteral("reverse_customer_debt.sqlite")));
+    QVERIFY(f.transactionId > 0);
+    const long long stockBefore = f.stock();
+    QCOMPARE(data::CustomerRepository(f.db).balanceCentsFor(f.customerId), 14000LL);
+
+    data::SaleService sales(f.db);
+    const data::SaleReverseResult result = sales.reverseCustomerDebt(f.transactionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    // The debt is gone, and it is gone because of a negative row against the
+    // original rather than because the original was edited away.
+    QCOMPARE(data::CustomerRepository(f.db).balanceCentsFor(f.customerId), 0LL);
+    const auto txs = data::CustomerTransactionRepository(f.db).findByCustomerId(f.customerId);
+    QCOMPARE(txs.size(), std::size_t(2));
+    QCOMPARE(txs[1].amountCents, -14000LL);
+    QCOMPARE(txs[1].reversedTransactionId, f.transactionId);
+    QCOMPARE(txs[0].amountCents, 14000LL);
+
+    // The goods came back.
+    QCOMPARE(f.stock(), stockBefore + 2);
+
+    // And the reversal carries its own items, so the quantity that came back and
+    // the amount taken off cannot drift apart.
+    data::CustomerTransactionItemRepository items(f.db);
+    QCOMPARE(items.findByTransactionId(txs[1].id).size(), std::size_t(1));
+    QCOMPARE(items.findByTransactionId(txs[1].id)[0].quantity, -2LL);
+    QCOMPARE(items.findByTransactionId(txs[1].id)[0].reversedId,
+             items.findByTransactionId(f.transactionId)[0].id);
+}
+
+void DataLayerTest::reverse_customer_debt_touches_no_cash()
+{
+    // A credit sale put no money in the drawer, so cancelling it must take none
+    // out. A refund written here would show the till short by the whole sale for
+    // goods that were never in it — the drawer would not reconcile at close and
+    // there would be no receipt to explain the gap.
+    DebtFixture f(m_dir.filePath(QStringLiteral("reverse_customer_debt_no_cash.sqlite")));
+    data::CashMovementRepository movements(f.db);
+    const long long before = f.cashSum();
+
+    data::SaleService sales(f.db);
+    const data::SaleReverseResult result = sales.reverseCustomerDebt(f.transactionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    QCOMPARE(f.cashSum(), before);
+    QCOMPARE(movements.findBySessionId(1).size(), std::size_t(0));
+}
+
+void DataLayerTest::reverse_customer_debt_refuses_a_second_reversal()
+{
+    // Nothing stops the same sale being cancelled twice, and
+    // reversed_transaction_id has no unique index, so the guard has to be a
+    // lookup — inside the transaction, so the check and the row it guards commit
+    // as one. Without it the ledger takes the amount off twice and the customer
+    // appears to owe money in the other direction.
+    DebtFixture f(m_dir.filePath(QStringLiteral("reverse_customer_debt_twice.sqlite")));
+    data::SaleService sales(f.db);
+    QVERIFY(sales.reverseCustomerDebt(f.transactionId).ok);
+    const long long stockAfterFirst = f.stock();
+
+    const data::SaleReverseResult second = sales.reverseCustomerDebt(f.transactionId);
+    QVERIFY(!second.ok);
+    QVERIFY2(!second.error.isEmpty(), "a refusal has to say why");
+
+    // Nothing moved the second time.
+    QCOMPARE(data::CustomerRepository(f.db).balanceCentsFor(f.customerId), 0LL);
+    QCOMPARE(f.stock(), stockAfterFirst);
+    QCOMPARE(data::CustomerTransactionRepository(f.db)
+                 .findByCustomerId(f.customerId)
+                 .size(),
+             std::size_t(2));
+}
+
+void DataLayerTest::reverse_customer_debt_refuses_a_payment_row()
+{
+    // Settling a debt writes a negative row on the same ledger. Cancelling one
+    // would book the amount off again, so the customer would see their repayment
+    // credited back to them — a debt in the other direction where none exists.
+    DebtFixture f(m_dir.filePath(QStringLiteral("reverse_customer_debt_payment.sqlite")));
+    data::CustomerTransactionRepository transactions(f.db);
+    core::CustomerTransaction repayment;
+    repayment.customerId = f.customerId;
+    repayment.amountCents = -5000;
+    const int repaymentId = transactions.insert(repayment);
+    QVERIFY(repaymentId > 0);
+
+    data::SaleService sales(f.db);
+    const data::SaleReverseResult result = sales.reverseCustomerDebt(repaymentId);
+    QVERIFY(!result.ok);
+
+    // Untouched: the repayment still stands.
+    QCOMPARE(data::CustomerRepository(f.db).balanceCentsFor(f.customerId), 9000LL);
+    QCOMPARE(transactions.findByCustomerId(f.customerId).size(), std::size_t(2));
+}
+
+void DataLayerTest::reverse_customer_debt_refuses_a_missing_sale()
+{
+    // 999999 is not a row anyone inserted. The call used to have no way to say
+    // so, and a caller that checked nothing went on to report success.
+    DebtFixture f(m_dir.filePath(QStringLiteral("reverse_customer_debt_missing.sqlite")));
+    data::SaleService sales(f.db);
+    const data::SaleReverseResult result = sales.reverseCustomerDebt(999999);
+    QVERIFY(!result.ok);
+    QVERIFY(!result.error.isEmpty());
+    QCOMPARE(data::CustomerTransactionRepository(f.db)
+                 .findByCustomerId(f.customerId)
+                 .size(),
+             std::size_t(1));
+    QCOMPARE(data::CustomerRepository(f.db).balanceCentsFor(f.customerId), 14000LL);
+}
+
+
+// The five reversal ledgers, and how to put one ordinary row and two reversal
+// rows into each by hand. Raw SQL on purpose: the point of these cases is what
+// the database does with the write, and going through a repository would have
+// its own guards in the way.
+namespace {
+
+struct ReversalTable {
+    const char* index;
+    const char* table;
+    const char* reversedColumn;
+    const char* originalInsert;
+    const char* reversalInsert;
+};
+
+const ReversalTable kReversalTables[] = {
+    {"uq_payments_one_reversal", "payments", "reversed_id",
+     "INSERT INTO payments (customer_id, amount_cents, created_at, reversed_id) VALUES (1, 1000, '2024-01-01T00:00:00.000', 0)",
+     "INSERT INTO payments (customer_id, amount_cents, created_at, reversed_id) VALUES (1, -1000, '2024-01-02T00:00:00.000', %1)"},
+    {"uq_expenses_one_reversal", "expenses", "reversed_id",
+     "INSERT INTO expenses (created_at, label, amount_cents, reversed_id) VALUES ('2024-01-01T00:00:00.000', 'x', 1000, 0)",
+     "INSERT INTO expenses (created_at, label, amount_cents, reversed_id) VALUES ('2024-01-02T00:00:00.000', 'y', -1000, %1)"},
+    {"uq_owner_drawings_one_reversal", "owner_drawings", "reversed_id",
+     "INSERT INTO owner_drawings (created_at, amount_cents, reversed_id) VALUES ('2024-01-01T00:00:00.000', 1000, 0)",
+     "INSERT INTO owner_drawings (created_at, amount_cents, reversed_id) VALUES ('2024-01-02T00:00:00.000', -1000, %1)"},
+    {"uq_sales_one_reversal", "sales", "reversed_sale_id",
+     "INSERT INTO sales (created_at, total_cents, device_id, reversed_sale_id) VALUES ('2024-01-01T00:00:00.000', 1000, 'dev', 0)",
+     "INSERT INTO sales (created_at, total_cents, device_id, reversed_sale_id) VALUES ('2024-01-02T00:00:00.000', -1000, 'dev', %1)"},
+    {"uq_customer_transactions_one_reversal", "customer_transactions", "reversed_transaction_id",
+     "INSERT INTO customer_transactions (customer_id, amount_cents, created_at, reversed_transaction_id) VALUES (1, 1000, '2024-01-01T00:00:00.000', 0)",
+     "INSERT INTO customer_transactions (customer_id, amount_cents, created_at, reversed_transaction_id) VALUES (1, -1000, '2024-01-02T00:00:00.000', %1)"},
+};
+
+long long lastInsertId(const QSqlDatabase& db)
+{
+    QSqlQuery query(db);
+    if (!query.exec(QStringLiteral("SELECT last_insert_rowid()")) || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toLongLong();
+}
+
+} // namespace
+
+void DataLayerTest::unique_indexes_reject_a_second_reversal()
+{
+    // The service guards are the first line and speak the operator's language.
+    // These indexes are the second: for the writer nobody remembered to change,
+    // the database itself refuses the write rather than letting a till gain the
+    // same money back twice.
+    for (const ReversalTable& spec : kReversalTables) {
+        const QString originalSql = QString::fromLatin1(spec.originalInsert);
+        const QString reversalSql = QString::fromLatin1(spec.reversalInsert);
+
+        QSqlQuery original(m_db->handle());
+        QVERIFY2(original.exec(originalSql), qPrintable(original.lastError().text()));
+        const long long originalId = lastInsertId(m_db->handle());
+        QVERIFY(originalId > 0);
+
+        QSqlQuery first(m_db->handle());
+        QVERIFY2(first.exec(reversalSql.arg(originalId)),
+                 qPrintable(QStringLiteral("%1: first reversal refused").arg(QLatin1StringView(spec.index))));
+
+        // Second reversal of the same original: this is the write the index
+        // exists to stop.
+        QSqlQuery second(m_db->handle());
+        QVERIFY2(!second.exec(reversalSql.arg(originalId)),
+                 qPrintable(QStringLiteral("%1 let a second reversal through: %2")
+                                .arg(QLatin1StringView(spec.index), originalSql)));
+        QVERIFY(!second.lastError().text().isEmpty());
+    }
+}
+
+void DataLayerTest::unique_indexes_never_reject_an_ordinary_row()
+{
+    // The whole reason the indexes are partial. "Not a reversal" is 0, and it
+    // sits on every ordinary row in every one of these tables — a second sale,
+    // a second expense, the first payment of every customer. A plain unique
+    // index on the column would refuse the second of each and take the shop's
+    // daily work with it.
+    for (const ReversalTable& spec : kReversalTables) {
+        const QString originalSql = QString::fromLatin1(spec.originalInsert);
+        for (int i = 0; i < 3; ++i) {
+            QSqlQuery query(m_db->handle());
+            QVERIFY2(query.exec(originalSql),
+                     qPrintable(QStringLiteral("ordinary row %1 in %2 refused: %3")
+                                    .arg(i)
+                                    .arg(QLatin1StringView(spec.table), query.lastError().text())));
+        }
+
+        // And two different originals can each be reversed once: the rule is per
+        // original, not per table.
+        QSqlQuery a(m_db->handle());
+        QVERIFY(a.exec(originalSql));
+        const long long firstId = lastInsertId(m_db->handle());
+        QSqlQuery b(m_db->handle());
+        QVERIFY(b.exec(originalSql));
+        const long long secondId = lastInsertId(m_db->handle());
+        QVERIFY(firstId != secondId);
+
+        QSqlQuery reversalA(m_db->handle());
+        QVERIFY2(reversalA.exec(QString::fromLatin1(spec.reversalInsert).arg(firstId)),
+                 qPrintable(QStringLiteral("%1: first reversal refused").arg(QLatin1StringView(spec.index))));
+        QSqlQuery reversalB(m_db->handle());
+        QVERIFY2(reversalB.exec(QString::fromLatin1(spec.reversalInsert).arg(secondId)),
+                 qPrintable(QStringLiteral("%1: reversal of a second original refused")
+                                .arg(QLatin1StringView(spec.index))));
+    }
+}
+
+void DataLayerTest::migration_skips_the_index_when_the_ledger_holds_a_duplicate()
+{
+    // A shop that already has a double reversal must still be able to open its
+    // till. The migration reports the duplicate and leaves that one index off, so
+    // the service checks keep protecting the ledger and the log says plainly what
+    // the database is not protecting. Refusing to open — or worse, quietly
+    // deleting a row to make the index fit — would be the wrong trade: the books
+    // are append-only, and a row removed to satisfy an index takes the record of a
+    // real event with it.
+    const QString path = m_dir.filePath(QStringLiteral("legacy_duplicate.sqlite"));
+    const QString connection = QStringLiteral("legacy-duplicate");
+
+    // Built with a plain SQLite handle before any of this build's code touches
+    // it, which is how a database from an older version actually arrives: at
+    // version 0, holding rows nobody has checked.
+    {
+        QSqlDatabase legacy = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection);
+        legacy.setDatabaseName(path);
+        QVERIFY(legacy.open());
+        QSqlQuery create(legacy);
+        QVERIFY(create.exec(QStringLiteral(
+            "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,"
+            " opening_balance_cents INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)")));
+        QVERIFY(create.exec(QStringLiteral(
+            "CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL,"
+            " amount_cents INTEGER NOT NULL, created_at TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',"
+            " reversed_id INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(create.exec(QStringLiteral("INSERT INTO customers (name) VALUES ('x')")));
+        QVERIFY(create.exec(QString::fromLatin1(kReversalTables[0].originalInsert)));
+        const QString reversalSql = QString::fromLatin1(kReversalTables[0].reversalInsert);
+        // Two reversals of the same original: the state the migration has to
+        // decide what to do about.
+        QVERIFY(create.exec(reversalSql.arg(1)));
+        QVERIFY(create.exec(reversalSql.arg(1)));
+        legacy.close();
+    }
+    QSqlDatabase::removeDatabase(connection);
+
+    // Opening it is the migration running. This must not throw.
+    data::Database db(path);
+
+    // Both duplicate rows are still there. Nothing was deleted to make room for
+    // the index, and the books still balance the way they did.
+    QSqlQuery duplicates(db.handle());
+    QVERIFY(duplicates.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM payments WHERE reversed_id <> 0")));
+    QVERIFY(duplicates.next());
+    QCOMPARE(duplicates.value(0).toInt(), 2);
+
+    // That one index was left off, and only that one. A duplicate in one ledger
+    // must not cost the shop the protection on the other four.
+    for (int i = 0; i < 5; ++i) {
+        QSqlQuery indexList(db.handle());
+        QVERIFY(indexList.exec(QStringLiteral("PRAGMA index_list(%1)")
+                                    .arg(QLatin1StringView(kReversalTables[i].table))));
+        bool present = false;
+        while (indexList.next()) {
+            present = present
+                || indexList.value(1).toString() == QLatin1StringView(kReversalTables[i].index);
+        }
+        QCOMPARE(present, i != 0);
+    }
+
+    // And the ordinary work still goes through on the ledger whose index is off,
+    // which is the state the warning describes.
+    QSqlQuery ordinary(db.handle());
+    QVERIFY(ordinary.exec(QString::fromLatin1(kReversalTables[0].originalInsert)));
+    QVERIFY(ordinary.exec(QString::fromLatin1(kReversalTables[0].originalInsert)));
+}
+
+
+void DataLayerTest::audit_row_is_written_by_the_service_not_the_caller()
+{
+    // The audit rows used to be written by the page that asked for the movement,
+    // after the service had already committed. A log that records an expense the
+    // transaction never kept is worse than no log: it is believed. These cases
+    // check both halves — the service writes the row itself, and it goes away
+    // with the movement it describes.
+    data::Database db(m_dir.filePath(QStringLiteral("audit_in_service.sqlite")));
+    const int sessionId = data::CashSessionRepository(db).open(10000);
+    QVERIFY(sessionId > 0);
+
+    // Nothing but the service has been asked to do anything, and a row is there
+    // already — so the entry did not come from a page.
+    data::CashEntryService entries(db);
+    QVERIFY(entries.recordExpense(QStringLiteral("كهرباء"), 1500, sessionId).ok);
+
+    data::AuditLogRepository audit(db);
+    const auto logged = audit.findAll();
+    QCOMPARE(logged.size(), std::size_t(1));
+    QCOMPARE(logged[0].action, QStringLiteral("expense"));
+    QVERIFY2(logged[0].target.contains(QStringLiteral("expense #")),
+             "the target has to name the entry the operator would look up");
+
+    // A second operation logs its own line rather than appending to the first:
+    // the count is what an auditor counts.
+    QVERIFY(entries.recordDrawing(QStringLiteral("سحب"), 2000, sessionId).ok);
+    QCOMPARE(audit.findAll().size(), std::size_t(2));
+
+    // And the reversal is audited by the service too, on the same transaction as
+    // the money coming back into the till.
+    QVERIFY(entries.reverseExpense(1, sessionId).ok);
+    const auto afterReversal = audit.findAll();
+    QCOMPARE(afterReversal.size(), std::size_t(3));
+    QCOMPARE(afterReversal[2].action, QStringLiteral("entry_reversal"));
+}
+
+void DataLayerTest::audit_row_rolls_back_with_the_movement_it_describes()
+{
+    // The failure the UI-written log could not catch: the service refuses, so the
+    // movement never happened, and no audit row may claim that it did. The
+    // database is left holding exactly what it held before the attempt.
+    data::Database db(m_dir.filePath(QStringLiteral("audit_rollback.sqlite")));
+    const int sessionId = data::CashSessionRepository(db).open(10000);
+    QVERIFY(sessionId > 0);
+    data::AuditLogRepository audit(db);
+    QCOMPARE(audit.findAll().size(), std::size_t(0));
+
+    data::CashEntryService entries(db);
+    // A session that was closed after the page was built: the operator clicked
+    // save on a till nobody is counting any more.
+    QVERIFY(data::CashSessionRepository(db).close(sessionId, 10000, 10000, 0));
+
+    const data::CashEntryResult refused = entries.recordExpense(QStringLiteral("كهرباء"), 1500, sessionId);
+    QVERIFY(!refused.ok);
+    QVERIFY(!refused.error.isEmpty());
+
+    // Nothing at all: no expense, no cash movement, and above all no audit row
+    // pointing at one.
+    QCOMPARE(audit.findAll().size(), std::size_t(0));
+    QCOMPARE(data::ExpenseRepository(db)
+                 .findBetween(QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+                              QDateTime::currentDateTime())
+                 .size(),
+             std::size_t(0));
+    QCOMPARE(data::CashMovementRepository(db).sumBySessionId(sessionId), 0LL);
 }
 
 void DataLayerTest::customer_balance_uses_opening_and_transactions()
@@ -1868,6 +2319,101 @@ void DataLayerTest::payment_reverse_returns_false_on_missing()
     QCOMPARE(check.value(0).toInt(), 0);
 }
 
+void DataLayerTest::payment_reverse_refuses_a_second_reversal()
+{
+    // Reversing the same payment twice returned money to the till twice. The
+    // guard is a lookup inside the caller's transaction, not a unique index:
+    // payments.reversed_id only got a partial unique index in the 1e migration,
+    // and a repository that relied on it would fail on an older database.
+    data::PaymentRepository payments(*m_db);
+
+    data::CustomerRepository customers(*m_db);
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون استرجاع مزدوج");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    core::Payment payment;
+    payment.customerId = customerId;
+    payment.amountCents = 4500;
+    const int paymentId = payments.insert(payment);
+    QVERIFY(paymentId > 0);
+
+    QVERIFY(payments.hasReversalOf(paymentId) == false);
+    QVERIFY(payments.reverse(paymentId, 4500, QStringLiteral("first refund")));
+    QVERIFY(payments.hasReversalOf(paymentId));
+
+    // The second refund: refused, and nothing written.
+    QVERIFY(!payments.reverse(paymentId, 4500, QStringLiteral("second refund")));
+
+    QSqlQuery count(m_db->handle());
+    QVERIFY(count.prepare(QStringLiteral("SELECT COUNT(*) FROM payments WHERE reversed_id = ?")));
+    count.addBindValue(paymentId);
+    QVERIFY(count.exec());
+    QVERIFY(count.next());
+    QCOMPARE(count.value(0).toInt(), 1);
+
+    // The original keeps its own amount: a reversal adds a row, it never
+    // rewrites history.
+    const auto original = payments.findById(paymentId);
+    QVERIFY(original.has_value());
+    QCOMPARE(original->amountCents, 4500LL);
+}
+
+void DataLayerTest::refund_customer_payment_refuses_a_second_refund()
+{
+    // The whole refund, seen from the service the cashier actually calls: the
+    // second attempt has to come back as a failure with a reason, and the till
+    // has to be left exactly where the first refund left it.
+    data::Database db(m_dir.filePath(QStringLiteral("double_refund.sqlite")));
+    data::CustomerRepository customers(db);
+    data::CashSessionRepository sessions(db);
+    data::PaymentService service(db);
+
+    const int sessionId = sessions.open(100000);
+    QVERIFY(sessionId > 0);
+
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    const data::PaymentResult paid = service.recordCustomerPayment(customerId, 3000, sessionId, QString());
+    QVERIFY2(paid.ok, qPrintable(paid.error));
+    QVERIFY(paid.paymentId > 0);
+
+    const data::PaymentResult first = service.refundCustomerPayment(paid.paymentId, sessionId, QString());
+    QVERIFY2(first.ok, qPrintable(first.error));
+    QCOMPARE(first.amountCents, -3000LL);
+
+    // The cashier's second click on the same row. The list already hides a
+    // refunded payment, so this is the race: a second click that lands while the
+    // first is still running, or the same refund arriving twice over sync.
+    const data::PaymentResult second = service.refundCustomerPayment(paid.paymentId, sessionId, QString());
+    QVERIFY(!second.ok);
+    // Named outright, because "the payment could not be reversed" would read to
+    // an operator as a fault on the till rather than a refund that is done.
+    QCOMPARE(second.error, QStringLiteral("this payment has already been refunded"));
+
+    // One negative payment row, and one negative cash movement: the till gained
+    // 3000 and gave back 3000 exactly once. A fresh query per count: a reused one
+    // keeps its earlier bindings, which would silently answer about the wrong id.
+    QSqlQuery mirrored(db.handle());
+    QVERIFY(mirrored.prepare(QStringLiteral("SELECT COUNT(*) FROM payments WHERE reversed_id = ?")));
+    mirrored.addBindValue(paid.paymentId);
+    QVERIFY(mirrored.exec());
+    QVERIFY(mirrored.next());
+    QCOMPARE(mirrored.value(0).toInt(), 1);
+
+    QSqlQuery refunds(db.handle());
+    QVERIFY(refunds.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM cash_movements WHERE session_id = ? AND type = 'refund'")));
+    refunds.addBindValue(sessionId);
+    QVERIFY(refunds.exec());
+    QVERIFY(refunds.next());
+    QCOMPARE(refunds.value(0).toInt(), 1);
+}
+
 void DataLayerTest::reverseSale_refuses_double_reversal()
 {
     // Its own database: this writes a sale, a session and cash movements, and
@@ -2288,8 +2834,10 @@ void DataLayerTest::supplier_payment_schema_exists()
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'supplier_payments'")));
     QVERIFY(query.next());
 
-    // Both indexes exist: one to list a supplier's payments newest first, one to
-    // sum what a single invoice has already been paid.
+    // Three indexes: one to list a supplier's payments newest first, one to sum
+    // what a single invoice has already been paid, and one added by the 4
+    // migration so the supplier report's paid_at range is a search and not a
+    // scan of the whole table.
     QVERIFY(query.exec(QStringLiteral("PRAGMA index_list(supplier_payments)")));
     QStringList indexes;
     while (query.next()) {
@@ -2297,7 +2845,8 @@ void DataLayerTest::supplier_payment_schema_exists()
     }
     QVERIFY(indexes.contains(QStringLiteral("idx_supplier_payments_supplier")));
     QVERIFY(indexes.contains(QStringLiteral("idx_supplier_payments_purchase")));
-    QCOMPARE(indexes.size(), 2);
+    QVERIFY(indexes.contains(QStringLiteral("idx_supplier_payments_paid_at")));
+    QCOMPARE(indexes.size(), 3);
 }
 
 void DataLayerTest::supplier_return_roundtrip()
@@ -2637,6 +3186,243 @@ void DataLayerTest::findBetween_includes_boundary_days()
     QCOMPARE(wholeDay.size(), 2);
     QCOMPARE(wholeDay.first().id, firstMomentId);
     QCOMPARE(wholeDay.last().id, boundaryId);
+}
+
+// Every movement written through the cash drawer must carry a reference to its
+// originating document. This test exercises every code path that writes to the
+// drawer and asserts the correct ref_type/ref_id are present.
+void DataLayerTest::cash_movements_carry_correct_reference()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("cash_refs.sqlite")));
+    const int sessionId = data::CashSessionRepository(db).open(100000);
+    QVERIFY(sessionId > 0);
+
+    // --- Sale (money in) ---
+    core::Product product;
+    product.name = QStringLiteral("شاي");
+    product.salePriceCents = 12000;
+    product.costPriceCents = 9500;
+    data::ProductRepository products(db);
+    const int productId = products.save(product);
+    products.adjustStock(productId, 10, QStringLiteral("opening"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 1;
+    item.unitPriceCents = 12000;
+    data::SaleService saleSvc(db);
+    const auto saleResult = saleSvc.recordSale({item}, sessionId, QStringLiteral("dev"), false);
+    QVERIFY2(saleResult.ok, qPrintable(saleResult.error));
+    const int saleId = saleResult.saleId;
+    const auto saleReversal = saleSvc.reverseSale(saleId, sessionId);
+    QVERIFY2(saleReversal.ok, qPrintable(saleReversal.error));
+
+    // --- Customer payment (money in) ---
+    core::Customer customer;
+    customer.name = QStringLiteral("عميل");
+    data::CustomerRepository customers(db);
+    const int customerId = customers.save(customer);
+    data::PaymentService paySvc(db);
+    const auto customerPayment = paySvc.recordCustomerPayment(customerId, 5000, sessionId, QString());
+    QVERIFY2(customerPayment.ok, qPrintable(customerPayment.error));
+
+    // --- Expense (money out) ---
+    data::CashEntryService cash(db);
+    const auto expense = cash.recordExpense(QStringLiteral("كهرباء"), 1500, sessionId);
+    QVERIFY2(expense.ok, qPrintable(expense.error));
+
+    // --- Owner drawing (money out) ---
+    const auto drawing = cash.recordDrawing(QStringLiteral("سحب"), 2000, sessionId);
+    QVERIFY2(drawing.ok, qPrintable(drawing.error));
+
+    // --- Supplier payment (money out) ---
+    data::SupplierRepository suppliers(db);
+    core::Supplier supplier;
+    supplier.name = QStringLiteral("مورد");
+    const int supplierId = suppliers.save(supplier);
+    data::PurchaseRepository purchases(db);
+    core::Purchase purchase;
+    purchase.supplierId = supplierId;
+    purchase.invoiceNumber = QStringLiteral("");
+    purchase.note = QStringLiteral("");
+    purchase.purchasedAt = QStringLiteral("2026-01-01T10:00:00.000");
+    purchase.subtotalCents = 10000;
+    purchase.vatCents = 0;
+    purchase.totalCents = 10000;
+    purchase.paidCents = 5000;
+    purchase.method = core::SupplierPaymentMethod::Cash;
+    purchase.addToStock = false;
+    data::SupplierPaymentRepository spRepo(db);
+    data::SupplierPaymentService spSvc(db, spRepo, suppliers, purchases);
+    const auto spResult = spSvc.recordPayment(supplierId, std::nullopt, 5000, data::nowIso(), QString(),
+                                              core::SupplierPaymentMethod::Cash, sessionId);
+    QVERIFY2(spResult.ok, qPrintable(spResult.error));
+    const int spPaymentId = spResult.paymentId;
+
+    // --- Supplier payment reversal (money in) ---
+    QVERIFY(spSvc.reversePayment(spPaymentId, sessionId).ok);
+
+    // --- Refund (money out) ---
+    data::PaymentService paySvc2(db);
+    const int paymentId2 = paySvc.recordCustomerPayment(customerId, 5000, sessionId, QString()).paymentId;
+    QVERIFY(paySvc2.refundCustomerPayment(paymentId2, sessionId, QString()).ok);
+
+    // Now check every movement has the right ref_type/ref_id
+    data::CashMovementRepository movements(db);
+    const auto rows = movements.findBySessionId(sessionId);
+
+    QMap<QString, QPair<QString, int>> expected;
+    expected[QStringLiteral("customer_payment")] = {QStringLiteral("payment"), customerPayment.paymentId};
+    expected[QStringLiteral("expense")] = {QStringLiteral("expense"), expense.entryId};
+    expected[QStringLiteral("drawing")] = {QStringLiteral("owner_drawing"), drawing.entryId};
+    expected[QStringLiteral("supplier_payment")] = {QStringLiteral("supplier_payment"), spPaymentId};
+    expected[QStringLiteral("supplier_payment_reversal")] = {QStringLiteral("supplier_payment"), spPaymentId};
+    expected[QStringLiteral("refund")] = {QStringLiteral("payment"), paymentId2};
+
+    for (const auto& m : movements.findBySessionId(sessionId)) {
+        if (m.type == core::cashMovementType::kSale
+            || (m.type == core::cashMovementType::kRefund && m.refType == QStringLiteral("sale"))) {
+            QCOMPARE(m.refType, QStringLiteral("sale"));
+            QCOMPARE(m.refId, saleId);
+        } else {
+            QVERIFY2(expected.contains(m.type), qPrintable(QStringLiteral("Unexpected movement type %1").arg(m.type)));
+            QCOMPARE(m.refType, expected.value(m.type).first);
+            QCOMPARE(m.refId, expected.value(m.type).second);
+        }
+        QVERIFY2(m.refId > 0, qPrintable(QStringLiteral("Movement %1 type %2 has ref_id <= 0").arg(m.id).arg(m.type)));
+    }
+    QCOMPARE(movements.findBySessionId(sessionId).size(), std::size_t(expected.size() + 2));
+
+    QString helperError;
+    QVERIFY(!cashDrawer::recordMoneyIn(db, sessionId, QStringLiteral("invalid"), 100,
+                                       QString(), QStringLiteral("test"), QString(), 0,
+                                       &helperError).has_value());
+    QVERIFY(!helperError.isEmpty());
+}
+
+// The close-time validation detects violations and reports them without blocking.
+void DataLayerTest::close_validation_detects_violations()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("close_violations.sqlite")));
+    const int sessionId = data::CashSessionRepository(db).open(100000);
+    QVERIFY(sessionId > 0);
+
+    // Insert a movement without a reference (simulating old data or a bug)
+    QSqlQuery q(db.handle());
+    QVERIFY(q.exec(QStringLiteral(
+        "INSERT INTO cash_movements (session_id, type, amount_cents, created_at, note) "
+        "VALUES (%1, 'expense', -1000, datetime('now'), 'unreferenced')").arg(sessionId)));
+
+    data::CashSessionRepository sessions(db);
+    const auto violations = sessions.validateForClose(sessionId);
+
+    // Should detect the unreferenced movement
+    bool foundUnreferenced = false;
+    for (const auto& v : violations) {
+        if (v.entityType == QStringLiteral("movement") && v.description.contains(QStringLiteral("بدون مرجع"))) {
+            foundUnreferenced = true;
+            break;
+        }
+    }
+    QVERIFY2(foundUnreferenced, "Validation should detect unreferenced movement");
+
+    // The list should not be empty
+    QVERIFY(!violations.isEmpty());
+
+    QCOMPARE(sessions.unreferencedMovementCount(sessionId), 1);
+
+    data::SaleRepository sales(db);
+    core::Sale sale;
+    sale.createdAt = QDateTime::currentDateTime();
+    sale.totalCents = 5000;
+    const int saleId = sales.insert(sale);
+    QVERIFY(saleId > 0);
+    const auto withMissingSaleMovement = sessions.validateForClose(sessionId);
+    bool foundMissingSale = false;
+    for (const auto& v : withMissingSaleMovement) {
+        if (v.entityType == QStringLiteral("sale") && v.entityId == saleId) {
+            foundMissingSale = true;
+        }
+    }
+    QVERIFY(foundMissingSale);
+}
+
+void DataLayerTest::cash_reference_migration_keeps_legacy_null_and_adds_index()
+{
+    const QString path = m_dir.filePath(QStringLiteral("cash_ref_migration.sqlite"));
+    QFile::remove(path);
+    const QString connectionName = QStringLiteral("cash_ref_legacy_test");
+    {
+        QSqlDatabase legacyDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacyDb.setDatabaseName(path);
+        QVERIFY(legacyDb.open());
+        QSqlQuery legacy(legacyDb);
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE cash_sessions (id INTEGER PRIMARY KEY, opened_at TEXT NOT NULL, "
+            "opening_float_cents INTEGER NOT NULL, closed_at TEXT, closing_counted_cents INTEGER, "
+            "expected_cents INTEGER, variance_cents INTEGER, status TEXT NOT NULL DEFAULT 'open')")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE cash_movements (id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL, "
+            "type TEXT NOT NULL, amount_cents INTEGER NOT NULL, created_at TEXT NOT NULL, "
+            "note TEXT NOT NULL DEFAULT '')")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO cash_sessions VALUES (1, '2026-10-01T00:00:00.000', 1000, NULL, NULL, NULL, NULL, 'open')")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO cash_movements VALUES (1, 1, 'expense', -100, '2026-10-01T00:00:00.000', 'legacy note')")));
+        QVERIFY(legacy.exec(QStringLiteral("PRAGMA user_version = 8")));
+        legacyDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    {
+        QSqlDatabase migratedDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        migratedDb.setDatabaseName(path);
+        QVERIFY(migratedDb.open());
+        data::runSchemaMigrations(migratedDb);
+
+        QSqlQuery legacy(migratedDb);
+        QVERIFY(legacy.exec(QStringLiteral("SELECT ref_type, ref_id FROM cash_movements WHERE id = 1")));
+        QVERIFY(legacy.next());
+        QVERIFY(legacy.value(0).isNull());
+        QVERIFY(legacy.value(1).isNull());
+
+        QSqlQuery index(migratedDb);
+        QVERIFY(index.exec(QStringLiteral("PRAGMA index_info(idx_cash_movements_reference)")));
+        QStringList indexedColumns;
+        while (index.next()) {
+            indexedColumns.push_back(index.value(2).toString());
+        }
+        QCOMPARE(indexedColumns, (QStringList{QStringLiteral("ref_type"), QStringLiteral("ref_id")}));
+        migratedDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+}
+
+void DataLayerTest::invalid_outbox_payload_is_permanently_failed_with_error()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("invalid_outbox.sqlite")));
+    core::SyncOperation op;
+    op.opId = 1;
+    op.type = core::SyncOpType::CustomerPayment;
+    op.entityId = 1;
+    op.amountCents = 100;
+    data::SyncOutboxRepository outbox(db);
+    const int id = outbox.enqueue(op);
+    QVERIFY(id > 0);
+
+    QSqlQuery corrupt(db.handle());
+    corrupt.prepare(QStringLiteral("UPDATE sync_outbox SET op_json = ? WHERE id = ?"));
+    corrupt.addBindValue(QStringLiteral(
+        "{\"opId\":1,\"type\":2,\"entityId\":1,\"amountCents\":100.7}"));
+    corrupt.addBindValue(id);
+    QVERIFY(corrupt.exec());
+
+    QVERIFY(outbox.findPending(10).empty());
+    QCOMPARE(outbox.countPending(), 0);
+    const auto failed = outbox.findById(id);
+    QVERIFY(failed.has_value());
+    QCOMPARE(failed->status, core::SyncOutboxStatus::PermanentFailed);
+    QVERIFY2(failed->lastError.contains(QStringLiteral("fractional")), qPrintable(failed->lastError));
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

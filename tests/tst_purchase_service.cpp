@@ -3,18 +3,31 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 
+#include "core/cash_movement.h"
+#include "core/cash_session_calculator.h"
+#include "core/supplier_payment.h"
 #include "data/date_utils.h"
 #include "data/database.h"
+#include "data/cash_movement_repository.h"
+#include "data/cash_session_repository.h"
+#include "data/daily_report_service.h"
 #include "data/occasion_repository.h"
 #include "data/occasion_service.h"
 #include "data/product_repository.h"
 #include "data/purchase_item_repository.h"
 #include "data/purchase_repository.h"
 #include "data/purchase_service.h"
+#include "data/report_service.h"
+#include "data/sale_service.h"
 #include "data/setting_repository.h"
 #include "data/stock_movement_repository.h"
 #include "data/supplier_repository.h"
 #include "data/supplier_payment_repository.h"
+#include "data/supplier_payment_service.h"
+#include "data/supplier_report_service.h"
+#include "data/supplier_return_repository.h"
+
+#include <algorithm>
 
 using namespace app;
 
@@ -34,6 +47,13 @@ struct Fixture {
         , supplierPayments(db)
         , service(db, purchases, items, products, stockMovements, suppliers, supplierPayments)
     {
+        // Every fixture opens a till. Only the tests that actually hand money over
+        // with the invoice name it: an invoice paid at the counter has to be
+        // booked against a session so the drawer can be said to have given the
+        // money up, and an invoice paid on the account names none, because no
+        // drawer is involved. Which tests pass sessionId is the whole difference
+        // between the two paths.
+        sessionId = data::CashSessionRepository(db).open(100000);
     }
 
     data::Database db;
@@ -44,6 +64,7 @@ struct Fixture {
     data::SupplierRepository suppliers;
     data::SupplierPaymentRepository supplierPayments;
     data::PurchaseService service;
+    int sessionId = 0;
 };
 
 int addSupplier(data::SupplierRepository& suppliers, const QString& name)
@@ -119,6 +140,21 @@ private slots:
     void purchase_carries_active_occasion();
     void purchase_no_occasion_when_inactive();
 
+    void cash_invoice_lowers_the_expected_till();
+    void unpaid_invoice_needs_no_session();
+    void cash_invoice_without_a_session_is_refused();
+    void credit_invoice_moves_no_cash();
+
+    void void_cash_purchase_restores_drawer_and_balance();
+    void void_purchase_allowed_without_later_movements();
+    void void_purchase_rejected_when_later_stock_movements();
+    void void_purchase_rejected_when_later_payments();
+    void void_purchase_rejected_when_later_credit_payment();
+    void void_cash_purchase_with_initial_payment_succeeds();
+    void void_purchase_never_leaves_negative_stock();
+    void void_purchase_supplier_balance_restored();
+    void void_purchase_reversal_appears_in_supplier_report();
+
 private:
     QTemporaryDir m_dir;
 };
@@ -139,7 +175,8 @@ void PurchaseServiceTest::cash_purchase_simple()
     const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
     const QVector<core::PurchaseItem> lines = {makeLine(productId, 100, 5000)};
 
-    const data::PurchaseResult result = f.service.recordPurchase(purchase, lines);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, lines, core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(result.ok, qPrintable(result.error));
     QVERIFY(result.purchaseId > 0);
 
@@ -200,7 +237,8 @@ void PurchaseServiceTest::partial_payment()
     const core::Purchase purchase = makePurchase(supplierId, 1000000, 400000, true);
     const QVector<core::PurchaseItem> lines = {makeLine(productId, 100, 10000)};
 
-    const data::PurchaseResult result = f.service.recordPurchase(purchase, lines);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, lines, core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(result.ok, qPrintable(result.error));
 
     const auto movements = f.stockMovements.findByProductId(productId);
@@ -228,7 +266,8 @@ void PurchaseServiceTest::purchase_with_vat()
     const core::Purchase purchase = makePurchase(supplierId, 119000, 119000, true, 19000);
     const QVector<core::PurchaseItem> lines = {makeLine(productId, 100, 1000)};
 
-    const data::PurchaseResult result = f.service.recordPurchase(purchase, lines);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, lines, core::SupplierPaymentMethod::Cash, f.sessionId);
     QVERIFY2(result.ok, qPrintable(result.error));
 
     // The VAT is stored beside the sub-total, not folded into it and not dropped
@@ -502,6 +541,495 @@ void PurchaseServiceTest::purchase_no_occasion_when_inactive()
     QVERIFY(query.exec(QStringLiteral("SELECT occasion_id FROM purchases WHERE id = %1").arg(result.purchaseId)));
     QVERIFY(query.next());
     QVERIFY2(query.value(0).isNull(), "occasion_id must be NULL, not 0");
+}
+
+void PurchaseServiceTest::cash_invoice_lowers_the_expected_till()
+{
+    // The defect this covers: money handed to a supplier with the invoice left no
+    // trace in the drawer. The payment settled the supplier and nothing else, so
+    // the session still expected the full opening float plus the day's sales —
+    // the drawer was short by exactly what had been paid out and the operator
+    // closed the day staring at a deficit that no receipt explained.
+    Fixture f(m_dir.filePath(QStringLiteral("cash_invoice_lowers_the_expected_till.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد نقدي"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("شاي"), 0);
+    QVERIFY(productId > 0);
+
+    // The drawer starts on the opening float alone. sumBySessionId counts the
+    // movements and nothing else, so it is the float that has to be added on top
+    // to get what the drawer is expected to hold.
+    data::CashMovementRepository movements(f.db);
+    QVERIFY(f.sessionId > 0);
+    QCOMPARE(movements.sumBySessionId(f.sessionId), 0LL);
+    QCOMPARE(core::CashSessionCalculator::expectedTotalCents(100000, 0), 100000LL);
+
+    // A day's takings first, so the drawer holds something to be paid out of.
+    // 100 units bought at 50.00, sold again at 70.00: the till takes 7000.00.
+    f.products.adjustStock(productId, 100, QStringLiteral("purchase"));
+    core::Product priced = *f.products.findById(productId);
+    priced.salePriceCents = 7000;
+    f.products.save(priced);
+    core::SaleItem sold;
+    sold.productId = productId;
+    sold.quantity = 100;
+    QVERIFY(data::SaleService(f.db).recordSale({sold}, f.sessionId, QStringLiteral("dev-test"), false).ok);
+    QCOMPARE(movements.sumBySessionId(f.sessionId), 700000LL);
+
+    // The invoice is settled in part, out of the drawer: 4000.00 of a 5000.00
+    // invoice. paidCents above zero with method Cash, so a session is named.
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 400000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    // 700000 of takings less the 400000 handed to the supplier: the movements sum
+    // drops by exactly the amount that left the drawer.
+    QCOMPARE(movements.sumBySessionId(f.sessionId), 300000LL);
+    const long long expected = core::CashSessionCalculator::expectedTotalCents(100000, 300000);
+    QCOMPARE(expected, 400000LL);
+
+    // One movement for the payment, negative, and it says what it was for rather
+    // than showing up as a bare figure the operator has to recognise.
+    const auto rows = movements.findBySessionId(f.sessionId);
+    QCOMPARE(rows.size(), std::size_t(2));
+    QCOMPARE(rows[1].type, core::cashMovementType::kSupplierPayment);
+    QCOMPARE(rows[1].amountCents, -400000LL);
+
+    // And the day closes square. Counted 400000 against 400000 expected, variance
+    // nil: the payment is accounted for, not a phantom shortfall on top of it.
+    QVERIFY(data::CashSessionRepository(f.db).close(f.sessionId, expected, expected, 0));
+    const auto session = data::CashSessionRepository(f.db).findById(f.sessionId);
+    QVERIFY(session.has_value());
+    QCOMPARE(session->status, QStringLiteral("closed"));
+    QCOMPARE(session->expectedCents, 400000LL);
+    QCOMPARE(session->varianceCents, 0LL);
+}
+
+void PurchaseServiceTest::unpaid_invoice_needs_no_session()
+{
+    // Nothing changed hands, so nothing has to be booked: the invoice is recorded
+    // with no session at all. Refusing this would mean a shop with its drawer
+    // closed could not take delivery of goods.
+    Fixture f(m_dir.filePath(QStringLiteral("unpaid_invoice_needs_no_session.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد آجل"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("زيت"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 0, true);
+    const data::PurchaseResult result = f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)});
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    // No payment was recorded, so nothing may have reached the drawer and the
+    // session still holds exactly its opening float.
+    QCOMPARE(f.supplierPayments.findBySupplierId(supplierId).size(), std::size_t(0));
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), 0LL);
+}
+
+void PurchaseServiceTest::cash_invoice_without_a_session_is_refused()
+{
+    // Paid out of the drawer, but no session to book it against. Refused outright
+    // rather than recorded: the alternative is a payment on the ledger that the
+    // till never saw, which is the same defect this whole path exists to close.
+    Fixture f(m_dir.filePath(QStringLiteral("cash_invoice_without_a_session_is_refused.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد بلا وردية"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("عسل"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, std::nullopt);
+    QVERIFY(!result.ok);
+    QVERIFY(!result.error.isEmpty());
+
+    // Nothing at all was written: no invoice, no stock, no payment, no movement.
+    QCOMPARE(countRows(f.db, QStringLiteral("purchases")), 0);
+    QCOMPARE(countRows(f.db, QStringLiteral("supplier_payments")), 0);
+    QCOMPARE(countRows(f.db, QStringLiteral("cash_movements")), 0);
+    const auto product = f.products.findById(productId);
+    QVERIFY(product.has_value());
+    QCOMPARE(product->quantity, 0LL);
+}
+
+void PurchaseServiceTest::credit_invoice_moves_no_cash()
+{
+    // Settled on the account: the supplier's balance drops and the drawer is
+    // untouched. This is the case that used to be impossible to record without
+    // pretending the money had left the till.
+    Fixture f(m_dir.filePath(QStringLiteral("credit_invoice_moves_no_cash.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد ائتمان"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("سكر"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Credit, std::nullopt);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    const auto payments = f.supplierPayments.findByPurchaseId(result.purchaseId);
+    QCOMPARE(payments.size(), std::size_t(1));
+    QCOMPARE(payments[0].amountCents, 500000LL);
+    QCOMPARE(payments[0].method, core::SupplierPaymentMethod::Credit);
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+    // The drawer never saw it, and the session is exactly as it was opened.
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), 0LL);
+}
+
+// A void of a cash purchase returns the money to the drawer and reverses the
+// supplier payment. The supplier balance and drawer are both restored.
+void PurchaseServiceTest::void_cash_purchase_restores_drawer_and_balance()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_cash_purchase.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد نقدي"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("زيت"), 0);
+    QVERIFY(productId > 0);
+    f.products.adjustStock(productId, 10, QStringLiteral("opening"));
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const int purchaseId = result.purchaseId;
+    const auto initialPayments = f.supplierPayments.findByPurchaseId(purchaseId);
+    QCOMPARE(initialPayments.size(), std::size_t(1));
+    QVERIFY(initialPayments.front().isPurchaseInitialPayment);
+
+    // An invoice paid in full leaves nothing owed, and the drawer is 500000 short
+    // of where it started.
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), -500000LL);
+
+    // Void the purchase.
+    const data::PurchaseResult voidResult = f.service.voidPurchase(purchaseId, f.sessionId);
+    QVERIFY2(voidResult.ok, qPrintable(voidResult.error));
+
+    const auto voidPurchase = f.purchases.findById(voidResult.purchaseId);
+    QVERIFY(voidPurchase.has_value());
+    QCOMPARE(voidPurchase->totalCents, -500000LL);
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+
+    // Supplier balance back to 0, drawer gets +500000 back.
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), 0LL);
+
+    // Stock returned (was 0 after sale of 100, now back to 10).
+    const auto product = f.products.findById(productId);
+    QVERIFY(product.has_value());
+    QCOMPARE(product->quantity, 10LL);
+
+    // Supplier payment reversal row exists as a negative amount pointing back at
+    // the payment the purchase booked, so the two net to zero.
+    const auto spRows = f.supplierPayments.findByPurchaseId(purchaseId);
+    QVERIFY(spRows.size() >= 2); // original + reversal
+    const auto originalPayment = std::find_if(spRows.cbegin(), spRows.cend(),
+                                              [](const core::SupplierPayment& row) { return row.amountCents > 0; });
+    QVERIFY(originalPayment != spRows.cend());
+    const auto reversal = std::find_if(spRows.cbegin(), spRows.cend(),
+                                       [](const core::SupplierPayment& row) { return row.amountCents < 0; });
+    QVERIFY(reversal != spRows.cend());
+    QCOMPARE(reversal->amountCents, -originalPayment->amountCents);
+    QCOMPARE(reversal->reversedId, originalPayment->id);
+}
+
+// Nothing has touched the products since the purchase, so the void is allowed.
+void PurchaseServiceTest::void_purchase_allowed_without_later_movements()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_allowed.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("شاي"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 300000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    const data::PurchaseResult voidBefore = f.service.voidPurchase(result.purchaseId, f.sessionId);
+    QVERIFY2(voidBefore.ok, qPrintable(voidBefore.error));
+}
+
+// Void purchase is refused if any product has moved stock since it was bought.
+void PurchaseServiceTest::void_purchase_rejected_when_later_stock_movements()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_later_stock.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("شاي"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const int purchaseId = result.purchaseId;
+    QCOMPARE(f.products.findById(productId)->quantity, 100LL);
+
+    // The goods are sold after the purchase, so the shelf no longer holds
+    // exactly what the invoice put there.
+    core::SaleItem sold;
+    sold.productId = productId;
+    sold.quantity = 5;
+    sold.unitPriceCents = 7000;
+    const auto sale =
+        data::SaleService(f.db).recordSale({sold}, f.sessionId, QStringLiteral("dev"), false);
+    QVERIFY2(sale.ok, qPrintable(sale.error));
+    QCOMPARE(f.products.findById(productId)->quantity, 95LL);
+
+    // Voiding now would hand back 100 against a shelf holding 95.
+    const data::PurchaseResult voidResult = f.service.voidPurchase(purchaseId, f.sessionId);
+    QVERIFY(!voidResult.ok);
+    QVERIFY2(!voidResult.error.isEmpty(), qPrintable(voidResult.error));
+    QVERIFY(voidResult.error.contains(QStringLiteral("moved stock")));
+
+    // Refused means refused: the level, the invoice and the money all stand. The
+    // drawer still holds what the purchase took out plus what the sale brought
+    // in (5 at 7000), with none of it given back.
+    QCOMPARE(f.products.findById(productId)->quantity, 95LL);
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), -500000LL + 35000LL);
+}
+
+// Void purchase is refused if there are later payments on the same invoice.
+void PurchaseServiceTest::void_purchase_rejected_when_later_payments()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_later_payment.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("سكر"), 0);
+    QVERIFY(productId > 0);
+
+    // The invoice is for 500000 and 300000 is paid at the time, so 200000 stays
+    // open for the payment made afterwards.
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 300000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const int purchaseId = result.purchaseId;
+    QCOMPARE(f.purchases.findById(purchaseId)->totalCents, 500000LL);
+
+    // Make a LATER payment on the same invoice (not the initial one).
+    data::SupplierPaymentRepository spRepo(f.db);
+    data::SupplierPaymentService spSvc(f.db, spRepo, f.suppliers, f.purchases);
+    const auto laterResult = spSvc.recordPayment(supplierId, purchaseId, 200000, data::nowIso(), QString(),
+                                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(laterResult.ok, qPrintable(laterResult.error));
+
+    // Now try to void — should be refused because of the later payment.
+    const data::PurchaseResult voidResult = f.service.voidPurchase(purchaseId, f.sessionId);
+    QVERIFY(!voidResult.ok);
+    QVERIFY2(!voidResult.error.isEmpty(), qPrintable(voidResult.error));
+    QVERIFY(voidResult.error.contains(QStringLiteral("payment")));
+}
+
+// Void purchase with later supplier payment (credit) also refused.
+void PurchaseServiceTest::void_purchase_rejected_when_later_credit_payment()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_later_credit_payment.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("زيت"), 0);
+    QVERIFY(productId > 0);
+
+    // The invoice is for 500000 and 300000 is paid at the time, so 200000 stays
+    // open for the payment made afterwards.
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 300000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const int purchaseId = result.purchaseId;
+    QCOMPARE(f.purchases.findById(purchaseId)->totalCents, 500000LL);
+
+    // Later credit payment on the same invoice. No session: credit never
+    // touches the drawer.
+    data::SupplierPaymentRepository spRepo(f.db);
+    data::SupplierPaymentService spSvc(f.db, spRepo, f.suppliers, f.purchases);
+    const auto laterResult = spSvc.recordPayment(supplierId, purchaseId, 200000, data::nowIso(), QString(),
+                                                 core::SupplierPaymentMethod::Credit, std::nullopt);
+    QVERIFY2(laterResult.ok, qPrintable(laterResult.error));
+
+    // Try to void — should be refused.
+    const data::PurchaseResult voidResult = f.service.voidPurchase(purchaseId, f.sessionId);
+    QVERIFY(!voidResult.ok);
+    QVERIFY2(!voidResult.error.isEmpty(), qPrintable(voidResult.error));
+    QVERIFY(voidResult.error.contains(QStringLiteral("payment")));
+}
+
+// Void purchase of a cash invoice at purchase time succeeds and restores drawer.
+void PurchaseServiceTest::void_cash_purchase_with_initial_payment_succeeds()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_initial_payment.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("عسل"), 0);
+    QVERIFY(productId > 0);
+
+    // Purchase paid in full at creation.
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const int purchaseId = result.purchaseId;
+
+    // Void it — should succeed because the payment was the INITIAL one.
+    const data::PurchaseResult voidResult = f.service.voidPurchase(purchaseId, f.sessionId);
+    QVERIFY2(voidResult.ok, qPrintable(voidResult.error));
+
+    // Drawer back to zero, supplier balance zero.
+    QCOMPARE(data::CashMovementRepository(f.db).sumBySessionId(f.sessionId), 0LL);
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+}
+
+// Voiding never drives stock below zero. Handing stock back can only add, and
+    // once the goods have moved on the void is refused instead, so the level
+    // left on the shelf is whatever the shop really holds.
+void PurchaseServiceTest::void_purchase_never_leaves_negative_stock()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_negative_stock.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("شاي"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    QCOMPARE(f.products.findById(productId)->quantity, 100LL);
+
+    const data::PurchaseResult voidResult = f.service.voidPurchase(result.purchaseId, f.sessionId);
+    QVERIFY2(voidResult.ok, qPrintable(voidResult.error));
+
+    // 100 went on and came straight back off: the shelf is empty, not below it.
+    QCOMPARE(f.products.findById(productId)->quantity, 0LL);
+}
+
+// Supplier balance is correctly restored after void.
+void PurchaseServiceTest::void_purchase_supplier_balance_restored()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_balance.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("زيت"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 300000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const int purchaseId = result.purchaseId;
+
+    // 500000 invoiced, 300000 paid: 200000 is still owed.
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 200000LL);
+
+    const data::PurchaseResult voidResult = f.service.voidPurchase(purchaseId, f.sessionId);
+    QVERIFY2(voidResult.ok, qPrintable(voidResult.error));
+
+    // Nothing owed: the void invoice cancels the 500000 and the reversal cancels
+    // the 300000 that had been paid.
+    QCOMPARE(f.suppliers.balanceCentsFor(supplierId), 0LL);
+}
+
+// Void purchase of a cash invoice paid in full succeeds: the drawer's money
+    // comes back and the supplier is owed nothing.
+void PurchaseServiceTest::void_purchase_reversal_appears_in_supplier_report()
+{
+    Fixture f(m_dir.filePath(QStringLiteral("void_daily_report.sqlite")));
+    const int supplierId = addSupplier(f.suppliers, QStringLiteral("مورد"));
+    QVERIFY(supplierId > 0);
+    const int productId = addProduct(f.products, QStringLiteral("شاي"), 0);
+    QVERIFY(productId > 0);
+
+    const core::Purchase purchase = makePurchase(supplierId, 500000, 500000, true);
+    const data::PurchaseResult result =
+        f.service.recordPurchase(purchase, {makeLine(productId, 100, 5000)},
+                                 core::SupplierPaymentMethod::Cash, f.sessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const int purchaseId = result.purchaseId;
+
+    const data::PurchaseResult voidResult = f.service.voidPurchase(purchaseId, f.sessionId);
+    QVERIFY2(voidResult.ok, qPrintable(voidResult.error));
+
+    // The money back is a cash movement of its own type, pointing at the
+    // purchase it undoes, and it goes in as a positive so the session nets zero.
+    data::CashMovementRepository movements(f.db);
+    const auto rows = movements.findBySessionId(f.sessionId);
+    bool foundReversal = false;
+    for (const auto& m : rows) {
+        if (m.type == core::cashMovementType::kSupplierPaymentReversal) {
+            foundReversal = true;
+            QCOMPARE(m.amountCents, 500000LL);
+            QCOMPARE(m.refType, QStringLiteral("purchase"));
+            QCOMPARE(m.refId, purchaseId);
+        }
+    }
+    QVERIFY2(foundReversal, "cash movements should contain supplier_payment_reversal");
+    QCOMPARE(movements.sumBySessionId(f.sessionId), 0LL);
+
+    data::SaleRepository sales(f.db);
+    data::ExpenseRepository expenses(f.db);
+    data::OwnerDrawingRepository drawings(f.db);
+    data::CustomerTransactionRepository customerTransactions(f.db);
+    data::CashSessionRepository cashSessions(f.db);
+    const data::DailyReport daily = data::DailyReportService(
+        f.db, sales, expenses, drawings, customerTransactions, cashSessions)
+        .forDay(QDate::currentDate().toString(Qt::ISODate));
+    bool dailyHasReversal = false;
+    for (const auto& line : daily.cashLines) {
+        if (line.type == core::cashMovementType::kSupplierPaymentReversal) {
+            dailyHasReversal = true;
+            QCOMPARE(line.count, 1);
+            QCOMPARE(line.sumCents, 500000LL);
+        }
+    }
+    QVERIFY(dailyHasReversal);
+
+    const data::StoreReport range = data::ReportService(f.db).build(
+        QDateTime::currentDateTime().addDays(-1), QDateTime::currentDateTime().addDays(1));
+    bool rangeHasReversal = false;
+    for (const auto& line : range.cashLines) {
+        if (line.type == core::cashMovementType::kSupplierPaymentReversal) {
+            rangeHasReversal = true;
+            QCOMPARE(line.count, 1);
+            QCOMPARE(line.sumCents, 500000LL);
+        }
+    }
+    QVERIFY(rangeHasReversal);
+
+    // And the supplier's own record shows both halves of the reversal, so the
+    // period reads as nothing owed rather than as an unexplained gap.
+    data::SupplierReturnRepository returns(f.db);
+    data::SupplierReportService reports(f.db, f.suppliers, f.purchases, f.supplierPayments, returns);
+    const data::SupplierPeriodReport period =
+        reports.periodReport(supplierId, QStringLiteral("2000-01-01T00:00:00"),
+                             QStringLiteral("2999-12-31T23:59:59"));
+    QCOMPARE(period.purchasesCents, 0LL);   // invoice and its void cancel
+    QCOMPARE(period.paymentsCents, 0LL);    // payment and its reversal cancel
+    QCOMPARE(period.netChangeCents, 0LL);
+    QCOMPARE(period.payments.size(), 2);
+    bool reportHasReversal = false;
+    for (const core::SupplierPayment& row : period.payments) {
+        if (row.amountCents < 0) {
+            reportHasReversal = true;
+            QCOMPARE(row.amountCents, -500000LL);
+        }
+    }
+    QVERIFY2(reportHasReversal, "the supplier report should list the reversed payment");
 }
 
 QTEST_GUILESS_MAIN(PurchaseServiceTest)

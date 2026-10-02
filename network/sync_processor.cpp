@@ -5,6 +5,7 @@
 
 #include "cash_session_repository.h"
 #include "sync_protocol.h"
+#include "core/sync_operation_codec.h"
 
 namespace app::network {
 
@@ -250,13 +251,32 @@ SyncAppliedOp SyncProcessor::applySale(const QJsonObject& json, int cashSessionI
     }
 
     QVector<app::core::SaleItem> items;
-    for (const QJsonValue& value : itemsJson) {
+    for (int index = 0; index < itemsJson.size(); ++index) {
+        const QJsonValue value = itemsJson.at(index);
+        if (!value.isObject()) {
+            *error = QStringLiteral("sale item is not an object");
+            return applied;
+        }
         const QJsonObject itemJson = value.toObject();
         app::core::SaleItem item;
         item.productId = itemJson.value(QStringLiteral("productId")).toInt();
-        item.quantity = static_cast<long long>(itemJson.value(QStringLiteral("quantity")).toDouble());
-        item.unitPriceCents =
-            static_cast<long long>(itemJson.value(QStringLiteral("unitPriceCents")).toDouble());
+
+        // The same reader the codec uses, so a batch is read by one rule
+        // wherever it arrives from: a whole number, as a string or as an old
+        // build's JSON number within +/- 2^53.
+        QString reason;
+        if (!app::core::SyncOpCodec::readExactInteger(itemJson.value(QStringLiteral("quantity")),
+                                                      QStringLiteral("quantity of sale item %1").arg(index),
+                                                      &item.quantity, &reason)) {
+            *error = reason;
+            return applied;
+        }
+        if (!app::core::SyncOpCodec::readExactInteger(itemJson.value(QStringLiteral("unitPriceCents")),
+                                                      QStringLiteral("unitPriceCents of sale item %1").arg(index),
+                                                      &item.unitPriceCents, &reason)) {
+            *error = reason;
+            return applied;
+        }
         items.append(item);
     }
 
@@ -296,13 +316,30 @@ SyncAppliedOp SyncProcessor::applyDebt(const QJsonObject& json, QString* error)
     }
 
     QVector<app::core::SaleItem> items;
-    for (const QJsonValue& value : itemsJson) {
+    for (int index = 0; index < itemsJson.size(); ++index) {
+        const QJsonValue value = itemsJson.at(index);
+        if (!value.isObject()) {
+            *error = QStringLiteral("customer_debt item is not an object");
+            return applied;
+        }
         const QJsonObject itemJson = value.toObject();
         app::core::SaleItem item;
         item.productId = itemJson.value(QStringLiteral("productId")).toInt();
-        item.quantity = static_cast<long long>(itemJson.value(QStringLiteral("quantity")).toDouble());
-        item.unitPriceCents =
-            static_cast<long long>(itemJson.value(QStringLiteral("unitPriceCents")).toDouble());
+
+        QString reason;
+        if (!app::core::SyncOpCodec::readExactInteger(itemJson.value(QStringLiteral("quantity")),
+                                                      QStringLiteral("quantity of customer_debt item %1").arg(index),
+                                                      &item.quantity, &reason)) {
+            *error = reason;
+            return applied;
+        }
+        if (!app::core::SyncOpCodec::readExactInteger(itemJson.value(QStringLiteral("unitPriceCents")),
+                                                      QStringLiteral("unitPriceCents of customer_debt item %1")
+                                                          .arg(index),
+                                                      &item.unitPriceCents, &reason)) {
+            *error = reason;
+            return applied;
+        }
         items.append(item);
     }
 
@@ -330,10 +367,21 @@ SyncAppliedOp SyncProcessor::applyPayment(const QJsonObject& json, int cashSessi
     applied.type = QStringLiteral("customer_payment");
 
     const int customerId = json.value(QStringLiteral("entityId")).toInt();
-    const long long amountCents =
-        static_cast<long long>(json.value(QStringLiteral("amountCents")).toDouble());
-    const QString note = json.value(QStringLiteral("note")).toString();
 
+    // amountCents may be a string or an old build's JSON number, but it has to be a
+    // whole number either way. A payment is money handed over, so a fractional
+    // or out-of-range value is refused rather than rounded into a different
+    // amount of money than the till that sent it.
+    QString reason;
+    long long amountCents = 0;
+    if (!app::core::SyncOpCodec::readExactInteger(json.value(QStringLiteral("amountCents")),
+                                                  QStringLiteral("amountCents of customer_payment"),
+                                                  &amountCents, &reason)) {
+        *error = reason;
+        return applied;
+    }
+
+    const QString note = json.value(QStringLiteral("note")).toString();
     const QString deviceId = json.value(QStringLiteral("deviceId")).toString();
     app::core::SyncApplyToken token;
     token.opId = applied.opId;

@@ -2,12 +2,27 @@
 
 #include <QDateTime>
 
+#include "core/cash_movement.h"
+#include "cash_drawer.h"
 #include "cash_movement_repository.h"
+#include "audit_log_repository.h"
 #include "cash_session_repository.h"
 #include "expense_repository.h"
 #include "owner_drawing_repository.h"
 
 namespace app::data {
+
+// Writes the audit entry for one of the four operations on this service. Every
+// one of them moves money, and all four go through the same transaction as the
+// movement itself: an entry that survived a rollback would be a claim the money
+// moved when it did not, and an entry written after a failed commit would be the
+// same claim with nothing left to catch it.
+bool writeAudit(Database& db, const QString& action, int entryId)
+{
+    AuditLogRepository audit(db);
+    return audit.record(action, QStringLiteral("%1 #%2").arg(action).arg(entryId)) != 0;
+}
+
 
 namespace {
 
@@ -61,15 +76,22 @@ CashEntryResult CashEntryService::recordExpense(const QString& label, long long 
         return result;
     }
 
-    core::CashMovement movement;
-    movement.sessionId = sessionId;
-    movement.type = QStringLiteral("expense");
-    movement.amountCents = -amountCents;
-    movement.createdAt = expense.createdAt;
-    movement.note = label;
-    if (CashMovementRepository(m_db).insert(movement) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyOut(
+        m_db, sessionId, core::cashMovementType::kExpense, amountCents,
+        label, QStringLiteral("the expense"),
+        QStringLiteral("expense"), expenseId, &movementError);
+    if (!movementId.has_value()) {
         m_db.rollback();
-        result.error = m_db.lastError();
+        result.error = movementError;
+        return result;
+    }
+
+    if (!writeAudit(m_db, QStringLiteral("expense"), expenseId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the entry could not be recorded in the audit log")
+            : m_db.lastError();
         return result;
     }
 
@@ -116,15 +138,22 @@ CashEntryResult CashEntryService::recordDrawing(const QString& note, long long a
         return result;
     }
 
-    core::CashMovement movement;
-    movement.sessionId = sessionId;
-    movement.type = QStringLiteral("drawing");
-    movement.amountCents = -amountCents;
-    movement.createdAt = drawing.createdAt;
-    movement.note = note;
-    if (CashMovementRepository(m_db).insert(movement) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyOut(
+        m_db, sessionId, core::cashMovementType::kDrawing, amountCents,
+        note, QStringLiteral("the owner drawing"),
+        QStringLiteral("owner_drawing"), drawingId, &movementError);
+    if (!movementId.has_value()) {
         m_db.rollback();
-        result.error = m_db.lastError();
+        result.error = movementError;
+        return result;
+    }
+
+    if (!writeAudit(m_db, QStringLiteral("owner_drawing"), drawingId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the entry could not be recorded in the audit log")
+            : m_db.lastError();
         return result;
     }
 
@@ -174,15 +203,22 @@ CashEntryResult CashEntryService::reverseExpense(int expenseId, int cashSessionI
         return result;
     }
 
-    core::CashMovement movement;
-    movement.sessionId = sessionId;
-    movement.type = QStringLiteral("refund");
-    movement.amountCents = original->amountCents;
-    movement.createdAt = QDateTime::currentDateTime();
-    movement.note = original->label;
-    if (CashMovementRepository(m_db).insert(movement) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyIn(
+        m_db, sessionId, core::cashMovementType::kRefund, original->amountCents,
+        original->label, QStringLiteral("the expense reversal"),
+        QStringLiteral("expense"), expenseId, &movementError);
+    if (!movementId.has_value()) {
         m_db.rollback();
-        result.error = m_db.lastError();
+        result.error = movementError;
+        return result;
+    }
+
+    if (!writeAudit(m_db, QStringLiteral("entry_reversal"), expenseId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the entry could not be recorded in the audit log")
+            : m_db.lastError();
         return result;
     }
 
@@ -231,15 +267,22 @@ CashEntryResult CashEntryService::reverseDrawing(int drawingId, int cashSessionI
         return result;
     }
 
-    core::CashMovement movement;
-    movement.sessionId = sessionId;
-    movement.type = QStringLiteral("refund");
-    movement.amountCents = original->amountCents;
-    movement.createdAt = QDateTime::currentDateTime();
-    movement.note = original->note;
-    if (CashMovementRepository(m_db).insert(movement) == 0) {
+    QString movementError;
+    const std::optional<int> movementId = cashDrawer::recordMoneyIn(
+        m_db, sessionId, core::cashMovementType::kRefund, original->amountCents,
+        original->note, QStringLiteral("the owner drawing reversal"),
+        QStringLiteral("owner_drawing"), drawingId, &movementError);
+    if (!movementId.has_value()) {
         m_db.rollback();
-        result.error = m_db.lastError();
+        result.error = movementError;
+        return result;
+    }
+
+    if (!writeAudit(m_db, QStringLiteral("entry_reversal"), drawingId)) {
+        m_db.rollback();
+        result.error = m_db.lastError().isEmpty()
+            ? QStringLiteral("the entry could not be recorded in the audit log")
+            : m_db.lastError();
         return result;
     }
 
