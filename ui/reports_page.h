@@ -39,6 +39,7 @@ private slots:
 private:
     void fromTo(const QDateTime& from, const QDateTime& to);
     void rebuild();
+    void rebuildZakatHistory();
 
     app::data::Database& m_db;
     QDateEdit* m_fromEdit = nullptr;
@@ -49,6 +50,11 @@ private:
     QVector<QPushButton*> m_periodControls;
     QStackedWidget* m_tableStack = nullptr;
     QTableWidget* m_cashTable;
+    // The per-year zakat ledger. Separate from m_cashTable because it answers a
+    // different question and follows different rules: those rows are the
+    // selected period and add up to a total, these are whole years and must not.
+    QTableWidget* m_zakatHistoryTable = nullptr;
+    QStackedWidget* m_zakatHistoryStack = nullptr;
     data::StoreReport m_report;
 };
 

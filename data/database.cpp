@@ -63,6 +63,32 @@ void migrateUsersTable(const QSqlDatabase& db)
     }
 }
 
+// zakat_settings was a second key/value table holding exactly the same three
+// columns as settings, and the only thing that ever told the two apart was which
+// one a key had been written to first. Every zakat key lives in settings now, so
+// this folds whatever is left into it and drops the table.
+//
+// settings wins a collision rather than zakat_settings: it is the table the rest
+// of the app reads, and a key that is already there was written by a build that
+// knew what it meant. Nothing is lost, because the two tables only ever held
+// "enabled" and "nisab_cents" under the same names.
+//
+// Idempotent, and a no-op on a database that never had the table.
+void migrateZakatSettingsIntoSettings(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("zakat_settings"));
+    if (columns.isEmpty()) {
+        return;
+    }
+    QSqlQuery copy(db);
+    if (!copy.exec(QStringLiteral(
+            "INSERT OR IGNORE INTO settings (key, value) SELECT key, value FROM zakat_settings"))) {
+        return;
+    }
+    QSqlQuery drop(db);
+    drop.exec(QStringLiteral("DROP TABLE zakat_settings"));
+}
+
 // Idempotent, runs on every open. Adds missing columns to suppliers:
 // phone, address, notes, opening_balance_cents, active.
 // SQLite does not enforce NOT NULL on columns added via ALTER TABLE with a
@@ -573,16 +599,30 @@ void Database::createSchema()
             "created_at TEXT NOT NULL);"),
 
         QStringLiteral(
-            "CREATE TABLE IF NOT EXISTS zakat_settings ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "key TEXT UNIQUE NOT NULL,"
-            "value TEXT NOT NULL);"),
-
-        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS settings ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "key TEXT UNIQUE NOT NULL,"
             "value TEXT NOT NULL);"),
+
+        // One row per zakat year. year is UNIQUE, so the year itself is what
+        // makes a second write for the same year a no-op rather than a duplicate:
+        // the history is a ledger, and re-recording a year that is already there
+        // must never silently overwrite what it was recorded as.
+        //
+        // paid is kept beside paid_cents rather than inferred from it being
+        // non-null, so "this year owes nothing yet" and "this year was settled
+        // at zero" stay two different facts.
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS zakat_history ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "year INTEGER NOT NULL UNIQUE,"
+            "nisab_cents INTEGER NOT NULL,"
+            "base_cents INTEGER NOT NULL,"
+            "due_cents INTEGER NOT NULL,"
+            "gold_price_cents INTEGER NOT NULL,"
+            "paid INTEGER NOT NULL DEFAULT 0,"
+            "paid_cents INTEGER,"
+            "paid_at TEXT);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS sync_outbox ("
@@ -749,6 +789,7 @@ void Database::createSchema()
 
     // purchases + purchase_items indexes are created via schema above.
 
+    migrateZakatSettingsIntoSettings(m_db);
     migrateUsersTable(m_db);
     migrateCustomersTable(m_db);
     migrateSuppliersTable(m_db);

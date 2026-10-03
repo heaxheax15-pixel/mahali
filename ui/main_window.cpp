@@ -36,6 +36,8 @@
 #include <memory>
 
 #include "core/session.h"
+#include "core/zakat_notifier.h"
+#include "dialogs/zakat_dialog.h"
 #include "data/cash_session_repository.h"
 #include "core/update_checker.h"
 #include "core/update_downloader.h"
@@ -310,6 +312,25 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
             this, &MainWindow::onUpdateFailed);
     QTimer::singleShot(5000, this, [this]() { m_updateChecker->check(); });
 
+    // On the same reasoning, and a beat earlier: the zakat reminder is a modal
+    // dialog, so it waits until the first page has been drawn and the database
+    // is quiet.
+    //
+    // Once per session, guarded rather than trusted. shouldNotifyZakat no longer
+    // writes, which is what makes this guard necessary instead of redundant: a
+    // check that does not claim the year still returns true every time it is run,
+    // so a second call would put the same modal up again on top of a dialog the
+    // operator is still answering — or re-open it the moment they dismiss it.
+    QTimer::singleShot(2500, this, [this]() {
+        if (m_zakatCheckedThisSession) {
+            return;
+        }
+        m_zakatCheckedThisSession = true;
+        if (app::core::shouldNotifyZakat(m_db)) {
+            showZakatDialog();
+        }
+    });
+
     // Built up front but idle: the download only starts when the user asks for
     // it, and a bar is only ever shown when a newer release exists.
     m_updateDownloader = new app::core::UpdateDownloader(this);
@@ -381,6 +402,11 @@ void MainWindow::refreshPage(int row)
         return;
     }
     factory.refresh(factory.instance);
+}
+
+void MainWindow::showZakatDialog()
+{
+    app::ui::showZakatDialog(this, m_db);
 }
 
 PosPage* MainWindow::posPage()

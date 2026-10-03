@@ -38,11 +38,12 @@
 #include "admin_secret_repository.h"
 #include "device_repository.h"
 #include "audit_log_repository.h"
-#include "zakat_setting_repository.h"
 #include "setting_repository.h"
+#include "zakat_history_repository.h"
 #include "occasion_repository.h"
 #include "occasion_service.h"
 #include "core/i18n.h"
+#include "core/zakat_notifier.h"
 #include "sync_outbox_repository.h"
 #include "device_ledger_service.h"
 #include "device_identity.h"
@@ -112,6 +113,9 @@ private slots:
     void device_ledger_rejects_empty_device_id();
     void cashSessionLifecycle();
     void settingsRoundTrip();
+    void zakat_year_calculation();
+    void should_notify_does_not_claim_year();
+    void zakat_history_roundtrip();
     void appendOnlyGuard();
     void journalModeMatchesDatabaseRole();
     void pruneOnlyExpiredAcknowledgedOutboxRows();
@@ -167,9 +171,9 @@ void DataLayerTest::schemaContainsAllTables()
         QStringLiteral("expenses"), QStringLiteral("owner_drawings"),
         QStringLiteral("stock_movements"), QStringLiteral("cash_sessions"),
         QStringLiteral("cash_movements"), QStringLiteral("users"), QStringLiteral("devices"),
-        QStringLiteral("audit_log"), QStringLiteral("zakat_settings"), QStringLiteral("settings"),
+        QStringLiteral("audit_log"), QStringLiteral("settings"),
         QStringLiteral("sync_outbox"), QStringLiteral("applied_ops"), QStringLiteral("sync_sequence"),
-        QStringLiteral("admin_secrets"),
+        QStringLiteral("admin_secrets"), QStringLiteral("zakat_history"),
     };
 
     QSqlQuery query(m_db->handle());
@@ -1954,19 +1958,143 @@ void DataLayerTest::cashSessionLifecycle()
     QCOMPARE(closed->varianceCents, 0LL);
 }
 
+void DataLayerTest::zakat_year_calculation()
+{
+    using app::core::zakatYearFor;
+
+    // A 01-04 zakat date: the trading year turns over on the first of April, not
+    // on New Year's Day, so most of January still belongs to the year before.
+    const QDate firstOfApril(2026, 4, 1);
+    QCOMPARE(zakatYearFor(QDate(2026, 2, 15), firstOfApril), 2025);
+    QCOMPARE(zakatYearFor(QDate(2026, 4, 1), firstOfApril), 2026);
+    QCOMPARE(zakatYearFor(QDate(2026, 4, 2), firstOfApril), 2026);
+
+    // And the same day, a year later, turns the year over again — the date is a
+    // day within the trading year, not a fixed calendar date.
+    QCOMPARE(zakatYearFor(QDate(2027, 3, 31), firstOfApril), 2026);
+    QCOMPARE(zakatYearFor(QDate(2027, 4, 1), firstOfApril), 2027);
+
+    // An invalid today has no year to report.
+    QCOMPARE(zakatYearFor(QDate(), firstOfApril), 0);
+
+    // A 29 February zakat date has no 29 February in a common year, so the
+    // turn-over lands on the 28th: asked on the 27th the year has not turned,
+    // asked on the 28th it has.
+    const QDate leapDay(2024, 2, 29);
+    QCOMPARE(zakatYearFor(QDate(2025, 2, 27), leapDay), 2024);
+    QCOMPARE(zakatYearFor(QDate(2025, 2, 28), leapDay), 2025);
+    // In a leap year the real 29th is used.
+    QCOMPARE(zakatYearFor(QDate(2028, 2, 28), leapDay), 2027);
+    QCOMPARE(zakatYearFor(QDate(2028, 2, 29), leapDay), 2028);
+
+    // An unset date cannot place the turn-over, so the shop is left in the year
+    // it is actually in.
+    QCOMPARE(zakatYearFor(QDate(2026, 2, 15), QDate()), 2026);
+}
+
+void DataLayerTest::should_notify_does_not_claim_year()
+{
+    // The suite shares one database, so the two keys this test owns are cleared
+    // rather than assumed absent.
+    data::SettingRepository settings(*m_db);
+    settings.remove(QStringLiteral("zakat_date"));
+    settings.remove(QStringLiteral("zakat_notified_year"));
+
+    const QDate today = QDate::currentDate();
+    settings.set(QStringLiteral("zakat_date"), today.toString(Qt::ISODate));
+    const int year = core::zakatYearFor(today, today);
+    QVERIFY(year > 0);
+
+    // Asked inside the window with the year unclaimed: yes, and nothing written.
+    QVERIFY(core::shouldNotifyZakat(*m_db));
+    QVERIFY(!settings.value(QStringLiteral("zakat_notified_year")).has_value());
+
+    // Asked again having only been asked. This is the bug: claiming on the way
+    // out meant a dialog that was opened and dismissed without paying never got
+    // asked again for that whole year.
+    QVERIFY(core::shouldNotifyZakat(*m_db));
+    QVERIFY(!settings.value(QStringLiteral("zakat_notified_year")).has_value());
+
+    // Claimed on purpose, the year stops being owed.
+    core::markZakatYearAsSeen(*m_db, year);
+    QCOMPARE(settings.value(QStringLiteral("zakat_notified_year")).value_or(QString()),
+             QString::number(year));
+    QVERIFY(!core::shouldNotifyZakat(*m_db));
+
+    // A different year is a different debt, so last year's claim does not silence
+    // this year's reminder.
+    core::markZakatYearAsSeen(*m_db, year - 1);
+    QVERIFY(core::shouldNotifyZakat(*m_db));
+
+    // Nothing at all configured means nothing owed.
+    settings.remove(QStringLiteral("zakat_date"));
+    settings.remove(QStringLiteral("zakat_notified_year"));
+    QVERIFY(!core::shouldNotifyZakat(*m_db));
+}
+
+void DataLayerTest::zakat_history_roundtrip()
+{
+    data::ZakatHistoryRepository history(*m_db);
+
+    QVERIFY(history.insertOrIgnore(2026, 100000, 500000, 12500, 2000));
+
+    const auto recorded = history.findByYear(2026);
+    QVERIFY(recorded.has_value());
+    QCOMPARE(recorded->year, 2026);
+    QCOMPARE(recorded->nisabCents, 100000LL);
+    QCOMPARE(recorded->baseCents, 500000LL);
+    QCOMPARE(recorded->dueCents, 12500LL);
+    QCOMPARE(recorded->goldPriceCents, 2000LL);
+    QVERIFY(!recorded->paid);
+    QVERIFY(recorded->paidAt.isEmpty());
+
+    // Marking a year that was never assessed settles nothing, and says so.
+    QVERIFY(!history.markPaid(2030, 999, QStringLiteral("2030-01-01")));
+    QVERIFY(!history.findByYear(2030).has_value());
+
+    QVERIFY(history.markPaid(2026, 12500, QStringLiteral("2026-04-05")));
+    const auto settled = history.findByYear(2026);
+    QVERIFY(settled.has_value());
+    QVERIFY(settled->paid);
+    QCOMPARE(settled->paidCents, 12500LL);
+    QCOMPARE(settled->paidAt, QStringLiteral("2026-04-05"));
+
+    // Assessing the same year again must not touch the row: this is a ledger, and
+    // re-running the calculation with today's stock would otherwise rewrite what
+    // that year was recorded as — including dropping the payment.
+    QVERIFY(history.insertOrIgnore(2026, 111, 222, 333, 444));
+    const auto untouched = history.findByYear(2026);
+    QVERIFY(untouched.has_value());
+    QCOMPARE(untouched->nisabCents, 100000LL);
+    QCOMPARE(untouched->baseCents, 500000LL);
+    QCOMPARE(untouched->dueCents, 12500LL);
+    QCOMPARE(untouched->goldPriceCents, 2000LL);
+    QVERIFY(untouched->paid);
+    QCOMPARE(untouched->paidCents, 12500LL);
+    QCOMPARE(untouched->paidAt, QStringLiteral("2026-04-05"));
+
+    QVERIFY(history.insertOrIgnore(2025, 90000, 400000, 10000, 1800));
+    const auto all = history.findAll();
+    QCOMPARE(static_cast<int>(all.size()), 2);
+    // Newest year first.
+    QCOMPARE(all.front().year, 2026);
+    QCOMPARE(all.back().year, 2025);
+    QVERIFY(!all.back().paid);
+
+    QVERIFY(!history.findByYear(2024).has_value());
+}
+
 void DataLayerTest::settingsRoundTrip()
 {
     data::SettingRepository settingRepo(*m_db);
-    data::ZakatSettingRepository zakatRepo(*m_db);
 
     settingRepo.set(QStringLiteral("batch_size"), QStringLiteral("50"));
     QCOMPARE(settingRepo.value(QStringLiteral("batch_size")), std::optional<QString>(QStringLiteral("50")));
     QVERIFY(!settingRepo.value(QStringLiteral("missing")).has_value());
 
-    zakatRepo.set(QStringLiteral("nisab_cents"), QStringLiteral("1000000"));
-    const auto nisab = zakatRepo.findByKey(QStringLiteral("nisab_cents"));
-    QVERIFY(nisab.has_value());
-    QCOMPARE(nisab->value, QStringLiteral("1000000"));
+    settingRepo.set(QStringLiteral("nisab_cents"), QStringLiteral("1000000"));
+    QCOMPARE(settingRepo.value(QStringLiteral("nisab_cents")),
+             std::optional<QString>(QStringLiteral("1000000")));
 }
 
 void DataLayerTest::appendOnlyGuard()

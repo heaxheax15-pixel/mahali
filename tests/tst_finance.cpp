@@ -12,6 +12,7 @@ private slots:
     void profitLoss();
     void cashSessionVariance();
     void zakatBaseTreatsDebtAsCash();
+    void zakatBaseStockCashReceivables();
 };
 
 void FinanceTest::profitLoss()
@@ -48,6 +49,26 @@ void FinanceTest::zakatBaseTreatsDebtAsCash()
 
     QCOMPARE(ZakatCalculator::zakatBaseCents(100000, 50000), 150000);
     QCOMPARE(ZakatCalculator::zakatBaseCents(0, 70000), 70000);
+}
+
+void FinanceTest::zakatBaseStockCashReceivables()
+{
+    using app::core::ZakatCalculator;
+
+    app::core::ZakatInputs inputs;
+    inputs.stockValueCents = 100000;
+    inputs.cashCents = 50000;
+    inputs.receivablesCents = 30000;
+    QCOMPARE(ZakatCalculator::zakatBase(inputs), 180000LL);
+
+    // Each leg on its own is enough to make the base, and a shop holding stock
+    // with an empty till is not a shop that owes no zakat.
+    app::core::ZakatInputs stockOnly;
+    stockOnly.stockValueCents = 40000;
+    QCOMPARE(ZakatCalculator::zakatBase(stockOnly), 40000LL);
+
+    app::core::ZakatInputs nothing;
+    QCOMPARE(ZakatCalculator::zakatBase(nothing), 0LL);
 }
 
 QTEST_GUILESS_MAIN(FinanceTest)

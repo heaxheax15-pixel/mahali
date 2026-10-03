@@ -16,7 +16,7 @@
 #include "core/i18n.h"
 #include "core/update_checker.h"
 #include "data/setting_repository.h"
-#include "data/zakat_setting_repository.h"
+
 #include "format_utils.h"
 #include "theme.h"
 #include "widgets/app_icon.h"
@@ -57,6 +57,8 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     m_currency = new QLineEdit;
     m_currency->setPlaceholderText(tr("مثال: دج  أو  DA"));
     m_zakat = new QCheckBox(tr("احتساب الزكاة (2.5%) في التقارير"));
+    m_zakatDate = new QLineEdit;
+    m_zakatDate->setPlaceholderText(QStringLiteral("YYYY-MM-DD"));
     m_syncKey = new QLineEdit;
     m_syncKey->setEchoMode(QLineEdit::Password);
 
@@ -108,6 +110,18 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     // The checkbox carries its own text and spans the row, so it reads as a
     // sentence in its own right rather than as a box with a gap beside it.
     form->addRow(m_zakat);
+    // The date sits under the checkbox rather than beside it: both are about
+    // zakat, and the hint has to sit under the field it explains, which a
+    // WrapAllRows form cannot do for a bare row.
+    auto* zakatDateHint = new QLabel(tr("Un rappel annuel s'affichera à cette date"));
+    zakatDateHint->setObjectName(QStringLiteral("faintText"));
+    auto* zakatDateBox = new QWidget;
+    auto* zakatDateLayout = new QVBoxLayout(zakatDateBox);
+    zakatDateLayout->setContentsMargins(0, 0, 0, 0);
+    zakatDateLayout->setSpacing(2);
+    zakatDateLayout->addWidget(m_zakatDate);
+    zakatDateLayout->addWidget(zakatDateHint);
+    form->addRow(caption(tr("تاريخ الزكاة السنوي:")), zakatDateBox);
     form->addRow(caption(tr("السمة:")), m_theme);
     form->addRow(caption(tr("اللغة:")), m_language);
     form->addRow(caption(tr("مفتاح المزامنة (يتطلب إعادة تشغيل):")), m_syncKey);
@@ -262,9 +276,9 @@ void SettingsPage::refresh()
     m_language->setCurrentIndex(langIdx >= 0 ? langIdx
                                              : m_language->findData(core::defaultLanguage()));
 
-    data::ZakatSettingRepository zakat(m_db);
-    const auto enabledRow = zakat.findByKey(QStringLiteral("enabled"));
-    m_zakat->setChecked(!enabledRow.has_value() || enabledRow->value == QLatin1String("1"));
+    const auto enabledRow = settings.value(QStringLiteral("enabled"));
+    m_zakat->setChecked(!enabledRow.has_value() || *enabledRow == QLatin1String("1"));
+    m_zakatDate->setText(settings.value(QStringLiteral("zakat_date")).value_or(QString()));
 
     m_notice->clear();
     m_notice->setVisible(false);
@@ -284,6 +298,11 @@ QString SettingsPage::currencySymbol() const
 bool SettingsPage::zakatEnabled() const
 {
     return m_zakat->isChecked();
+}
+
+QString SettingsPage::zakatDate() const
+{
+    return m_zakatDate->text().trimmed();
 }
 
 QString SettingsPage::syncKey() const
@@ -311,6 +330,11 @@ void SettingsPage::setZakatEnabled(bool enabled)
     m_zakat->setChecked(enabled);
 }
 
+void SettingsPage::setZakatDate(const QString& date)
+{
+    m_zakatDate->setText(date);
+}
+
 void SettingsPage::setSyncKey(const QString& key)
 {
     m_syncKey->setText(key);
@@ -321,12 +345,12 @@ void SettingsPage::save()
     data::SettingRepository settings(m_db);
     settings.set(QStringLiteral("shop_name"), shopName());
     settings.set(QStringLiteral("currency_symbol"), currencySymbol());
+    settings.set(QStringLiteral("zakat_date"), zakatDate());
     settings.set(QStringLiteral("theme"), m_theme->currentData().toString());
     if (!syncKey().isEmpty()) {
         settings.set(QStringLiteral("sync_hmac_key"), syncKey());
     }
-    data::ZakatSettingRepository zakat(m_db);
-    zakat.set(QStringLiteral("enabled"), zakatEnabled() ? QStringLiteral("1") : QStringLiteral("0"));
+    settings.set(QStringLiteral("enabled"), zakatEnabled() ? QStringLiteral("1") : QStringLiteral("0"));
 
     app::ui::setCurrencySymbol(currencySymbol());
     m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));

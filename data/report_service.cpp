@@ -1,10 +1,17 @@
 #include "report_service.h"
 
+#include <QDebug>
 #include <QSqlQuery>
 #include <QVariant>
 
+#include <limits>
+#include <optional>
+
 #include "core/profit_loss_calculator.h"
 #include "core/zakat_calculator.h"
+#include "core/cash_session_calculator.h"
+#include "cash_movement_repository.h"
+#include "cash_session_repository.h"
 #include "customer_repository.h"
 #include "customer_transaction_repository.h"
 #include "date_utils.h"
@@ -13,7 +20,9 @@
 #include "payment_repository.h"
 #include "sale_item_repository.h"
 #include "sale_repository.h"
-#include "zakat_setting_repository.h"
+#include "setting_repository.h"
+#include "supplier_repository.h"
+
 
 namespace app::data {
 
@@ -31,6 +40,49 @@ long long cogsFor(const std::vector<core::SaleItem>& items)
         cogs += item.unitCostCents * item.quantity;
     }
     return cogs;
+}
+
+long long stockValueCents(Database& db)
+{
+    QSqlQuery query(db.handle());
+    query.prepare(QStringLiteral("SELECT id, quantity, sale_price_cents FROM products "
+                                 "WHERE active = 1 AND quantity > 0"));
+    if (!query.exec()) {
+        db.recordError(query.lastError(), QStringLiteral("ReportService::stockValueCents"));
+        return 0;
+    }
+
+    const long long ceiling = std::numeric_limits<long long>::max();
+    long long total = 0;
+    while (query.next()) {
+        const long long quantity = query.value(1).toLongLong();
+        const long long price = query.value(2).toLongLong();
+        if (quantity > 0 && price > ceiling / quantity) {
+            qWarning() << "stock value: product" << query.value(0).toInt()
+                       << "left out, its quantity times its sale price overflows";
+            continue;
+        }
+        const long long term = quantity * price;
+        if (total > ceiling - term) {
+            qWarning() << "stock value: stopped at product" << query.value(0).toInt()
+                       << ", the running total would overflow";
+            break;
+        }
+        total += term;
+    }
+    return total;
+}
+
+long long cashOnHandCents(Database& db)
+{
+    CashSessionRepository sessions(db);
+    const std::optional<core::CashSession> session = sessions.findOpen();
+    if (!session.has_value()) {
+        return 0;
+    }
+    CashMovementRepository movements(db);
+    return core::CashSessionCalculator::expectedTotalCents(session->openingFloatCents,
+                                                           movements.sumBySessionId(session->id));
 }
 
 } // namespace
@@ -82,12 +134,34 @@ StoreReport ReportService::build(const QDateTime& from, const QDateTime& to) con
             report.outstandingDebtCents += balance;
         }
     }
-    report.zakatBaseCents =
-        core::ZakatCalculator::zakatBaseCents(report.revenueCents, report.outstandingDebtCents);
-    ZakatSettingRepository zakatSettings(m_db);
-    const auto enabledRow = zakatSettings.findByKey(QStringLiteral("enabled"));
-    const bool zakatEnabled = !enabledRow.has_value() || enabledRow->value == QLatin1String("1");
+    report.receivablesCents = report.outstandingDebtCents;
+
+    core::ZakatInputs zakatInputs;
+    report.stockValueCents = stockValueCents(m_db);
+    report.cashOnHandCents = cashOnHandCents(m_db);
+    zakatInputs.stockValueCents = report.stockValueCents;
+    zakatInputs.cashCents = report.cashOnHandCents;
+    zakatInputs.receivablesCents = report.receivablesCents;
+    report.zakatBaseCents = core::ZakatCalculator::zakatBase(zakatInputs);
+
+    SupplierRepository suppliers(m_db);
+    for (const core::Supplier& supplier : suppliers.findAll()) {
+        const long long balance = suppliers.balanceCentsFor(supplier.id);
+        if (balance > 0) {
+            report.supplierDebtCents += balance;
+        }
+    }
+
+    SettingRepository settings(m_db);
+    const auto enabledRow = settings.value(QStringLiteral("enabled"));
+    const bool zakatEnabled = !enabledRow.has_value() || *enabledRow == QLatin1String("1");
     report.zakatCents = zakatEnabled && report.zakatBaseCents > 0 ? report.zakatBaseCents * 25 / 1000 : 0;
+
+    const long long nisabCents =
+        settings.value(QStringLiteral("nisab_cents")).value_or(QString()).toLongLong();
+    if (nisabCents > 0 && report.zakatBaseCents < nisabCents) {
+        report.zakatCents = 0;
+    }
 
     QSqlQuery sessionQuery(m_db.handle());
     sessionQuery.prepare(QStringLiteral(

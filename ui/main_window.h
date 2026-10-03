@@ -157,6 +157,8 @@ private:
     // Asks the page at this index to re-read, doing nothing if it has not been
     // opened yet: a page nobody has looked at has nothing stale to correct.
     void refreshPage(int row);
+    // The annual zakat reminder. Empty in B1; B2 gives it the dialog.
+    void showZakatDialog();
 
     app::data::Database& m_db;
     ServerController& m_controller;
@@ -180,6 +182,9 @@ private:
     // written to the settings and has to be re-applied on the next start, long
     // after the rail itself has been built.
     bool m_sidebarVisible = true;
+    // One zakat reminder check per run of the app. Kept because the check is a
+    // pure read now, so nothing but this stops it being asked twice.
+    bool m_zakatCheckedThisSession = false;
     // The column the nav groups are added to. Held so a role change can empty
     // it and build the groups again without rebuilding the window.
     QVBoxLayout* m_sidebarGroupLayout = nullptr;

@@ -49,7 +49,6 @@
 #include "data/setting_repository.h"
 #include "data/stock_movement_repository.h"
 #include "data/supplier_repository.h"
-#include "data/zakat_setting_repository.h"
 #include "data/user_repository.h"
 #include "network/sync_client.h"
 #include "ui/audit_log_page.h"
@@ -101,6 +100,7 @@ private slots:
     void expensesAndDrawings();
     void reportBuilds();
     void settingsCurrencyAndZakat();
+    void zakat_respects_nisab();
     void update_bar_hidden_by_default();
     void update_bar_appears_on_signal();
     void refundsRestoreMoneyAndStock();
@@ -1018,8 +1018,16 @@ void UiTest::reportBuilds()
     QCOMPARE(report.drawingsCents, 2000LL);
     QCOMPARE(report.netProfitCents, 2500LL);
     QCOMPARE(report.outstandingDebtCents, 3000LL);
-    QCOMPARE(report.zakatBaseCents, 13000LL);
-    QCOMPARE(report.zakatCents, 325LL);
+    // The base is the trading-goods one: what is on the shelf at the selling
+    // price, what is in the drawer, and what the customers owe. 97 left of 100
+    // tubes at 5000, the float plus the movements booked against it, and 5000
+    // taken on account less the 2000 paid back.
+    QCOMPARE(report.stockValueCents, 485000LL);
+    QCOMPARE(report.cashOnHandCents, 13500LL);
+    QCOMPARE(report.receivablesCents, 3000LL);
+    QCOMPARE(report.supplierDebtCents, 0LL);
+    QCOMPARE(report.zakatBaseCents, 501500LL);
+    QCOMPARE(report.zakatCents, 12537LL);
     QCOMPARE(report.sessionsOpened, 1LL);
     QCOMPARE(report.openingFloatCents, 5000LL);
 
@@ -1041,7 +1049,7 @@ void UiTest::reportBuilds()
 
     ui::ReportsPage page(db);
     QCOMPARE(page.report().revenueCents, 10000LL);
-    QCOMPARE(page.report().zakatCents, 325LL);
+    QCOMPARE(page.report().zakatCents, 12537LL);
     QCOMPARE(page.report().netProfitCents, 2500LL);
 }
 
@@ -1066,10 +1074,7 @@ void UiTest::settingsCurrencyAndZakat()
     QCOMPARE(settings.value(QStringLiteral("shop_name")).value_or(QString()), QStringLiteral("محل النور"));
     QCOMPARE(settings.value(QStringLiteral("currency_symbol")).value_or(QString()), QStringLiteral("دج"));
     QCOMPARE(settings.value(QStringLiteral("sync_hmac_key")).value_or(QString()), QStringLiteral("my-sync-key"));
-    data::ZakatSettingRepository zakat(db);
-    const auto enabledRow = zakat.findByKey(QStringLiteral("enabled"));
-    QVERIFY(enabledRow.has_value());
-    QCOMPARE(enabledRow->value, QStringLiteral("1"));
+    QCOMPARE(settings.value(QStringLiteral("enabled")).value_or(QString()), QStringLiteral("1"));
 
     // Disabled zakat in the settings must zero out the report's zakat line.
     page.setZakatEnabled(false);
@@ -1095,10 +1100,58 @@ void UiTest::settingsCurrencyAndZakat()
 
     const QDateTime dayStart(QDate::currentDate(), QTime(0, 0, 0));
     const data::StoreReport report = data::ReportService(db).build(dayStart, QDateTime::currentDateTime());
-    QCOMPARE(report.zakatBaseCents, 10000LL);
+    // 8 tubes left at 5000 and a till holding the float plus the 10000 sale.
+    // Turning the zakat off zeroes what is owed, never the base it rests on.
+    QCOMPARE(report.zakatBaseCents, 55000LL);
     QCOMPARE(report.zakatCents, 0LL);
 
     app::ui::setCurrencySymbol(QString());
+}
+
+void UiTest::zakat_respects_nisab()
+{
+    const QString path = m_dir.filePath(QStringLiteral("zakat-nisab.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000004");
+    product.name = QStringLiteral("معجون");
+    product.salePriceCents = 5000;
+    product.unit = QStringLiteral("أنبوب");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 10, QStringLiteral("purchase"));
+
+    const QDateTime dayStart(QDate::currentDate(), QTime(0, 0, 0));
+    const QDateTime now = QDateTime::currentDateTime();
+
+    // No nisab has ever been set, so the shop owes zakat on whatever it holds.
+    const data::StoreReport before = data::ReportService(db).build(dayStart, now);
+    QCOMPARE(before.stockValueCents, 50000LL);
+    QCOMPARE(before.cashOnHandCents, 5000LL);
+    QCOMPARE(before.zakatBaseCents, 55000LL);
+    QVERIFY(before.zakatCents > 0);
+
+    // A nisab the shop has not reached takes the whole liability to zero, and
+    // the base is left standing: it is what the nisab is measured against.
+    data::SettingRepository zakat(db);
+    zakat.set(QStringLiteral("nisab_cents"), QStringLiteral("999999999"));
+
+    const data::StoreReport after = data::ReportService(db).build(dayStart, now);
+    QCOMPARE(after.zakatBaseCents, 55000LL);
+    QCOMPARE(after.zakatCents, 0LL);
+
+    // The base says nothing about the setting either way, so dropping the nisab
+    // brings the liability straight back rather than leaving it suppressed.
+    zakat.set(QStringLiteral("nisab_cents"), QStringLiteral("0"));
+    const data::StoreReport cleared = data::ReportService(db).build(dayStart, now);
+    QCOMPARE(cleared.zakatCents, before.zakatCents);
 }
 
 void UiTest::update_bar_hidden_by_default()

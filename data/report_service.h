@@ -27,6 +27,10 @@ struct StoreReport {
     long long openingFloatCents = 0;
     long long sessionsOpened = 0;
     long long outstandingDebtCents = 0;
+    long long stockValueCents = 0;
+    long long cashOnHandCents = 0;
+    long long receivablesCents = 0;
+    long long supplierDebtCents = 0;
     std::vector<CashLine> cashLines;
 };
 

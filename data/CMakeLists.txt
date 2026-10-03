@@ -35,6 +35,10 @@ target_sources(mahali-data PRIVATE
     # currentLanguage() reads SettingRepository, and data depends on core.
     ../core/i18n.cpp
     ../core/i18n.h
+    # Same reason as the two above: shouldNotifyZakat() reads and writes
+    # SettingRepository, which data depends on core.
+    ../core/zakat_notifier.cpp
+    ../core/zakat_notifier.h
     device_ledger_service.cpp
     device_identity.cpp
     device_repository.cpp
@@ -66,7 +70,8 @@ target_sources(mahali-data PRIVATE
     sync_outbox_repository.cpp
     sync_sequence_repository.cpp
     user_repository.cpp
-    zakat_setting_repository.cpp)
+    zakat_history_repository.cpp
+    zakat_history_repository.h)
 
 set_target_properties(mahali-data PROPERTIES
     POSITION_INDEPENDENT_CODE ON)

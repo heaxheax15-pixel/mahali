@@ -36,6 +36,8 @@ target_sources(mahali-ui PRIVATE
     dialogs/supplier_payment_dialog.h
     dialogs/supplier_return_dialog.cpp
     dialogs/supplier_return_dialog.h
+    dialogs/zakat_dialog.cpp
+    dialogs/zakat_dialog.h
     quick_items_bar.cpp
     quick_items_bar.h
     cash_session_page.cpp

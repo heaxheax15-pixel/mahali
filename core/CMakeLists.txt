@@ -68,8 +68,7 @@ target_sources(mahali-core PRIVATE
     version.cpp
     version.h
     zakat_calculator.cpp
-    zakat_calculator.h
-    zakat_setting.h)
+    zakat_calculator.h)
 
 set_target_properties(mahali-core PROPERTIES
     POSITION_INDEPENDENT_CODE ON)

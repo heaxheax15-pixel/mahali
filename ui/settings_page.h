@@ -17,8 +17,8 @@ class UpdateChecker;
 namespace app::ui {
 
 // Shop settings (الإعدادات): name, currency symbol used by formatMoney, zakat
-// on/off, and the sync HMAC key. Persisted through SettingRepository and
-// ZakatSettingRepository; currency is applied live to rendered money.
+// on/off, the annual zakat date, and the sync HMAC key. All of it is persisted
+// through SettingRepository; currency is applied live to rendered money.
 class SettingsPage : public QWidget {
     Q_OBJECT
 
@@ -37,12 +37,14 @@ public:
     QString shopName() const;
     QString currencySymbol() const;
     bool zakatEnabled() const;
+    QString zakatDate() const;
     QString syncKey() const;
     QString noticeText() const;
 
     void setShopName(const QString& name);
     void setCurrencySymbol(const QString& symbol);
     void setZakatEnabled(bool enabled);
+    void setZakatDate(const QString& date);
     void setSyncKey(const QString& key);
 
 public slots:
@@ -59,6 +61,7 @@ private:
     QLineEdit* m_shopName;
     QLineEdit* m_currency;
     QCheckBox* m_zakat;
+    QLineEdit* m_zakatDate;
     QLineEdit* m_syncKey;
     QComboBox* m_theme;
     QComboBox* m_language;

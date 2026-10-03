@@ -25,6 +25,9 @@
 
 #include "core/cash_movement.h"
 #include "data/report_service.h"
+#include "data/setting_repository.h"
+#include "data/zakat_history_repository.h"
+
 #include "format_utils.h"
 #include "theme.h"
 
@@ -100,6 +103,12 @@ QDateTime startOfDay(const QDate& date)
 QDateTime endOfDay(const QDate& date)
 {
     return startOfDay(date.addDays(1)).addMSecs(-1);
+}
+
+long long nisabCentsFor(data::Database& db)
+{
+    data::SettingRepository settings(db);
+    return settings.value(QStringLiteral("nisab_cents")).value_or(QString()).toLongLong();
 }
 
 } // namespace
@@ -209,21 +218,76 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     }
     root->addLayout(metricGrid);
 
-    auto* currentHeading = new QLabel(tr("État actuel (indépendant de la période)"));
+    auto* currentHeading = new QLabel(tr("Zakat (état actuel, indépendant de la période)"));
     currentHeading->setObjectName(QStringLiteral("reportSectionTitle"));
     root->addWidget(currentHeading);
     auto* currentGrid = new QGridLayout;
     currentGrid->setContentsMargins(0, 0, 0, 0);
     currentGrid->setSpacing(8);
-    addMetricCard(currentGrid, 0, 0, tr("Dettes clients dues aujourd'hui"));
-    addMetricCard(currentGrid, 0, 1, tr("Base de la Zakat"));
-    addMetricCard(currentGrid, 0, 2, tr("Zakat (2,5 %)"));
-    addMetricCard(currentGrid, 1, 0, tr("Sessions sur la période"));
-    addMetricCard(currentGrid, 1, 1, tr("Fonds de départ"));
+    addMetricCard(currentGrid, 0, 0, tr("Valeur du stock"));
+    addMetricCard(currentGrid, 0, 1, tr("Trésorerie en caisse"));
+    addMetricCard(currentGrid, 0, 2, tr("Créances clients"));
+    addMetricCard(currentGrid, 1, 0, tr("Dettes fournisseurs"));
+    addMetricCard(currentGrid, 1, 1, tr("Total imposable"));
+    addMetricCard(currentGrid, 1, 2, tr("Nisab"));
+    addMetricCard(currentGrid, 2, 0, tr("Zakat (2,5 %)"));
+    addMetricCard(currentGrid, 2, 1, tr("Sessions sur la période"));
+    addMetricCard(currentGrid, 2, 2, tr("Fonds de départ"));
     for (int column = 0; column < 3; ++column) {
         currentGrid->setColumnStretch(column, 1);
     }
     root->addLayout(currentGrid);
+
+    // The per-year ledger, under the live figures above it. The 3x3 grid answers
+    // "where does the shop stand right now" and resets itself on every refresh;
+    // this is the part that does not reset, since a year that was assessed and
+    // paid is not re-derivable from today's stock.
+    auto* historyHeading = new QLabel(tr("Historique de la Zakat"));
+    historyHeading->setObjectName(QStringLiteral("reportSectionTitle"));
+    root->addWidget(historyHeading);
+    m_zakatHistoryTable = new QTableWidget;
+    m_zakatHistoryTable->setObjectName(QStringLiteral("reportTable"));
+    m_zakatHistoryTable->setAlternatingRowColors(true);
+    m_zakatHistoryTable->setFrameShape(QFrame::NoFrame);
+    m_zakatHistoryTable->setShowGrid(true);
+    m_zakatHistoryTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_zakatHistoryTable->setColumnCount(4);
+    m_zakatHistoryTable->setHorizontalHeaderLabels(
+        {tr("Année"), tr("Base"), tr("Dû"), tr("Statut")});
+    m_zakatHistoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_zakatHistoryTable->setSelectionMode(QAbstractItemView::NoSelection);
+    // The status column takes the slack so the two money columns keep the width
+    // they need to show a figure instead of truncating it mid-number.
+    m_zakatHistoryTable->horizontalHeader()->setStretchLastSection(false);
+    m_zakatHistoryTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    m_zakatHistoryTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+    m_zakatHistoryTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_zakatHistoryTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    m_zakatHistoryTable->setColumnWidth(0, 80);
+    m_zakatHistoryTable->setColumnWidth(1, 140);
+    m_zakatHistoryTable->setColumnWidth(2, 140);
+    m_zakatHistoryTable->horizontalHeader()->setFixedHeight(34);
+    m_zakatHistoryTable->verticalHeader()->setDefaultSectionSize(36);
+    m_zakatHistoryTable->verticalHeader()->hide();
+    // Bounded: one row a year, and a decade of history does not need the same
+    // height as the operations table it shares the page with. The scroll area
+    // handles the overflow.
+    m_zakatHistoryTable->setMaximumHeight(240);
+    m_zakatHistoryTable->setMinimumHeight(120);
+
+    auto* historyCard = makeCard();
+    auto* historyLayout = new QVBoxLayout(historyCard);
+    padCardLayout(historyLayout);
+    m_zakatHistoryStack = new QStackedWidget;
+    m_zakatHistoryStack->addWidget(m_zakatHistoryTable);
+    // An empty history is a normal state, not a broken table: say so rather than
+    // showing a header with nothing under it.
+    auto* emptyHistory = new QLabel(tr("Aucun exercice de Zakat enregistré"));
+    emptyHistory->setObjectName(QStringLiteral("emptyReportState"));
+    emptyHistory->setAlignment(Qt::AlignCenter);
+    m_zakatHistoryStack->addWidget(emptyHistory);
+    historyLayout->addWidget(m_zakatHistoryStack);
+    root->addWidget(historyCard);
 
     m_cashTable = new QTableWidget;
     m_cashTable->setObjectName(QStringLiteral("reportTable"));
@@ -349,11 +413,16 @@ void ReportsPage::rebuild()
     setValue(3, formatMoney(m_report.cogsCents), m_report.cogsCents);
     setValue(4, formatMoney(m_report.expensesCents), m_report.expensesCents);
     setValue(5, formatMoney(m_report.drawingsCents), m_report.drawingsCents);
-    setValue(6, formatMoney(m_report.outstandingDebtCents), m_report.outstandingDebtCents);
-    setValue(7, formatMoney(m_report.zakatBaseCents), m_report.zakatBaseCents);
-    setValue(8, formatMoney(m_report.zakatCents), m_report.zakatCents);
-    setValue(9, QString::number(m_report.sessionsOpened), 0, false);
-    setValue(10, formatMoney(m_report.openingFloatCents), m_report.openingFloatCents);
+    setValue(6, formatMoney(m_report.stockValueCents), m_report.stockValueCents);
+    setValue(7, formatMoney(m_report.cashOnHandCents), m_report.cashOnHandCents);
+    setValue(8, formatMoney(m_report.receivablesCents), m_report.receivablesCents);
+    setValue(9, formatMoney(m_report.supplierDebtCents), m_report.supplierDebtCents);
+    setValue(10, formatMoney(m_report.zakatBaseCents), m_report.zakatBaseCents);
+    const long long nisab = nisabCentsFor(m_db);
+    setValue(11, formatMoney(nisab), 0, false);
+    setValue(12, formatMoney(m_report.zakatCents), m_report.zakatCents);
+    setValue(13, QString::number(m_report.sessionsOpened), 0, false);
+    setValue(14, formatMoney(m_report.openingFloatCents), m_report.openingFloatCents);
 
     long long totalCount = 0;
     long long totalCents = 0;
@@ -370,6 +439,12 @@ void ReportsPage::rebuild()
         totalCount += line.count;
         totalCents += line.sumCents;
     }
+    // Read fresh rather than from m_report: the rows are years, not this period's
+    // figures, so they must not follow the date filters. The panel refreshes on
+    // every rebuild only because that is the one call that runs, and the read is
+    // a handful of rows — cheap enough not to want a second trigger to keep in
+    // step with.
+    rebuildZakatHistory();
     if (m_cashTable->rowCount() == 0) {
         m_tableStack->setCurrentIndex(1);
     } else {
@@ -389,6 +464,41 @@ void ReportsPage::rebuild()
         m_cashTable->setItem(totalRow, 0, totalLabel);
         m_cashTable->setItem(totalRow, 1, totalCountItem);
         m_cashTable->setItem(totalRow, 2, totalSumItem);
+    }
+}
+
+void ReportsPage::rebuildZakatHistory()
+{
+    const std::vector<data::ZakatHistory> rows = data::ZakatHistoryRepository(m_db).findAll();
+
+    m_zakatHistoryTable->setRowCount(0);
+    for (const data::ZakatHistory& history : rows) {
+        const int row = m_zakatHistoryTable->rowCount();
+        m_zakatHistoryTable->insertRow(row);
+
+        auto* year = new QTableWidgetItem(QString::number(history.year));
+        year->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        m_zakatHistoryTable->setItem(row, 0, year);
+
+        auto* base = new QTableWidgetItem(formatMoney(history.baseCents));
+        base->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        m_zakatHistoryTable->setItem(row, 1, base);
+
+        auto* due = new QTableWidgetItem(formatMoney(history.dueCents));
+        due->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        m_zakatHistoryTable->setItem(row, 2, due);
+
+        // Paid says it was settled, so what goes in the cell is when. An unpaid
+        // year shows only that: there is no date to show and inventing one would
+        // read as though something had been recorded on the day the page opened.
+        m_zakatHistoryTable->setItem(row, 3, new QTableWidgetItem(
+            history.paid ? tr("Payée le %1").arg(history.paidAt) : tr("Non payée")));
+    }
+
+    if (m_zakatHistoryTable->rowCount() == 0) {
+        m_zakatHistoryStack->setCurrentIndex(1);
+    } else {
+        m_zakatHistoryStack->setCurrentIndex(0);
     }
 }
 
