@@ -10,6 +10,7 @@
 #include "data/database.h"
 
 class QEvent;
+class QFrame;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -58,6 +59,15 @@ public:
 public slots:
     void addEntry();
     void completeSale();
+
+    // Puts the register on somebody's account: asks who, names them and what they
+    // already owe above the scan field, and points the sale button at their ledger.
+    // The next completed sale is written as a debt instead of into the till.
+    // clearCreditMode() puts it back, and isInCreditMode() says which of the two a
+    // sale would go to.
+    void enterCreditMode();
+    void clearCreditMode();
+    bool isInCreditMode() const { return m_creditCustomerId > 0; }
 
     // Puts the caret in the scan field and selects what is in it. Called by the
     // shell each time the register becomes the visible page: the window gives
@@ -126,6 +136,14 @@ private:
     QLabel* m_remainingLabel;
     QLabel* m_notice;
     int m_lastSaleId = 0;
+    // Who the sale in progress is being put on, and 0 for the till. Zero doubles
+    // as "this is a cash sale", which is why isInCreditMode() is a comparison and
+    // not a flag of its own that could disagree with it.
+    int m_creditCustomerId = 0;
+    // The bar that names the customer above the scan field, hidden while the sale
+    // is going to the till.
+    QFrame* m_creditBar = nullptr;
+    QLabel* m_creditLabel = nullptr;
     bool m_updating = false;
 };
 

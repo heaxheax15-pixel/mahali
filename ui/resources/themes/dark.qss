@@ -1221,6 +1221,39 @@ QPushButton#quickNavLetter[active="true"] {
     border-color: #d4a017;
 }
 
+/* ---------- شريط البيع الآجل ---------- */
+/* The bar above the scan field while the sale in progress is going on somebody's
+   account rather than into the till. Amber on a dark ground, so it reads as a
+   departure from the normal path at a glance from the other side of the counter. */
+QFrame#creditBar {
+    background: #3d2808;
+    border: 1px solid #f59e0b;
+    border-radius: 7px;
+}
+
+QLabel#creditLabel {
+    background: transparent;
+    color: #f59e0b;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+/* The × that takes the sale off the account. No frame of its own, since the bar
+   around it is already the frame. */
+QPushButton#creditCancel {
+    background: transparent;
+    border: none;
+    color: #f59e0b;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 0;
+}
+
+/* Lighter red on hover, because undoing the credit mode throws the sale away. */
+QPushButton#creditCancel:hover {
+    color: #dc2626;
+}
+
 /* ---------- زر القائمة الجانبية ---------- */
 /* The ☰ in the top bar: transparent surface, border drawn so it keeps an edge on
    hover, since the mark itself carries no text. */

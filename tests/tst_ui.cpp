@@ -1010,13 +1010,22 @@ void UiTest::reportBuilds()
     const QDateTime dayStart(QDate::currentDate(), QTime(0, 0, 0));
     const data::StoreReport report = data::ReportService(db).build(dayStart, QDateTime::currentDateTime());
 
-    QCOMPARE(report.revenueCents, 10000LL);
-    QCOMPARE(report.salesCount, 1LL);
-    QCOMPARE(report.cogsCents, 6000LL);
-    QCOMPARE(report.grossProfitCents, 4000LL);
+    // Revenue is the cash sale (2 x 5000) plus the one taken on account (1 x 5000):
+    // both were sold, and only one of them went through the drawer. The 2000 paid
+    // back is a settlement of debt, not a discount on the sale, so it is not
+    // subtracted from revenue here — it lands in the drawer and in the balance.
+    QCOMPARE(report.revenueCents, 15000LL);
+    // Two sales: one for cash, one on account.
+    QCOMPARE(report.salesCount, 2LL);
+    // Cost of both, 3 tubes at 3000.
+    QCOMPARE(report.cogsCents, 9000LL);
+    QCOMPARE(report.grossProfitCents, 6000LL);
     QCOMPARE(report.expensesCents, 1500LL);
     QCOMPARE(report.drawingsCents, 2000LL);
-    QCOMPARE(report.netProfitCents, 2500LL);
+    // Net is gross less expenses. Drawings are money the owner took out, not a
+    // cost of trading, so they are reported beside the profit rather than
+    // subtracted from it.
+    QCOMPARE(report.netProfitCents, 4500LL);
     QCOMPARE(report.outstandingDebtCents, 3000LL);
     // The base is the trading-goods one: what is on the shelf at the selling
     // price, what is in the drawer, and what the customers owe. 97 left of 100
@@ -1048,9 +1057,12 @@ void UiTest::reportBuilds()
     QCOMPARE(findLine(QStringLiteral("drawing"))->sumCents, -2000LL);
 
     ui::ReportsPage page(db);
-    QCOMPARE(page.report().revenueCents, 10000LL);
+    // The same figures the page's own card shows: revenue carries the on-account
+    // sale as well as the cash one, while the till lines below still only count
+    // what moved in the drawer — 10000 of sale, 2000 paid back.
+    QCOMPARE(page.report().revenueCents, 15000LL);
     QCOMPARE(page.report().zakatCents, 12537LL);
-    QCOMPARE(page.report().netProfitCents, 2500LL);
+    QCOMPARE(page.report().netProfitCents, 4500LL);
 }
 
 void UiTest::settingsCurrencyAndZakat()

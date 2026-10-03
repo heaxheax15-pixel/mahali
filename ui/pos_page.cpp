@@ -27,9 +27,11 @@
 #include "core/session.h"
 #include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
+#include "data/customer_repository.h"
 #include "data/product_repository.h"
 #include "data/sale_service.h"
 #include "dialogs/product_dialog.h"
+#include "dialogs/select_customer_dialog.h"
 #include "format_utils.h"
 #include "quick_items_bar.h"
 #include "widgets/app_icon.h"
@@ -57,6 +59,29 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_entry->setFont(entryFont);
     m_entry->addAction(appIcon(Icon::Search, QColor(QStringLiteral("#66757a")), 18),
                        QLineEdit::LeadingPosition);
+
+    // The bar that says the sale in progress is going on somebody's account. Built
+    // here, hidden, and added to the layout further down so it lands directly above
+    // the scan field: it belongs to that field, since it is what decides where the
+    // sale the field is feeding ends up.
+    m_creditBar = new QFrame;
+    m_creditBar->setObjectName(QStringLiteral("creditBar"));
+    auto* creditLayout = new QHBoxLayout(m_creditBar);
+    creditLayout->setContentsMargins(14, 7, 14, 7);
+    creditLayout->setSpacing(14);
+    m_creditLabel = new QLabel;
+    m_creditLabel->setObjectName(QStringLiteral("creditLabel"));
+    auto* creditCancel = new QPushButton(QStringLiteral("×"));
+    creditCancel->setObjectName(QStringLiteral("creditCancel"));
+    creditCancel->setFixedSize(28, 28);
+    creditCancel->setCursor(Qt::PointingHandCursor);
+    creditLayout->addWidget(m_creditLabel);
+    creditLayout->addStretch();
+    creditLayout->addWidget(creditCancel);
+    // Nothing to report yet. A layout skips a hidden widget rather than reserving
+    // the row, so the till keeps the scan field exactly where it was.
+    m_creditBar->setVisible(false);
+    connect(creditCancel, &QPushButton::clicked, this, &PosPage::clearCreditMode);
 
     m_workspace = new QSplitter(Qt::Horizontal);
     m_workspace->setObjectName(QStringLiteral("posWorkspace"));
@@ -236,7 +261,10 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     rightLayout->addWidget(invoiceBar);
 
     // The scan field is the only control above the panes now: the catalogue
-    // search that shared the row went with the catalogue it filtered.
+    // search that shared the row went with the catalogue it filtered. The credit
+    // bar goes above it rather than below, so the eye reads the account before the
+    // barcode rather than after it.
+    root->addWidget(m_creditBar);
     root->addWidget(m_entry);
 
     m_workspace->addWidget(cartPane);
@@ -724,6 +752,40 @@ bool PosPage::syncFromTable()
     return ok;
 }
 
+void PosPage::enterCreditMode()
+{
+    const std::optional<int> customerId = showSelectCustomerDialog(this, m_db);
+    if (!customerId) {
+        return;
+    }
+    data::CustomerRepository repo(m_db);
+    const auto customer = repo.findById(*customerId);
+    if (!customer) {
+        return;
+    }
+    m_creditCustomerId = *customerId;
+    // The balance belongs on the bar, not only in the picker that was just closed:
+    // this is the figure the cashier is about to add to, and a sale that pushes an
+    // account further under is the whole reason to be looking at it.
+    const long long balance = repo.balanceCentsFor(*customerId);
+    m_creditLabel->setText(tr("À CRÉDIT : %1 · Solde : %2")
+                               .arg(customer->name, formatMoney(balance)));
+    m_creditBar->setVisible(true);
+    m_save->setText(tr("Enregistrer à crédit (Entrée)"));
+    m_entry->setFocus();
+}
+
+void PosPage::clearCreditMode()
+{
+    m_creditCustomerId = 0;
+    m_creditBar->setVisible(false);
+    // Back to the wording the button was built with. Written out rather than left
+    // alone, so the till label is the same string whether the mode was just entered
+    // or was never entered at all.
+    m_save->setText(tr("Valider la vente (Entrée)"));
+    m_entry->setFocus();
+}
+
 void PosPage::completeSale()
 {
     m_notice->clear();
@@ -736,11 +798,17 @@ void PosPage::completeSale()
         return;
     }
 
-    data::CashSessionRepository sessions(m_db);
-    const auto session = sessions.findOpen();
-    if (!session) {
-        setNotice(tr("لا توجد جلسة مفتوحة — افتح جلسة من قسم \"جلسة الصندوق\" أولاً"), false);
-        return;
+    // A credit sale never reached the drawer, so it is recorded without one. Asking
+    // for a session here would refuse a sale that is perfectly recordable on the
+    // grounds that the till happens to be shut.
+    std::optional<core::CashSession> session;
+    if (m_creditCustomerId <= 0) {
+        data::CashSessionRepository sessions(m_db);
+        session = sessions.findOpen();
+        if (!session) {
+            setNotice(tr("لا توجد جلسة مفتوحة — افتح جلسة من قسم \"جلسة الصندوق\" أولاً"), false);
+            return;
+        }
     }
 
     QVector<core::SaleItem> items;
@@ -766,6 +834,32 @@ void PosPage::completeSale()
     }
 
     data::SaleService service(m_db);
+
+    // The account was named above the scan field, so this sale is written to that
+    // customer's ledger rather than to the till. Same lines, same service, one
+    // argument apart.
+    if (m_creditCustomerId > 0) {
+        const data::SaleRecordResult result = service.recordCustomerDebt(
+            m_creditCustomerId, items, app::core::Session::instance().actorName(),
+            /*allowOversold=*/false);
+        if (!result.ok) {
+            setNotice(tr("تعذر تسجيل الدين: %1").arg(result.error), false);
+            return;
+        }
+        // m_lastSaleId is left alone on purpose: what came back is a ledger
+        // transaction id, and lastSaleId() is read as a row of the sales table.
+        // An overridden price is still an overridden price, on this side too.
+        for (const core::AuditLogEntry& entry : priceOverrides) {
+            audit.insert(entry);
+        }
+        setNotice(tr("تم تسجيل الدين : %1").arg(formatMoney(result.totalCents)), true);
+        clearCreditMode();
+        m_lines.clear();
+        rebuildTable();
+        refreshQuickItems();
+        return;
+    }
+
     const data::SaleRecordResult result =
         service.recordSale(items, session->id, app::core::Session::instance().actorName(), /*allowOversold=*/false);
     if (!result.ok) {

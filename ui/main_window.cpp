@@ -115,11 +115,11 @@ QWidget* makeStubPage(const QString& title, const QString& body)
     return page;
 }
 
-// One of the four square buttons in the top bar: one letter, nothing else.
+// One of the quick square buttons in the top bar: one letter, nothing else.
 //
 // The letter replaces the icon-over-name pair these used to hold. At 64x64 with
 // an Arabic page name underneath, the row was 80px of the window and the names
-// were the widest thing in the bar; at 40x40 with a single glyph the four take
+// were the widest thing in the bar; at 40x40 with a single glyph they take
 // 187px instead of 300px, and the page is named in the tooltip and by the active
 // state rather than by a caption repeated from the sidebar two hundred pixels
 // away.
@@ -246,7 +246,7 @@ MainWindow::MainWindow(app::data::Database& db, ServerController& controller, QW
              return static_cast<QWidget*>(page);
          },
          [](QWidget* w) { qobject_cast<SettingsPage*>(w)->refresh(); }},
-        // The stock page is one of the four the top bar puts a square button for.
+        // The stock page is one of the pages the top bar puts a square button for.
         {[this] { return static_cast<QWidget*>(new StockPage(m_db)); },
          [](QWidget* w) { qobject_cast<StockPage*>(w)->refresh(); }},
     };
@@ -525,7 +525,7 @@ void MainWindow::onSidebarToggleClicked()
                                                        : QStringLiteral("0"));
 }
 
-// One of the four square buttons in the top bar. A QPushButton so the
+// One of the quick square buttons in the top bar. A QPushButton so the
 // QPushButton#quickNavLetter rules reach it: Qt matches a QSS type selector
 // against the widget's own class rather than its base classes, so a QToolButton
 // would miss every one of them and keep the theme's plain button look with no
@@ -551,7 +551,7 @@ QPushButton* MainWindow::makeQuickNavButton(QLatin1Char letter, const QString& t
     return button;
 }
 
-// The strip above everything: the brand on the right, the four pages reached most
+// The strip above everything: the brand on the right, the quick squares reached most
 // often, the rail's toggle, the shop's global search, then the controls that used
 // to sit in the status bar (who is signed in, which occasion is running) plus the
 // theme toggle.
@@ -560,7 +560,7 @@ QWidget* MainWindow::buildTopBar()
     m_topBar = new QWidget;
     m_topBar->setObjectName(QStringLiteral("topBar"));
     // Back to 56, which is what fitted the 36px controls before the quick-nav
-    // buttons were 64 tall. The four are 40 now, the tallest thing in the bar, and
+    // buttons were 64 tall. They are 40 now, the tallest thing in the bar, and
     // 40 plus the 8px margin above and below is exactly 56. A fixed height does
     // not grow to fit a child, which is what made 56 too short at 64 and would
     // make it too short again if the buttons ever grew.
@@ -607,7 +607,7 @@ QWidget* MainWindow::buildTopBar()
     m_sidebarToggle->setToolTip(tr("إظهار/إخفاء القائمة"));
     connect(m_sidebarToggle, &QPushButton::clicked, this, &MainWindow::onSidebarToggleClicked);
 
-    // The four pages an operator reaches for most, next to the brand. The same
+    // The squares an operator reaches for most, next to the brand. The same
     // pages the sidebar lists, put where the eye already is: the sidebar is a
     // rail of fourteen items that has to be scrolled, and the quick sale is the
     // one page that must never be more than one click away.
@@ -666,7 +666,7 @@ QWidget* MainWindow::buildTopBar()
     // colour rather than a flash of the light-theme one.
     refreshThemeIcons();
 
-    // The four squares go with the brand, before the rail's toggle. Beside the
+    // The quick squares go with the brand, before the rail's toggle. Beside the
     // mark is where a second click is never needed: the rail follows the reading
     // direction, so a button that opens a page from the rail costs a reach across
     // the window to find first, and the quick sale is the one page that must
@@ -675,30 +675,51 @@ QWidget* MainWindow::buildTopBar()
     quickNavGroup->setObjectName(QStringLiteral("quickNavGroup"));
     auto* quickNavLayout = new QHBoxLayout(quickNavGroup);
     quickNavLayout->setContentsMargins(0, 0, 0, 0);
-    // 7px, a wider gap than the bar's own spacing: these are four separate
-    // destinations and not one control split in four, and at 36px across they sit
+    // 7px, a wider gap than the bar's own spacing: these are five separate
+    // buttons and not one control split in five, and at 36px across they sit
     // close enough to read as a single group without that.
     quickNavLayout->setSpacing(7);
 
     struct QuickEntry { QLatin1Char letter; QString tooltip; int pageIndex; };
     const QuickEntry quickEntries[] = {
         {QLatin1Char('V'), tr("Vente rapide"), page::QuickSale},
+        // Beside the V rather than at the end of the row: both are sales, and they
+        // are the two squares a cashier reaches for together.
+        {QLatin1Char('C'), tr("Vente à crédit"), page::QuickSale},
         {QLatin1Char('P'), tr("Produits"),     page::Products},
         {QLatin1Char('S'), tr("Stock"),        page::Stock},
         {QLatin1Char('R'), tr("Rapports"),     page::Reports},
     };
 
+    // The credit square is the only one that is not a page on its own: it opens the
+    // register and then asks who the sale is for, so a cashier who clicks it from
+    // anywhere lands there with the question already asked. kNoPage is what it is
+    // recorded as below, so it never lights up as the page on screen -- the V
+    // square already marks that, and two lit squares for one page reads as a bug.
+    constexpr int kNoPage = -1;
+
     for (const QuickEntry& entry : quickEntries) {
         QPushButton* button = makeQuickNavButton(entry.letter, entry.tooltip);
         const int pageIndex = entry.pageIndex;
-        connect(button, &QPushButton::clicked, this, [this, pageIndex]() {
-            onPageChanged(pageIndex);
-        });
+        if (entry.letter == QLatin1Char('C')) {
+            connect(button, &QPushButton::clicked, this, [this]() {
+                onPageChanged(page::QuickSale);
+                // posPage() rather than the widget already in the stack: the page is
+                // built on first use, so on the very first click of the session there
+                // is nothing castable in the stack yet.
+                posPage()->enterCreditMode();
+            });
+        } else {
+            connect(button, &QPushButton::clicked, this, [this, pageIndex]() {
+                onPageChanged(pageIndex);
+            });
+        }
         quickNavLayout->addWidget(button);
-        m_quickNavButtons.push_back({button, pageIndex});
+        m_quickNavButtons.push_back(
+            {button, entry.letter == QLatin1Char('C') ? kNoPage : pageIndex});
     }
 
-    // In RTL the first widget added lands on the right. The brand leads, the four
+    // In RTL the first widget added lands on the right. The brand leads, the
     // quick pages follow it, the rail's toggle after them, the occasion badge
     // next, and the user and the two icon buttons close the left end. The stretch
     // takes up what is left, which is what holds the two groups apart now that the
@@ -947,7 +968,7 @@ void MainWindow::buildNavForRole(const QString& role)
 void MainWindow::refreshNavActiveState()
 {
     const int current = m_pages->currentIndex();
-    // The sidebar rail and the top bar's four squares, through the same code: both
+    // The sidebar rail and the top bar's quick squares, through the same code: both
     // mark the page on screen rather than the page that was asked for, so a
     // programmatic switch lights up both and they cannot disagree about which one
     // is showing.
@@ -1044,10 +1065,10 @@ void MainWindow::refreshThemeIcons()
                                     20));
     }
 
-    // The four squares in the top bar need nothing here: their glyph is the
+    // The quick squares in the top bar need nothing here: their glyph is the
     // button's own text and the stylesheet colours it, active and inactive, from
     // the same rules the sidebar's labels use. There is no pixmap to repaint, so
-    // m_quickNavIcons is gone and the theme switch reaches these four through
+    // m_quickNavIcons is gone and the theme switch reaches these through
     // the stylesheet alone.
 }
 
@@ -1069,7 +1090,7 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     const bool compact = width() < 1100;
-    // The rail only, and only its QToolButtons: the top bar's four squares carry
+    // The rail only, and only its QToolButtons: the top bar's quick squares carry
     // one letter each and are laid out once, so there is nothing here to redo.
     for (const NavButton& entry : m_navButtons) {
         if (!entry.button) {

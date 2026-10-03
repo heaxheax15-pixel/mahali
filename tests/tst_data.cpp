@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QList>
 #include <QSqlQuery>
+#include <QTime>
 
 #include "barcode_utils.h"
 #include "database.h"
@@ -38,6 +39,7 @@
 #include "admin_secret_repository.h"
 #include "device_repository.h"
 #include "audit_log_repository.h"
+#include "report_service.h"
 #include "setting_repository.h"
 #include "zakat_history_repository.h"
 #include "occasion_repository.h"
@@ -114,6 +116,10 @@ private slots:
     void cashSessionLifecycle();
     void settingsRoundTrip();
     void zakat_year_calculation();
+    void report_net_zero_after_reverse_sale();
+    void report_net_zero_after_reverse_debt();
+    void report_includes_credit_sales();
+    void report_excludes_reversed_credit_cogs();
     void should_notify_does_not_claim_year();
     void zakat_history_roundtrip();
     void appendOnlyGuard();
@@ -133,6 +139,7 @@ private slots:
     void reverseSale_refuses_double_reversal();
     void overflow_guard();
     void overflow_guard_cogs();
+    void cogs_guard_allows_negative_quantity();
     void supplier_new_fields_roundtrip();
     void supplier_list_active_excludes_inactive();
     void supplier_balance_from_purchases_and_payments();
@@ -1992,6 +1999,205 @@ void DataLayerTest::zakat_year_calculation()
     QCOMPARE(zakatYearFor(QDate(2026, 2, 15), QDate()), 2026);
 }
 
+// A shop that sells on account was missing half its revenue from the reports:
+// the credit path wrote to customer_transactions, which build() never read, so a
+// day of pure credit sales came out as nothing sold. These two tests pin the
+// figure and the cancellation of it.
+namespace {
+
+// One product with a known price and cost, stock on hand, and a customer to sell
+// to. Its own database so the report under test sees nothing else.
+struct CreditReportFixture {
+    data::Database db;
+    int customerId = 0;
+    int productId = 0;
+
+    explicit CreditReportFixture(const QString& path)
+        : db(path)
+    {
+        core::Product product;
+        product.name = QStringLiteral("شاي");
+        product.salePriceCents = 7000;
+        product.costPriceCents = 5000;
+        data::ProductRepository products(db);
+        productId = products.save(product);
+        products.adjustStock(productId, 10, QStringLiteral("opening"));
+
+        core::Customer customer;
+        customer.name = QStringLiteral("زبون");
+        customerId = data::CustomerRepository(db).save(customer);
+    }
+
+    core::SaleItem twoAtPrice() const
+    {
+        core::SaleItem item;
+        item.productId = productId;
+        item.quantity = 2;
+        // Left at zero on purpose: resolveSaleItems fills it from the product,
+        // which is the path the service actually takes.
+        return item;
+    }
+
+    // Today only, so the report cannot pick up rows from an earlier run.
+    data::StoreReport today()
+    {
+        const QDate day = QDate::currentDate();
+        return data::ReportService(db).build(QDateTime(day, QTime(0, 0, 0)),
+                                            QDateTime(day, QTime(23, 59, 59)));
+    }
+};
+
+} // namespace
+
+// A cancelled sale has to leave nothing behind in the profit and loss statement.
+// Revenue netted out of it already, but the cost of the goods did not: a reversal
+// carries its own items with negative quantities, and the report was skipping
+// exactly those rows, so the profit and loss statement kept charging for stock
+// that was back on the shelf. Both paths — cash and on account — are pinned here,
+// since they are two loops that were written apart and had drifted.
+namespace {
+
+struct ReverseReportFixture {
+    data::Database db;
+    int productId = 0;
+    int customerId = 0;
+    int sessionId = 0;
+
+    explicit ReverseReportFixture(const QString& path)
+        : db(path)
+    {
+        data::CashSessionRepository sessions(db);
+        sessionId = sessions.open(100000);
+        Q_UNUSED(sessionId)
+
+        core::Product product;
+        product.name = QStringLiteral("بضاعة");
+        product.salePriceCents = 8000;
+        product.costPriceCents = 6000;
+        data::ProductRepository products(db);
+        productId = products.save(product);
+        products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+        core::Customer customer;
+        customer.name = QStringLiteral("زبون");
+        customerId = data::CustomerRepository(db).save(customer);
+    }
+
+    core::SaleItem one() const
+    {
+        core::SaleItem item;
+        item.productId = productId;
+        item.quantity = 1;
+        return item;
+    }
+
+    data::StoreReport today()
+    {
+        const QDate day = QDate::currentDate();
+        return data::ReportService(db).build(QDateTime(day, QTime(0, 0, 0)),
+                                            QDateTime(day, QTime(23, 59, 59)));
+    }
+};
+
+} // namespace
+
+void DataLayerTest::report_net_zero_after_reverse_sale()
+{
+    ReverseReportFixture f(m_dir.filePath(QStringLiteral("report_reverse_sale.sqlite")));
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult sold = sales.recordSale({f.one()}, f.sessionId,
+                                                          QStringLiteral("dev"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+    const data::StoreReport before = f.today();
+    QCOMPARE(before.revenueCents, 8000LL);
+    QCOMPARE(before.cogsCents, 6000LL);
+    QCOMPARE(before.salesCount, 1LL);
+
+    QVERIFY2(sales.reverseSale(sold.saleId, f.sessionId).ok, "the sale was reversed");
+
+    const data::StoreReport after = f.today();
+    QCOMPARE(after.revenueCents, 0LL);
+    // The figure this fixes: 6000 before, because the reversal's own items were
+    // skipped while the original's were counted.
+    QCOMPARE(after.cogsCents, 0LL);
+    QCOMPARE(after.salesCount, 0LL);
+    QCOMPARE(after.grossProfitCents, 0LL);
+    // And the goods are really back, so the base follows them up again.
+    QCOMPARE(after.stockValueCents, 800000LL);
+}
+
+void DataLayerTest::report_net_zero_after_reverse_debt()
+{
+    ReverseReportFixture f(m_dir.filePath(QStringLiteral("report_reverse_debt.sqlite")));
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult sold = sales.recordCustomerDebt(
+        f.customerId, {f.one()}, QStringLiteral("dev"), /*allowOversold=*/false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+    const data::StoreReport before = f.today();
+    QCOMPARE(before.revenueCents, 8000LL);
+    QCOMPARE(before.cogsCents, 6000LL);
+    QCOMPARE(before.salesCount, 1LL);
+
+    QVERIFY2(sales.reverseCustomerDebt(sold.saleId).ok, "the credit sale was reversed");
+
+    const data::StoreReport after = f.today();
+    QCOMPARE(after.revenueCents, 0LL);
+    QCOMPARE(after.cogsCents, 0LL);
+    QCOMPARE(after.salesCount, 0LL);
+    QCOMPARE(after.grossProfitCents, 0LL);
+    // Nothing is owed and nothing is on account any more, so the receivable the
+    // sale created is gone rather than left at the amount it was taken at.
+    QCOMPARE(after.receivablesCents, 0LL);
+}
+
+void DataLayerTest::report_includes_credit_sales()
+{
+    CreditReportFixture f(m_dir.filePath(QStringLiteral("report_credit_sales.sqlite")));
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult recorded = sales.recordCustomerDebt(
+        f.customerId, {f.twoAtPrice()}, QStringLiteral("device-1"), /*allowOversold=*/false);
+    QVERIFY2(recorded.ok, qPrintable(recorded.error));
+
+    // 2 x 7000 on account, at a cost of 2 x 5000.
+    const data::StoreReport report = f.today();
+    QCOMPARE(report.revenueCents, 14000LL);
+    QCOMPARE(report.cogsCents, 10000LL);
+    // The credit sale is an operation, so it is counted: revenue without the
+    // count would leave the number of sales describing only the cash half.
+    QCOMPARE(report.salesCount, 1LL);
+
+    // And the profit is built from the same two figures, not from a stale total.
+    QCOMPARE(report.grossProfitCents, 4000LL);
+}
+
+void DataLayerTest::report_excludes_reversed_credit_cogs()
+{
+    CreditReportFixture f(m_dir.filePath(QStringLiteral("report_reversed_credit.sqlite")));
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult recorded = sales.recordCustomerDebt(
+        f.customerId, {f.twoAtPrice()}, QStringLiteral("device-1"), /*allowOversold=*/false);
+    QVERIFY2(recorded.ok, qPrintable(recorded.error));
+    QCOMPARE(f.today().cogsCents, 10000LL);
+
+    const data::SaleReverseResult reversed = sales.reverseCustomerDebt(recorded.saleId);
+    QVERIFY2(reversed.ok, qPrintable(reversed.error));
+
+    const data::StoreReport report = f.today();
+    // The goods came back, so their cost must go with them. The cancellation
+    // carries negative quantities of its own; adding them is what brings this to
+    // zero, and skipping the cancellation would leave the cost of stock that is
+    // back on the shelf sitting in the profit and loss statement.
+    QCOMPARE(report.cogsCents, 0LL);
+    // Revenue nets out the same way: the sale minus the cancellation.
+    QCOMPARE(report.revenueCents, 0LL);
+    // And a cancelled sale is not a sale to count.
+    QCOMPARE(report.salesCount, 0LL);
+}
+
 void DataLayerTest::should_notify_does_not_claim_year()
 {
     // The suite shares one database, so the two keys this test owns are cleared
@@ -2672,6 +2878,70 @@ void DataLayerTest::overflow_guard_cogs()
     QCOMPARE(data::cogsCentsFor(boundary),
              std::optional<long long>(std::numeric_limits<long long>::max()));
     QCOMPARE(data::cogsCentsFor({}), std::optional<long long>(0));
+}
+
+void DataLayerTest::cogs_guard_allows_negative_quantity()
+{
+    // The guard this covers was written as `quantity < 0 && cost < min / quantity`,
+    // which looks like a check on the negative range and is the wrong way round:
+    // min / -2 comes out as a large positive number, so the comparison rejects
+    // every ordinary small figure and lets the unstorable one through. The
+    // everyday case it broke is a cancellation, whose lines are negative and
+    // perfectly ordinary, so -2 x 5000 was refused as an overflow.
+    QVector<core::SaleItem> cancellation;
+    core::SaleItem line;
+    line.productId = 1;
+    line.unitCostCents = 5000;
+    line.unitPriceCents = 5000;
+    line.quantity = -2;
+    cancellation.append(line);
+    QCOMPARE(data::cogsCentsFor(cancellation), std::optional<long long>(-10000));
+    QCOMPARE(data::totalCentsFor(cancellation), std::optional<long long>(-10000));
+
+    // The largest negative figure that is genuinely representable still passes.
+    QVector<core::SaleItem> floorCase;
+    line.unitCostCents = std::numeric_limits<long long>::max();
+    line.quantity = -1;
+    floorCase.append(line);
+    QCOMPARE(data::cogsCentsFor(floorCase),
+             std::optional<long long>(-std::numeric_limits<long long>::max()));
+
+    // min itself is representable as a product, and must not be mistaken for the
+    // overflow it sits next to.
+    QVector<core::SaleItem> exactFloor;
+    line.unitCostCents = 1;
+    line.quantity = std::numeric_limits<long long>::min();
+    exactFloor.append(line);
+    QCOMPARE(data::cogsCentsFor(exactFloor),
+             std::optional<long long>(std::numeric_limits<long long>::min()));
+
+    // Fixing the direction must not disarm it: -3 past min is genuinely past the
+    // range and has to be refused, and so does a negative line that overflows only
+    // once it is added to a running total.
+    QVector<core::SaleItem> negativeOverflow;
+    line.unitCostCents = std::numeric_limits<long long>::max();
+    line.quantity = -2;
+    negativeOverflow.append(line);
+    QVERIFY2(!data::cogsCentsFor(negativeOverflow).has_value(),
+             "a negative product past the range must still be refused");
+
+    QVector<core::SaleItem> negativeSumming;
+    line.unitCostCents = std::numeric_limits<long long>::max();
+    line.quantity = -1;
+    negativeSumming.append(line);
+    negativeSumming.append(line);
+    QVERIFY2(!data::cogsCentsFor(negativeSumming).has_value(),
+             "negative lines that overflow only once added must be refused too");
+
+    // A positive and a negative line are the cancellation pair the report path
+    // sums: the two cancel rather than either one being rejected.
+    QVector<core::SaleItem> pair;
+    line.unitCostCents = std::numeric_limits<long long>::max();
+    line.quantity = 1;
+    pair.append(line);
+    line.quantity = -1;
+    pair.append(line);
+    QCOMPARE(data::cogsCentsFor(pair), std::optional<long long>(0));
 }
 
 void DataLayerTest::supplier_new_fields_roundtrip()

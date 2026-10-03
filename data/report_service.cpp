@@ -14,11 +14,13 @@
 #include "cash_session_repository.h"
 #include "customer_repository.h"
 #include "customer_transaction_repository.h"
+#include "customer_transaction_item_repository.h"
 #include "date_utils.h"
 #include "expense_repository.h"
 #include "owner_drawing_repository.h"
 #include "payment_repository.h"
 #include "sale_item_repository.h"
+#include "sale_rules.h"
 #include "sale_repository.h"
 #include "setting_repository.h"
 #include "supplier_repository.h"
@@ -33,11 +35,54 @@ ReportService::ReportService(Database& db)
 
 namespace {
 
+// Signed, so a reversal's negative quantities take the original's cost back out
+// and a cancelled sale nets to nothing. Guarded per line and per running total
+// because the terms are now negative as well as positive: a wrapped cost is not
+// a wrong cost, it is a plausible wrong amount of money, and it reaches the
+// profit and loss statement.
 long long cogsFor(const std::vector<core::SaleItem>& items)
 {
     long long cogs = 0;
     for (const core::SaleItem& item : items) {
-        cogs += item.unitCostCents * item.quantity;
+        if (!detail::productFits(item.unitCostCents, item.quantity)) {
+            qWarning() << "sale cost: item" << item.id
+                       << "left out, its quantity times its unit cost overflows";
+            continue;
+        }
+        const long long term = item.unitCostCents * item.quantity;
+        if (!detail::sumFits(cogs, term)) {
+            qWarning() << "sale cost: stopped at item" << item.id
+                       << ", the running total would overflow";
+            break;
+        }
+        cogs += term;
+    }
+    return cogs;
+}
+
+// Cost of goods that went out on account, summed the same way and for the same
+// reason: signed, so a cancellation's negative quantities take the original back
+// out and a reversed sale lands on zero. Deliberately no "skip the cancellation"
+// test — the cancellation carries its own items, exactly as the cash reversal
+// does, and skipping them would count the cost of goods that came back.
+long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines)
+{
+    long long cogs = 0;
+    for (const core::CustomerTransactionItem& line : lines) {
+        if (!detail::productFits(line.unitCostCents, line.quantity)) {
+            qWarning() << "credit sale cost: item" << line.id
+                       << "left out, its quantity times its unit cost overflows";
+            continue;
+        }
+        const long long term = line.unitCostCents * line.quantity;
+        // Each term in range is not enough: the running sum can leave it on its
+        // own once enough lines are added together.
+        if (!detail::sumFits(cogs, term)) {
+            qWarning() << "credit sale cost: stopped at item" << line.id
+                       << ", the running total would overflow";
+            break;
+        }
+        cogs += term;
     }
     return cogs;
 }
@@ -94,12 +139,51 @@ StoreReport ReportService::build(const QDateTime& from, const QDateTime& to) con
     SaleRepository sales(m_db);
     SaleItemRepository saleItems(m_db);
     const auto allSales = sales.findBetween(from, to);
-    report.salesCount = static_cast<long long>(allSales.size());
     for (const core::Sale& sale : allSales) {
         report.revenueCents += sale.totalCents;
-        if (sale.reversedSaleId == 0) {
-            report.cogsCents += cogsFor(saleItems.findBySaleId(sale.id));
-        }
+        // Net, like the revenue above it: a reversal undoes a sale, so it takes
+        // one back off. Counting every row would report two sales for one that
+        // was undone, and a figure that rises when a sale is cancelled is not a
+        // count of anything.
+        report.salesCount += sale.reversedSaleId == 0 ? 1 : -1;
+        // Added for every sale, reversal rows included. A reversal carries its own
+        // items with negative quantities, so their cost is what takes the original
+        // back out; skipping the reversal left the cost of goods that were on the
+        // shelf again sitting in the profit and loss statement, while the revenue
+        // above had already been cancelled. Same summing as the credit path below,
+        // and for the same reason.
+        report.cogsCents += cogsFor(saleItems.findBySaleId(sale.id));
+    }
+
+    // Credit sales happened too, in the same period, and left out they made
+    // "revenue" mean only what the till took rather than what the shop sold.
+    //
+    // They live in customer_transactions: a positive amount is debt taken on, and
+    // a negative one carrying reversed_transaction_id is a cancellation. Customer
+    // payments are deliberately not rows here — they go to the payments table —
+    // so summing the signed amounts nets a cancellation out without any risk of
+    // subtracting a payment from revenue.
+    //
+    // Zakat does not move. Its base is stock + cash + receivables and has never
+    // read revenue; a sale on account shows up there through the receivable.
+    CustomerTransactionRepository creditTx(m_db);
+    CustomerTransactionItemRepository creditItems(m_db);
+    for (const core::CustomerTransaction& tx : creditTx.findBetween(from, to)) {
+        report.revenueCents += tx.amountCents;
+        // Net, like the revenue above it: a cancellation undoes a sale, so it
+        // takes one back off rather than being counted as one. Counting every row
+        // would report two sales for one that was undone, and a figure that rises
+        // when a sale is cancelled is not a count of anything.
+        //
+        // Floored at zero because the count is read off a card: a cancellation
+        // whose sale fell in an earlier period has nothing here to take back off,
+        // and "-1 ventes" would be a worse answer than 0. The revenue line is not
+        // floored — it carries the reversal honestly.
+        report.salesCount += tx.amountCents > 0 ? 1 : -1;
+        report.cogsCents += creditCogsFor(creditItems.findByTransactionId(tx.id));
+    }
+    if (report.salesCount < 0) {
+        report.salesCount = 0;
     }
 
     ExpenseRepository expenses(m_db);
