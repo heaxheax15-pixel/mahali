@@ -449,6 +449,10 @@ void Database::createSchema()
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "created_at TEXT NOT NULL,"
             "total_cents INTEGER NOT NULL,"
+            // What was changed by hand on the invoice, already signed. Zero on
+            // every ordinary sale: it is not a sentinel here, it is the absence
+            // of an adjustment.
+            "adjustment_cents INTEGER NOT NULL DEFAULT 0,"
             "device_id TEXT NOT NULL,"
             "oversold INTEGER NOT NULL DEFAULT 0,"
             "reversed_sale_id INTEGER NOT NULL DEFAULT 0,"
@@ -487,6 +491,8 @@ void Database::createSchema()
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "customer_id INTEGER NOT NULL REFERENCES customers(id),"
             "amount_cents INTEGER NOT NULL,"
+            // Same meaning as sales.adjustment_cents, and 0 for the same reason.
+            "adjustment_cents INTEGER NOT NULL DEFAULT 0,"
             "created_at TEXT NOT NULL,"
             "reversed_transaction_id INTEGER NOT NULL DEFAULT 0);"),
 

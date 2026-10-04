@@ -390,6 +390,57 @@ void migratePurchaseInitialPaymentMarker(const QSqlDatabase& db)
         QStringLiteral("mark historical purchase-time payments"));
 }
 
+// ---------------------------------------------------------------------------
+// 12 — sales.adjustment_cents + customer_transactions.adjustment_cents
+//
+// A cashier could only ever sell at exactly the sum of the lines: a discount was
+// made by rewriting a unit price, which changed the cost the goods went out at
+// and could not be undone from the invoice afterwards. A whole-invoice adjustment
+// — a surcharge, a round-figure discount, a correction — has nowhere to live at
+// all, so it is added as a signed column on both ledgers. Both are 0 on every
+// row that predates it, which is the truth: those sales were never adjusted.
+//
+// The two tables get it together because both are invoices and both are read back
+// the same way. A credit sale with a discount on it is exactly as common as a cash
+// one.
+//
+// No backfill and no rewrite of the totals: total_cents already holds the sum of
+// the lines and nothing else, so leaving it and leaving the new column at 0 keeps
+// every historical row stating what it always stated.
+void migrateSaleAdjustment(const QSqlDatabase& db)
+{
+    struct AdjustmentColumn {
+        const char* table;
+    };
+
+    constexpr AdjustmentColumn kAdjustmentColumns[] = {
+        {"sales"},
+        {"customer_transactions"},
+    };
+
+    for (const AdjustmentColumn& spec : kAdjustmentColumns) {
+        const QString table = QString::fromLatin1(spec.table);
+        // A table that is not there yet has nothing to alter. createSchema() is
+        // run before this and creates it with the column already in place, so the
+        // common case is the empty check below.
+        if (tableColumns(db, table).isEmpty()) {
+            continue;
+        }
+        // SQLite has no ADD COLUMN IF NOT EXISTS, so the presence check is the
+        // only way to write this idempotently. Without it a second run fails with
+        // "duplicate column name" on every open.
+        if (tableColumns(db, table).contains(QStringLiteral("adjustment_cents"))) {
+            continue;
+        }
+        if (!run(db,
+                 QStringLiteral("ALTER TABLE %1 ADD COLUMN adjustment_cents INTEGER NOT NULL DEFAULT 0")
+                     .arg(QLatin1StringView(spec.table)),
+                 QStringLiteral("add %1.adjustment_cents").arg(QLatin1StringView(spec.table)))) {
+            continue;
+        }
+    }
+}
+
 // so a database that has already run it never runs it twice. Every entry is
 // idempotent anyway (each one looks before it creates), because a database
 // restored from a backup taken between two versions can arrive with some of the
@@ -425,6 +476,11 @@ const std::pair<int, std::function<void(const QSqlDatabase&)>> kMigrations[] = {
     {9, migrateCashMovementReference},
     {10, migrateCashMovementReferenceIndex},
     {11, migratePurchaseInitialPaymentMarker},
+    // A cashier had no way to change the whole invoice: a discount had to be made
+    // by rewriting a unit price, which changed the cost the goods left at and left
+    // nothing on the invoice to say so. The column is added to both ledgers at 0,
+    // which is what every existing row says about itself.
+    {12, migrateSaleAdjustment},
 };
 
 } // namespace

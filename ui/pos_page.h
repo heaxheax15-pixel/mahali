@@ -47,13 +47,16 @@ public:
     // Test accessors.
     int lineCount() const;
     long long totalCents() const;
+    long long adjustmentCents() const;
     long long lineQuantityAt(int row) const;
     long long linePriceAt(int row) const;
     int lastSaleId() const;
     QString noticeText() const;
     void setEntryText(const QString& text);
+    void setAdjustmentText(const QString& text);
     QTableWidget* table() const { return m_table; }
     QLineEdit* entryField() const { return m_entry; }
+    QLineEdit* adjustmentField() const { return m_adjustment; }
     QuickItemsBar* quickItemsBar() const { return m_quickItems; }
 
 public slots:
@@ -83,12 +86,19 @@ private slots:
     void onCellDoubleClicked(int row, int column);
     void onQuickItemClicked(int productId);
     void onAddQuickProduct();
+    void onAdjustmentChanged(const QString& text);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    // Reads the adjustment field as cents. nullopt when the field holds text that
+    // is not money — the caller refuses the sale rather than quietly recording
+    // no adjustment, because a cashier who typed something and got a sale
+    // recorded without it would have no way of knowing.
+    std::optional<long long> adjustmentFromField() const;
+
     // The sale grid, which is the wide table on the left. Named rather than
     // spelled as literals at each use: the quantity is read back by two
     // different code paths (the inline edit and the pre-sale sync) and a number
@@ -134,6 +144,15 @@ private:
     QLabel* m_totalLabel;
     QLabel* m_paidLabel;
     QLabel* m_remainingLabel;
+    // The whole-invoice change, typed by the cashier: a surcharge or a discount.
+    // A field of its own rather than another column of the grid, because it does
+    // not belong to any line and has no product behind it.
+    QLineEdit* m_adjustment = nullptr;
+    // The adjustment as the cashier last left it, read back through
+    // adjustmentFromField(). Cached so that repainting the grid does not have to
+    // re-parse the field, and so a half-typed "-" does not throw the row away
+    // every keystroke.
+    long long m_adjustmentCents = 0;
     QLabel* m_notice;
     int m_lastSaleId = 0;
     // Who the sale in progress is being put on, and 0 for the till. Zero doubles

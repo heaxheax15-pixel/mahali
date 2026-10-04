@@ -40,12 +40,23 @@ class SaleService {
 public:
     explicit SaleService(Database& db);
 
+    // adjustmentCents is what the cashier changed by hand on the whole invoice,
+    // already signed: a surcharge, a round-figure discount, a correction. It is
+    // added to the total and stored beside it, and it is not applied to the cost:
+    // the goods left the shelf at the prices on the invoice whatever the cashier
+    // did to the sum.
+    //
+    // It is the last parameter and it defaults to 0 so that every existing caller —
+    // the sync processor, the dialogs, the tests — keeps recording exactly what it
+    // recorded before, with no adjustment and no adjustment on the row.
     SaleRecordResult recordSale(const QVector<core::SaleItem>& items, int cashSessionId, const QString& deviceId,
-                                bool allowOversold, const core::SyncApplyToken* applyToken = nullptr);
+                                bool allowOversold, const core::SyncApplyToken* applyToken = nullptr,
+                                long long adjustmentCents = 0);
 
     SaleRecordResult recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
                                         const QString& deviceId, bool allowOversold,
-                                        const core::SyncApplyToken* applyToken = nullptr);
+                                        const core::SyncApplyToken* applyToken = nullptr,
+                                        long long adjustmentCents = 0);
 
     SaleReverseResult reverseSale(int saleId, int cashSessionId);
 

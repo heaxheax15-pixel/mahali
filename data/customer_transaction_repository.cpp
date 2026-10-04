@@ -20,12 +20,17 @@ core::CustomerTransaction txFromQuery(const QSqlQuery& query)
     tx.id = query.value(0).toInt();
     tx.customerId = query.value(1).toInt();
     tx.amountCents = query.value(2).toLongLong();
+    tx.adjustmentCents = query.value(5).toLongLong();
     tx.createdAt = fromIso(query.value(3).toString()).value_or(QDateTime());
     tx.reversedTransactionId = query.value(4).toInt();
     return tx;
 }
 
-const char* kTxColumns = "id, customer_id, amount_cents, created_at, reversed_transaction_id";
+// adjustment_cents comes last so the indices above keep their meaning: the column
+// was added to the table after the rest of it, and every query in this file reads
+// by position.
+const char* kTxColumns =
+    "id, customer_id, amount_cents, created_at, reversed_transaction_id, adjustment_cents";
 
 } // namespace
 
@@ -82,12 +87,13 @@ int CustomerTransactionRepository::insert(const core::CustomerTransaction& trans
 {
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("INSERT INTO customer_transactions (customer_id, amount_cents, created_at, reversed_transaction_id) "
-                       "VALUES (?, ?, ?, ?)"));
+        QStringLiteral("INSERT INTO customer_transactions (customer_id, amount_cents, created_at, reversed_transaction_id, adjustment_cents) "
+                       "VALUES (?, ?, ?, ?, ?)"));
     query.addBindValue(transaction.customerId);
     query.addBindValue(transaction.amountCents);
     query.addBindValue(toIso(transaction.createdAt.isValid() ? transaction.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(transaction.reversedTransactionId);
+    query.addBindValue(transaction.adjustmentCents);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("CustomerTransactionRepository::insert"));
         return 0;

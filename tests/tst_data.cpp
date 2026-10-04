@@ -87,6 +87,10 @@ private slots:
     void stock_movement_reference_roundtrip();
     void saleInsertAndItems();
     void customerTransactionAndItems();
+    void sale_with_adjustment();
+    void customer_debt_with_adjustment();
+    void sale_without_adjustment_unchanged();
+    void adjustment_migration_adds_the_column_to_a_legacy_ledger();
     void customer_balance_uses_opening_and_transactions();
     void reverse_customer_debt_offsets_the_ledger_and_returns_stock();
     void reverse_customer_debt_touches_no_cash();
@@ -925,6 +929,214 @@ void DataLayerTest::customerTransactionAndItems()
     const auto txs = txRepo.findByCustomerId(customerId);
     QCOMPARE(txs.size(), 1);
     QCOMPARE(txs[0].amountCents, 70000LL);
+}
+
+namespace {
+
+// One product at 100 sold for, bought for 40, ten on the shelf, and an open till.
+// Shared by the three adjustment cases below so each of them states only what it
+// is actually about.
+struct AdjustmentFixture {
+    data::Database db;
+    int productId = 0;
+    int sessionId = 0;
+
+    explicit AdjustmentFixture(const QString& path)
+        : db(path)
+    {
+        core::Product product;
+        product.name = QStringLiteral("منتج-أج");
+        product.salePriceCents = 100;
+        product.costPriceCents = 40;
+        data::ProductRepository products(db);
+        productId = products.save(product);
+        products.adjustStock(productId, 10, QStringLiteral("opening"));
+        sessionId = data::CashSessionRepository(db).open(100000);
+    }
+
+    // Quantity 1 at the product's own price: the line the adjustment is added to.
+    core::SaleItem one() const
+    {
+        core::SaleItem item;
+        item.productId = productId;
+        item.quantity = 1;
+        item.unitPriceCents = 100;
+        return item;
+    }
+};
+
+} // namespace
+
+// An adjustment is what the cashier changed about the invoice as a whole. It has
+// to reach both the amount recorded and the row that records it, because the total
+// is what the till is reconciled against and the column is the only thing that
+// says why it does not add up to the lines.
+void DataLayerTest::sale_with_adjustment()
+{
+    AdjustmentFixture f(m_dir.filePath(QStringLiteral("sale_with_adjustment.sqlite")));
+    QVERIFY(f.sessionId > 0);
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult recorded =
+        sales.recordSale({f.one()}, f.sessionId, QStringLiteral("actor"),
+                         /*allowOversold=*/false, /*applyToken=*/nullptr, /*adjustmentCents=*/50);
+    QVERIFY2(recorded.ok, qPrintable(recorded.error));
+
+    // 100 on the line, 50 added by hand, 150 charged.
+    QCOMPARE(recorded.totalCents, 150LL);
+    // And the cost is untouched: a surcharge does not make the goods dearer to
+    // have sold, so folding it into the cost would turn a surcharge into a margin.
+    QCOMPARE(recorded.cogsCents, 40LL);
+
+    const std::optional<core::Sale> stored =
+        data::SaleRepository(f.db).findById(recorded.saleId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->totalCents, 150LL);
+    QCOMPARE(stored->adjustmentCents, 50LL);
+}
+
+// The same adjustment on a credit sale. The customer's ledger is the other place a
+// cashier used to have to work around a round figure, by rewriting a price.
+void DataLayerTest::customer_debt_with_adjustment()
+{
+    AdjustmentFixture f(m_dir.filePath(QStringLiteral("debt_with_adjustment.sqlite")));
+
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون-أج");
+    data::CustomerRepository customers(f.db);
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult recorded =
+        sales.recordCustomerDebt(customerId, {f.one()}, QStringLiteral("actor"),
+                                 /*allowOversold=*/false, /*applyToken=*/nullptr,
+                                 /*adjustmentCents=*/50);
+    QVERIFY2(recorded.ok, qPrintable(recorded.error));
+    QCOMPARE(recorded.totalCents, 150LL);
+    QCOMPARE(recorded.cogsCents, 40LL);
+
+    const std::optional<core::CustomerTransaction> stored =
+        data::CustomerTransactionRepository(f.db).findById(recorded.saleId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->amountCents, 150LL);
+    QCOMPARE(stored->adjustmentCents, 50LL);
+
+    // What the customer is said to owe is the charged amount, not the line sum:
+    // an invoice that adds up to less than the balance is not an invoice.
+    QCOMPARE(customers.balanceCentsFor(customerId), 150LL);
+}
+
+// Every caller that existed before the adjustment parameter does still compile and
+// does still record what it recorded: 0 on the row, and a total of the lines.
+void DataLayerTest::sale_without_adjustment_unchanged()
+{
+    AdjustmentFixture f(m_dir.filePath(QStringLiteral("sale_without_adjustment.sqlite")));
+    QVERIFY(f.sessionId > 0);
+
+    data::SaleService sales(f.db);
+    // No adjustment argument at all, the way the sync processor and the dialogs
+    // call it.
+    const data::SaleRecordResult recorded =
+        sales.recordSale({f.one()}, f.sessionId, QStringLiteral("actor"), /*allowOversold=*/false);
+    QVERIFY2(recorded.ok, qPrintable(recorded.error));
+    QCOMPARE(recorded.totalCents, 100LL);
+
+    const std::optional<core::Sale> stored =
+        data::SaleRepository(f.db).findById(recorded.saleId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->totalCents, 100LL);
+    QCOMPARE(stored->adjustmentCents, 0LL);
+
+    // And on the credit ledger too, for the same reason.
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون-بلا-أج");
+    data::CustomerRepository customers(f.db);
+    const int customerId = customers.save(customer);
+    const data::SaleRecordResult debt =
+        sales.recordCustomerDebt(customerId, {f.one()}, QStringLiteral("actor"),
+                                 /*allowOversold=*/false);
+    QVERIFY2(debt.ok, qPrintable(debt.error));
+    QCOMPARE(debt.totalCents, 100LL);
+
+    const std::optional<core::CustomerTransaction> storedTx =
+        data::CustomerTransactionRepository(f.db).findById(debt.saleId);
+    QVERIFY(storedTx.has_value());
+    QCOMPARE(storedTx->amountCents, 100LL);
+    QCOMPARE(storedTx->adjustmentCents, 0LL);
+}
+
+// The other half of the feature: a database opened by an older build has no
+// adjustment column at all, and the migration has to add it without touching a
+// single figure that is already in the ledger.
+void DataLayerTest::adjustment_migration_adds_the_column_to_a_legacy_ledger()
+{
+    const QString path = m_dir.filePath(QStringLiteral("adjustment_migration.sqlite"));
+    QFile::remove(path);
+    const QString connectionName = QStringLiteral("adjustment_migration_test");
+    {
+        QSqlDatabase legacyDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacyDb.setDatabaseName(path);
+        QVERIFY(legacyDb.open());
+        QSqlQuery legacy(legacyDb);
+        // Both ledgers as they were before the feature: no adjustment column.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE sales (id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, "
+            "total_cents INTEGER NOT NULL, device_id TEXT NOT NULL, "
+            "oversold INTEGER NOT NULL DEFAULT 0, reversed_sale_id INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE customer_transactions (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, "
+            "amount_cents INTEGER NOT NULL, created_at TEXT NOT NULL, "
+            "reversed_transaction_id INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO sales VALUES (1, '2026-10-01T00:00:00.000', 900, 'dev', 0, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO customer_transactions VALUES "
+            "(1, 1, 900, '2026-10-01T00:00:00.000', 0)")));
+        // One below this build, so exactly the adjustment migration is pending.
+        QVERIFY(legacy.exec(QStringLiteral("PRAGMA user_version = 11")));
+        legacyDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    {
+        QSqlDatabase migratedDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        migratedDb.setDatabaseName(path);
+        QVERIFY(migratedDb.open());
+        data::runSchemaMigrations(migratedDb);
+        // Run twice: SQLite has no ADD COLUMN IF NOT EXISTS, so a migration that
+        // did not look before it altered would fail on every open after the first.
+        data::runSchemaMigrations(migratedDb);
+
+        for (const QString& table : {QStringLiteral("sales"), QStringLiteral("customer_transactions")}) {
+            QSqlQuery columns(migratedDb);
+            QVERIFY(columns.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table)));
+            bool found = false;
+            while (columns.next()) {
+                found = found || columns.value(1).toString() == QStringLiteral("adjustment_cents");
+            }
+            QVERIFY2(found, qPrintable(QStringLiteral("no adjustment_cents on %1").arg(table)));
+        }
+
+        // The rows that were there before still say what they said: a total that has
+        // not moved, and an adjustment that is genuinely zero rather than unknown.
+        QSqlQuery sales(migratedDb);
+        QVERIFY(sales.exec(QStringLiteral("SELECT total_cents, adjustment_cents FROM sales WHERE id = 1")));
+        QVERIFY(sales.next());
+        QCOMPARE(sales.value(0).toLongLong(), 900LL);
+        QCOMPARE(sales.value(1).toLongLong(), 0LL);
+
+        QSqlQuery txs(migratedDb);
+        QVERIFY(txs.exec(QStringLiteral(
+            "SELECT amount_cents, adjustment_cents FROM customer_transactions WHERE id = 1")));
+        QVERIFY(txs.next());
+        QCOMPARE(txs.value(0).toLongLong(), 900LL);
+        QCOMPARE(txs.value(1).toLongLong(), 0LL);
+
+        QCOMPARE(data::readSchemaVersion(migratedDb), data::kSchemaVersion);
+        migratedDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
 }
 
 

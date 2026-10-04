@@ -20,6 +20,7 @@ core::Sale saleFromQuery(const QSqlQuery& query)
     sale.id = query.value(0).toInt();
     sale.createdAt = fromIso(query.value(1).toString()).value_or(QDateTime());
     sale.totalCents = query.value(2).toLongLong();
+    sale.adjustmentCents = query.value(7).toLongLong();
     sale.deviceId = query.value(3).toString();
     sale.oversold = query.value(4).toInt() != 0;
     sale.reversedSaleId = query.value(5).toInt();
@@ -31,7 +32,11 @@ core::Sale saleFromQuery(const QSqlQuery& query)
     return sale;
 }
 
-const char* kSaleColumns = "id, created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id";
+// adjustment_cents comes last so the indices above keep their meaning: the column
+// was added to the table after the rest of it, and every query in this file reads
+// by position.
+const char* kSaleColumns =
+    "id, created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id, adjustment_cents";
 
 } // namespace
 
@@ -94,8 +99,8 @@ int SaleRepository::insert(const core::Sale& sale)
 {
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("INSERT INTO sales (created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id) "
-                       "VALUES (?, ?, ?, ?, ?, ?)"));
+        QStringLiteral("INSERT INTO sales (created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id, adjustment_cents) "
+                       "VALUES (?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(toIso(sale.createdAt.isValid() ? sale.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(sale.totalCents);
     query.addBindValue(sale.deviceId);
@@ -108,6 +113,7 @@ int SaleRepository::insert(const core::Sale& sale)
     } else {
         query.addBindValue(QVariant());
     }
+    query.addBindValue(sale.adjustmentCents);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("SaleRepository::insert"));
         return 0;

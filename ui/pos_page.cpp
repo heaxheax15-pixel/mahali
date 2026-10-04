@@ -210,6 +210,26 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     totals->addWidget(m_totalLabel);
     totals->addWidget(m_countLabel);
 
+    // Ajustement: what the cashier changes about the invoice as a whole. It sits
+    // under the total, which is the figure it moves, and it is a field rather than
+    // another grid row because there is no product on it to name — it is the only
+    // line on the invoice that is not a thing the customer is buying.
+    auto* adjustmentRow = new QHBoxLayout;
+    adjustmentRow->setContentsMargins(0, 0, 0, 0);
+    adjustmentRow->setSpacing(themeTokens::space4);
+    auto* adjustmentCaption = new QLabel(tr("Ajustement"));
+    adjustmentCaption->setObjectName(QStringLiteral("heroCaption"));
+    m_adjustment = new QLineEdit;
+    m_adjustment->setObjectName(QStringLiteral("posAdjustmentField"));
+    m_adjustment->setPlaceholderText(QStringLiteral("+ 0"));
+    m_adjustment->setToolTip(tr("Somme à ajouter (+) ou à retirer (-) sur la facture entière"));
+    m_adjustment->setClearButtonEnabled(true);
+    m_adjustment->setMinimumHeight(36);
+    adjustmentRow->addWidget(adjustmentCaption);
+    adjustmentRow->addWidget(m_adjustment, 1);
+
+    totals->addLayout(adjustmentRow);
+
     auto* paymentSummary = new QVBoxLayout;
     paymentSummary->setContentsMargins(0, 0, 0, 0);
     paymentSummary->setSpacing(themeTokens::space4);
@@ -283,6 +303,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
 
     connect(m_entry, &QLineEdit::returnPressed, this, &PosPage::addEntry);
     connect(m_entry, &QLineEdit::textChanged, this, &PosPage::onBarcodeTextChanged);
+    connect(m_adjustment, &QLineEdit::textChanged, this, &PosPage::onAdjustmentChanged);
     connect(m_save, &QPushButton::clicked, this, &PosPage::completeSale);
     connect(clearButton, &QPushButton::clicked, this, &PosPage::onClearCart);
     connect(removeButton, &QPushButton::clicked, this, &PosPage::onRemoveLine);
@@ -375,7 +396,62 @@ long long PosPage::totalCents() const
     for (const PosLine& line : m_lines) {
         total += line.unitPriceCents * line.quantity;
     }
-    return total;
+    // What the sale would be recorded at, which is what the invoice bar shows and
+    // what completeSale() hands to the service. Text that is not money counts as
+    // no adjustment, the same as the empty field does.
+    const std::optional<long long> adjustment = adjustmentFromField();
+    return total + (adjustment.value_or(0));
+}
+
+long long PosPage::adjustmentCents() const
+{
+    return adjustmentFromField().value_or(0);
+}
+
+std::optional<long long> PosPage::adjustmentFromField() const
+{
+    const QString text = m_adjustment->text().trimmed();
+    if (text.isEmpty()) {
+        return 0;
+    }
+    // parseMoney rejects a leading minus, because nothing else that takes money
+    // wants one. An adjustment is the one place that does: the cashier is saying
+    // "take this much off", and the sign is the whole point of the field. The
+    // value is parsed without its sign and negated here rather than by widening
+    // the parser, which every other caller would then have to remember to use
+    // safely.
+    if (text.startsWith(QLatin1Char('+'))) {
+        return parseMoney(text.mid(1));
+    }
+    if (!text.startsWith(QLatin1Char('-'))) {
+        return parseMoney(text);
+    }
+    const std::optional<long long> magnitude = parseMoney(text.mid(1));
+    if (!magnitude.has_value()) {
+        return std::nullopt;
+    }
+    return -*magnitude;
+}
+
+void PosPage::setAdjustmentText(const QString& text)
+{
+    m_adjustment->setText(text);
+}
+
+void PosPage::onAdjustmentChanged(const QString& text)
+{
+    Q_UNUSED(text);
+    const long long parsed = adjustmentFromField().value_or(0);
+    if (parsed == m_adjustmentCents) {
+        // A half-typed value that has not settled into a number yet. Repainting
+        // here would blank the row out from under the cashier on every keystroke.
+        return;
+    }
+    m_adjustmentCents = parsed;
+    // The grid is rebuilt rather than patched: the adjustment is a row in it, and
+    // a row that appears and disappears is the only honest way to show that there
+    // is nothing to adjust.
+    rebuildTable();
 }
 
 long long PosPage::lineQuantityAt(int row) const
@@ -549,6 +625,12 @@ void PosPage::onRemoveLine()
     QSet<int> rows;
     for (const QTableWidgetSelectionRange& range : ranges) {
         for (int row = range.topRow(); row <= range.bottomRow(); ++row) {
+            // Past the last real line sits the adjustment row, which has no line
+            // behind it to remove. Skipping it keeps the indices below aligned
+            // with the lines they are about to delete.
+            if (row >= m_lines.size()) {
+                continue;
+            }
             rows.insert(row);
         }
     }
@@ -667,10 +749,15 @@ void PosPage::refreshTotals()
         total += line.unitPriceCents * line.quantity;
         units += line.quantity;
     }
+    const long long adjustment = m_adjustmentCents;
+    // The hero figure is what the customer is charged, so the adjustment is inside
+    // it rather than a correction shown next to it: a total the till is about to
+    // disagree with is worse than one line too many.
+    const long long payable = total + adjustment;
     m_countLabel->setText(tr("Articles: %1 | Unités: %2").arg(m_lines.size()).arg(units));
-    m_totalLabel->setText(formatMoney(total));
+    m_totalLabel->setText(formatMoney(payable));
     m_paidLabel->setText(tr("Payé : %1").arg(formatMoney(0)));
-    m_remainingLabel->setText(tr("Reste : %1").arg(formatMoney(total)));
+    m_remainingLabel->setText(tr("Reste : %1").arg(formatMoney(payable)));
     m_save->setEnabled(!m_lines.isEmpty());
     m_save->setToolTip(m_lines.isEmpty()
                            ? tr("Scannez un produit ou choisissez-en un dans la liste")
@@ -725,6 +812,34 @@ void PosPage::rebuildTable()
         readOnly(priceItem);
         m_table->setItem(row, PriceColumn, priceItem);
     }
+
+    // The adjustment, as a line of the invoice. It is a row rather than a line:
+    // there is no product behind it and none is invented, so it carries no id, no
+    // barcode and no quantity, and nothing in this file turns it into a sale item.
+    // Its index is past the end of m_lines, which is what every edit path below
+    // checks for, so a click lands on nothing rather than on the line above it.
+    // It is only here when there is something to show: at zero the invoice has no
+    // such line, and a row reading "0,00" would be a line that was never sold.
+    if (m_adjustmentCents != 0) {
+        const int row = m_table->rowCount();
+        m_table->insertRow(row);
+
+        const auto readOnly = [](QTableWidgetItem* item) {
+            item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+        };
+
+        auto* adjustmentName = new QTableWidgetItem(tr("Ajustement"));
+        readOnly(adjustmentName);
+        m_table->setItem(row, NameColumn, adjustmentName);
+
+        auto* adjustmentAmount = new QTableWidgetItem(
+            m_adjustmentCents > 0 ? QStringLiteral("+ ") + formatMoney(m_adjustmentCents)
+                                   : formatMoney(m_adjustmentCents));
+        adjustmentAmount->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        readOnly(adjustmentAmount);
+        m_table->setItem(row, PriceColumn, adjustmentAmount);
+    }
+
     m_updating = false;
     m_cartStack->setCurrentWidget(m_lines.isEmpty() ? m_cartStack->widget(1) : m_table);
     refreshTotals();
@@ -732,7 +847,10 @@ void PosPage::rebuildTable()
 
 bool PosPage::syncFromTable()
 {
-    if (m_lines.size() != m_table->rowCount()) {
+    // One row more than there are lines is the adjustment, and it is skipped
+    // rather than read: it holds no quantity and no price, so treating it as a
+    // line would fail the sale on a number nobody can type into it.
+    if (m_table->rowCount() != m_lines.size() && m_table->rowCount() != m_lines.size() + 1) {
         return false;
     }
     bool ok = true;
@@ -798,6 +916,17 @@ void PosPage::completeSale()
         return;
     }
 
+    // Read before anything is written, and refused rather than ignored: a sale
+    // recorded with an adjustment the cashier did not ask for is money nobody can
+    // account for, and one recorded without an adjustment they did ask for is
+    // money taken off them. Both are worth a refusal.
+    const std::optional<long long> adjustment = adjustmentFromField();
+    if (!adjustment.has_value()) {
+        setNotice(tr("Ajustement invalide"), false);
+        return;
+    }
+    const long long adjustmentCents = *adjustment;
+
     // A credit sale never reached the drawer, so it is recorded without one. Asking
     // for a session here would refuse a sale that is perfectly recordable on the
     // grounds that the till happens to be shut.
@@ -841,7 +970,7 @@ void PosPage::completeSale()
     if (m_creditCustomerId > 0) {
         const data::SaleRecordResult result = service.recordCustomerDebt(
             m_creditCustomerId, items, app::core::Session::instance().actorName(),
-            /*allowOversold=*/false);
+            /*allowOversold=*/false, /*applyToken=*/nullptr, adjustmentCents);
         if (!result.ok) {
             setNotice(tr("تعذر تسجيل الدين: %1").arg(result.error), false);
             return;
@@ -854,14 +983,18 @@ void PosPage::completeSale()
         }
         setNotice(tr("تم تسجيل الدين : %1").arg(formatMoney(result.totalCents)), true);
         clearCreditMode();
+        // The adjustment belongs to the invoice that was just recorded, not to the
+        // next one: leaving it behind would silently reapply it.
+        m_adjustment->clear();
         m_lines.clear();
         rebuildTable();
         refreshQuickItems();
         return;
     }
 
-    const data::SaleRecordResult result =
-        service.recordSale(items, session->id, app::core::Session::instance().actorName(), /*allowOversold=*/false);
+    const data::SaleRecordResult result = service.recordSale(
+        items, session->id, app::core::Session::instance().actorName(), /*allowOversold=*/false,
+        /*applyToken=*/nullptr, adjustmentCents);
     if (!result.ok) {
         setNotice(tr("تعذر حفظ البيع: %1").arg(result.error), false);
         return;
@@ -873,6 +1006,7 @@ void PosPage::completeSale()
     }
     // Kept in Arabic on purpose: tst_ui asserts this exact string.
     setNotice(tr("تم البيع: %1").arg(formatMoney(result.totalCents)), true);
+    m_adjustment->clear();
     m_lines.clear();
     rebuildTable();
     refreshQuickItems();

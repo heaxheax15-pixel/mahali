@@ -83,7 +83,8 @@ bool SaleService::insertAppliedOp(const core::SyncApplyToken& token, core::SyncO
 
 SaleRecordResult SaleService::recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
                                                  const QString& deviceId, bool allowOversold,
-                                                 const core::SyncApplyToken* applyToken)
+                                                 const core::SyncApplyToken* applyToken,
+                                                 long long adjustmentCents)
 {
     SaleRecordResult result;
     if (items.isEmpty()) {
@@ -110,6 +111,14 @@ QString error;
         return result;
     }
 
+    // The adjustment joins the total here and nowhere else: the amount owed is
+    // lines + adjustment, while the cost of the goods stays at the line prices,
+    // which is what the profit and loss statement is built from.
+    if (!detail::sumFits(*totalOpt, adjustmentCents)) {
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
     const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
     if (!cogsOpt.has_value()) {
         result.error = QStringLiteral("the sale cost is too large to record");
@@ -121,12 +130,13 @@ QString error;
         return result;
     }
 
-    const long long total = *totalOpt;
+    const long long total = *totalOpt + adjustmentCents;
     const long long cogs = *cogsOpt;
 
     core::CustomerTransaction transaction;
     transaction.customerId = customerId;
     transaction.amountCents = total;
+    transaction.adjustmentCents = adjustmentCents;
     transaction.createdAt = QDateTime::currentDateTime();
     const int transactionId = m_customerTransactions.insert(transaction);
     if (transactionId == 0) {
@@ -193,7 +203,8 @@ QString error;
 
 SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, int cashSessionId,
                                          const QString& deviceId, bool allowOversold,
-                                         const core::SyncApplyToken* applyToken)
+                                         const core::SyncApplyToken* applyToken,
+                                         long long adjustmentCents)
 {
     SaleRecordResult result;
     if (items.isEmpty()) {
@@ -234,6 +245,16 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
         return result;
     }
 
+    // The adjustment is added to what the drawer is told about and to nothing
+    // else. The cost below is left at the line prices on purpose: a discount given
+    // on the invoice does not make the goods cheaper to have sold, and folding it
+    // into the cost would turn a discount into a margin.
+    if (!detail::sumFits(*totalOpt, adjustmentCents)) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
     const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
     if (!cogsOpt.has_value()) {
         m_db.rollback();
@@ -241,12 +262,13 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
         return result;
     }
 
-    const long long total = *totalOpt;
+    const long long total = *totalOpt + adjustmentCents;
     const long long cogs = *cogsOpt;
 
     core::Sale sale;
     sale.createdAt = QDateTime::currentDateTime();
     sale.totalCents = total;
+    sale.adjustmentCents = adjustmentCents;
     sale.deviceId = deviceId;
     sale.oversold = allowOversold;
     // Stamped with whatever occasion is running at the moment of the sale, so the
@@ -373,6 +395,11 @@ SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
     core::Sale reversal;
     reversal.createdAt = QDateTime::currentDateTime();
     reversal.totalCents = -original->totalCents;
+    // Mirrored with its sign flipped, for the same reason the total is: the
+    // reversal's own lines below sum to the negative of the original's, and an
+    // adjustment left at 0 would make the row claim a total its own items do not
+    // add up to.
+    reversal.adjustmentCents = -original->adjustmentCents;
     reversal.deviceId = original->deviceId;
     reversal.occasionId = original->occasionId;
     reversal.reversedSaleId = saleId;
@@ -495,6 +522,7 @@ SaleReverseResult SaleService::reverseCustomerDebt(int transactionId)
     core::CustomerTransaction reversal;
     reversal.customerId = original->customerId;
     reversal.amountCents = -original->amountCents;
+    reversal.adjustmentCents = -original->adjustmentCents;
     reversal.createdAt = QDateTime::currentDateTime();
     reversal.reversedTransactionId = transactionId;
     const int reversalId = m_customerTransactions.insert(reversal);
