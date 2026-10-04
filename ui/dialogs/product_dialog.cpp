@@ -2,6 +2,7 @@
 
 #include <QAbstractButton>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -159,9 +160,28 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     auto* cost = new QLineEdit(initial.costPriceCents ? formatMoney(initial.costPriceCents) : QString());
     auto* sale = new QLineEdit(initial.salePriceCents ? formatMoney(initial.salePriceCents) : QString());
     auto* unit = new QLineEdit(initial.unit.isEmpty() ? QString() : initial.unit);
+    // Asked only when the product is being created: an opening count is a fact
+    // about the first day, not something you edit later. Editing it afterwards
+    // would silently rewrite the shelf ledger instead of adding a movement, so
+    // the field is hidden on edit and the stock page owns every change after
+    // creation.
+    auto* openingStock = new QSpinBox();
+    openingStock->setRange(0, 1000000000);
+    openingStock->setValue(initial.id == 0 ? 0 : static_cast<int>(initial.quantity));
     auto* package = new QSpinBox;
     package->setRange(1, 1000000);
-    package->setValue(initial.packageSize ? initial.packageSize : 1);
+    package->setValue(initial.piecesPerPackage > 0 ? initial.piecesPerPackage : 1);
+    // Editable so a shop whose packaging has a local name not in the list can
+    // type it and keep it. The list is a starting point, not a closed set.
+    auto* packageName = new QComboBox();
+    packageName->setEditable(true);
+    packageName->addItems({QCoreApplication::translate("ProductDialog", "كرتونة"),
+                           QCoreApplication::translate("ProductDialog", "غاجو"),
+                           QCoreApplication::translate("ProductDialog", "بالة"),
+                           QCoreApplication::translate("ProductDialog", "كوربيّة")});
+    packageName->setCurrentText(initial.packageName.isEmpty()
+                                    ? QCoreApplication::translate("ProductDialog", "كرتونة")
+                                    : initial.packageName);
     auto* active = new QCheckBox;
     active->setChecked(forNew || initial.active);
 
@@ -183,9 +203,22 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     form->addRow(QCoreApplication::translate("ProductDialog", "الاسم"), name);
     form->addRow(QCoreApplication::translate("ProductDialog", "سعر التكلفة"), cost);
     form->addRow(QCoreApplication::translate("ProductDialog", "سعر البيع"), sale);
+    form->addRow(QCoreApplication::translate("ProductDialog", "الكمية الافتتاحية"), openingStock);
     form->addRow(QCoreApplication::translate("ProductDialog", "الوحدة"), unit);
-    form->addRow(QCoreApplication::translate("ProductDialog", "المحتوى (عدد وحدات الوجبة)"), package);
+    form->addRow(QCoreApplication::translate("ProductDialog", "عدد الحبات في العلبة"), package);
+    form->addRow(QCoreApplication::translate("ProductDialog", "اسم العلبة"), packageName);
     form->addRow(QCoreApplication::translate("ProductDialog", "مُفعّل"), active);
+
+    // Hidden on edit, together with its own label, so the row cannot leave a
+    // caption over nothing. setRowVisible() takes the widget and hides the label
+    // with it, which addRow() gives no way to do by hand.
+    if (initial.id != 0) {
+        form->setRowVisible(openingStock, false);
+        openingStock->setToolTip(QCoreApplication::translate(
+            "ProductDialog",
+            "الكمية الافتتاحية تُسجَّل مرة واحدة عند إنشاء المنتج. لتعديل المخزون لاحقاً، "
+            "استخدم صفحة المخزون."));
+    }
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
@@ -284,7 +317,7 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     // re-typing the same string would only risk the AZERTY rewrite running again
     // on the way in.
     QObject::connect(fillFields, &QPushButton::clicked, &dialog, [barcode, name, cost, sale, unit,
-                                                                     package, notice, &db]() {
+                                                                     package, packageName, notice, &db]() {
         const auto found = data::ProductRepository(db).findByBarcode(barcode->text().trimmed());
         if (!found) {
             notice->setVisible(false);
@@ -296,7 +329,12 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
         cost->setText(found->costPriceCents ? formatMoney(found->costPriceCents) : QString());
         sale->setText(formatMoney(found->salePriceCents));
         unit->setText(found->unit);
-        package->setValue(found->packageSize ? found->packageSize : 1);
+        package->setValue(found->piecesPerPackage > 0 ? found->piecesPerPackage : 1);
+        // Copied with the rest so filling the form cannot silently replace a
+        // shop's own word for the carton with the default.
+        packageName->setCurrentText(found->packageName.isEmpty()
+                                        ? QCoreApplication::translate("ProductDialog", "كرتونة")
+                                        : found->packageName);
         notice->setVisible(false);
     });
 
@@ -394,8 +432,30 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     product.name = name->text().trimmed();
     product.costPriceCents = costCents;
     product.salePriceCents = *parseMoney(sale->text());
+    // The opening count, and only on the way in. Asked because an opening count is
+    // a fact about the first day; on an edit the copy carried in from initial is
+    // authoritative, because changing the shelf after the fact is a movement and
+    // belongs to the stock page. The repository will not store this either way --
+    // save() hardcodes quantity to 0 on INSERT and leaves it out of UPDATE -- so it
+    // is the caller that turns it into a stock movement.
+    if (initial.id == 0) {
+        product.quantity = static_cast<long long>(openingStock->value());
+    }
     product.unit = typedUnit.isEmpty() ? QStringLiteral("piece") : typedUnit;
-    product.packageSize = package->value();
+    // package_size and pieces_per_package are written from the same widget so the
+    // two columns cannot drift; package_barcode is computed rather than asked for,
+    // because a carton's barcode is the piece's plus a marker, and a field would
+    // only invite a typo that no scanner could ever produce.
+    const QString chosenPackage = packageName->currentText().trimmed();
+    product.packageName = chosenPackage.isEmpty() ? QStringLiteral("كرتونة") : chosenPackage;
+
+    const int pieces = package->value();
+    product.packageSize = pieces;      // legacy column, kept in sync
+    product.piecesPerPackage = pieces; // source of truth
+
+    const QString trimmedBarcode = barcode->text().trimmed();
+    product.packageBarcode =
+        trimmedBarcode.isEmpty() ? QString() : trimmedBarcode + QStringLiteral("c");
     product.active = active->isChecked();
     return product;
 }
