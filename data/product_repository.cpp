@@ -30,12 +30,20 @@ core::Product productFromQuery(const QSqlQuery& query)
     product.packageSize = query.value(7).toInt();
     product.active = query.value(8).toInt() != 0;
     product.soldByWeight = query.value(9).toInt() != 0;
+    // The four packaging columns come after every pre-existing one, so the indices
+    // above keep meaning what they meant. A NULL package_barcode comes back as a
+    // null QString, which toString() turns into the empty string the struct uses
+    // for "no carton barcode" -- the same round trip products.barcode makes.
+    product.packageName = query.value(10).toString();
+    product.piecesPerPackage = query.value(11).toInt();
+    product.packageBarcode = query.value(12).toString();
+    product.packageCostCents = query.value(13).toLongLong();
     return product;
 }
 
 const char* kProductColumns =
     "id, barcode, name, cost_price_cents, sale_price_cents, quantity, unit, package_size, active, "
-    "sold_by_weight";
+    "sold_by_weight, package_name, pieces_per_package, package_barcode, package_cost_cents";
 
 const char* kQuickItemsFilter = "active = 1 AND (barcode IS NULL OR TRIM(barcode) = '')";
 
@@ -63,6 +71,28 @@ QVariant barcodeVariant(const QString& barcode)
         return QVariant{};
     }
     return QVariant{barcode};
+}
+
+// The word for a carton, used when the caller leaves it blank. save() writes
+// package_name on every insert and update, which means the column's own DEFAULT
+// would never fire for a row written through here -- a blank field would be stored
+// as a blank name and a product with no carton name at all. The shop's word is the
+// answer, and it is a fallback rather than a stored value because it is a default
+// for this product rather than a fact about it: a shop that packs in boxes should
+// not have to retype "كرتونة" on every product to keep it.
+QString packageNameOrDefault(const QString& packageName)
+{
+    return packageName.trimmed().isEmpty() ? core::Product{}.packageName : packageName;
+}
+
+// A carton holds at least one piece, so anything below that is not a count of
+// anything: the box is empty or the number is a typo, and either way the figure
+// that comes back would be used to divide a carton price into piece prices. This
+// is the only place the floor is enforced -- the column has DEFAULT 1 but no
+// CHECK, so a row written by raw SQL or an import is not held to it.
+int piecesPerPackageOrOne(int piecesPerPackage)
+{
+    return piecesPerPackage < 1 ? 1 : piecesPerPackage;
 }
 
 // Escapes the LIKE wildcards so a literal % or _ in the query is not a pattern.
@@ -144,8 +174,9 @@ int ProductRepository::save(const core::Product& product)
     if (product.id == 0) {
         query.prepare(
             QStringLiteral("INSERT INTO products "
-                           "(barcode, name, cost_price_cents, sale_price_cents, quantity, unit, package_size, active, sold_by_weight) "
-                           "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)"));
+                           "(barcode, name, cost_price_cents, sale_price_cents, quantity, unit, package_size, active, sold_by_weight, "
+                           "package_name, pieces_per_package, package_barcode, package_cost_cents) "
+                           "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)"));
         query.addBindValue(barcodeVariant(product.barcode));
         query.addBindValue(product.name);
         query.addBindValue(product.costPriceCents);
@@ -154,6 +185,15 @@ int ProductRepository::save(const core::Product& product)
         query.addBindValue(product.packageSize);
         query.addBindValue(product.active ? 1 : 0);
         query.addBindValue(product.soldByWeight ? 1 : 0);
+        // The packaging columns follow the ones above in the order Phase 1 added
+        // them to the schema, so a positional read of the row lines up with
+        // productFromQuery(). package_cost_cents is passed through untouched: it is
+        // what the supplier invoiced, and guessing it from the piece price would
+        // round away the remainder that a shelf price has to be checked against.
+        query.addBindValue(packageNameOrDefault(product.packageName));
+        query.addBindValue(piecesPerPackageOrOne(product.piecesPerPackage));
+        query.addBindValue(barcodeVariant(product.packageBarcode));
+        query.addBindValue(product.packageCostCents);
         if (!query.exec()) {
             m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::save"));
             return 0;
@@ -164,7 +204,9 @@ int ProductRepository::save(const core::Product& product)
     query.prepare(
         QStringLiteral("UPDATE products SET "
                        "barcode = ?, name = ?, cost_price_cents = ?, sale_price_cents = ?, "
-                       "unit = ?, package_size = ?, active = ?, sold_by_weight = ? "
+                       "unit = ?, package_size = ?, active = ?, sold_by_weight = ?, "
+                       "package_name = ?, pieces_per_package = ?, package_barcode = ?, "
+                       "package_cost_cents = ? "
                        "WHERE id = ?"));
     query.addBindValue(barcodeVariant(product.barcode));
     query.addBindValue(product.name);
@@ -174,6 +216,14 @@ int ProductRepository::save(const core::Product& product)
     query.addBindValue(product.packageSize);
     query.addBindValue(product.active ? 1 : 0);
     query.addBindValue(product.soldByWeight ? 1 : 0);
+    // Same four columns and same rules as the insert above. package_name in
+    // particular is filled in rather than blanked, so an editor that has no word
+    // for the carton and leaves the field alone does not quietly erase the one
+    // already stored.
+    query.addBindValue(packageNameOrDefault(product.packageName));
+    query.addBindValue(piecesPerPackageOrOne(product.piecesPerPackage));
+    query.addBindValue(barcodeVariant(product.packageBarcode));
+    query.addBindValue(product.packageCostCents);
     query.addBindValue(product.id);
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::save"));

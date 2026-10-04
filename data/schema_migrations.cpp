@@ -441,6 +441,194 @@ void migrateSaleAdjustment(const QSqlDatabase& db)
     }
 }
 
+// ---------------------------------------------------------------------------
+// 13 — the carton (كرتونة) on products, and what a ledger line was counted in
+//
+// A product knew how many pieces made up its package but nothing could *be* sold
+// or bought by the package: every line carried a bare quantity and a unit price,
+// so a cashier wanting to charge for a carton had to divide the price by hand,
+// round, and be quietly wrong by the remainder every time. The remainder is the
+// part that cannot be recovered later — once the unit price is rounded, nobody can
+// tell whether the shortfall was a rounding artefact or a wrong price. So the
+// exact supplier cost of a carton is kept alongside it (package_cost_cents) rather
+// than recomputed as a division, and products.package_size is deliberately left
+// alone: it is still written by the product form, and nothing in production reads
+// it — pieces_per_package is what the stock arithmetic reads.
+//
+// Every ledger line gains unit_kind ("piece" or "package") so a line says what it
+// was counted in, and pieces_consumed / pieces_received so the pieces are counted
+// explicitly instead of being inferred later from a quantity whose unit is no
+// longer recorded anywhere. Inferring them after the fact is what would go wrong:
+// a carton line of 3 and a piece line of 3 are the same number and need different
+// stock arithmetic, and once the unit is not stored the two cannot be told apart.
+//
+// The backfill sets pieces_consumed/pieces_received from the existing quantity
+// with unit_kind left at its 'piece' default, which is the truth about every row
+// that predates this: nothing was ever sold by the carton, so every historical
+// quantity was a count of pieces. Without the backfill those rows would read 0
+// pieces and a stock count derived from them would empty the shelves.
+void migrateProductPackages(const QSqlDatabase& db)
+{
+    // One row per column to add. type is the SQLite column definition, which is
+    // spelled per table because the defaults differ; the presence check below is
+    // what keeps a second run from failing with "duplicate column name".
+    struct PackageColumn {
+        const char* table;
+        const char* column;
+        const char* type;
+        const char* what;
+    };
+
+    constexpr PackageColumn kPackageColumns[] = {
+        // What the shop calls a carton, in Arabic because that is what is printed
+        // on it and what the cashier will be typing. Stored rather than left as a
+        // constant so a shop that calls them something else can say so without a
+        // new build.
+        {"products", "package_name", "TEXT NOT NULL DEFAULT 'كرتونة'", "add products.package_name"},
+        // How many pieces are in one carton. Kept beside the older package_size
+        // rather than replacing it, so the form and the mapper do not have to
+        // change in the same commit: both are written from one widget and both
+        // default to 1. Nothing in production reads package_size — this column is
+        // the one the stock arithmetic reads — so the second number is a
+        // transition leftover, not a second reader's requirement.
+        {"products", "pieces_per_package", "INTEGER NOT NULL DEFAULT 1",
+         "add products.pieces_per_package"},
+        // The carton's own barcode, NULL when the product has none. Not UNIQUE at
+        // the database level, deliberately: products.barcode is UNIQUE so that a
+        // blank means "no barcode" and does not collide with other blanks, and a
+        // carton barcode has exactly the same problem. Making this UNIQUE would
+        // let one row refuse another over a typo, which is a barcode mistake
+        // turning into an unsaveable product.
+        {"products", "package_barcode", "TEXT", "add products.package_barcode"},
+        // What one carton costs the shop, in cents, exactly as invoiced. Not
+        // package_cost / pieces_per_package, because that division rounds and the
+        // remainder is the figure that decides whether the shelf price is right.
+        {"products", "package_cost_cents", "INTEGER NOT NULL DEFAULT 0",
+         "add products.package_cost_cents"},
+
+        // What this line was counted in. 'piece' is the default because that is
+        // what every line written before this column existed was.
+        {"sale_items", "unit_kind", "TEXT NOT NULL DEFAULT 'piece'", "add sale_items.unit_kind"},
+        // Pieces actually taken off the shelf, so the stock movement is a count of
+        // pieces rather than a re-derivation from a quantity whose unit is not
+        // recorded. Zero on rows that predate this, hence the backfill below.
+        {"sale_items", "pieces_consumed", "INTEGER NOT NULL DEFAULT 0",
+         "add sale_items.pieces_consumed"},
+
+        {"customer_transaction_items", "unit_kind", "TEXT NOT NULL DEFAULT 'piece'",
+         "add customer_transaction_items.unit_kind"},
+        // Same as sale_items, and for the same reason: a credit sale moves stock
+        // exactly as a cash one does, so a carton line here that cannot say how
+        // many pieces it took would reconcile the shelf against the till wrongly.
+        {"customer_transaction_items", "pieces_consumed", "INTEGER NOT NULL DEFAULT 0",
+         "add customer_transaction_items.pieces_consumed"},
+
+        {"purchase_items", "unit_kind", "TEXT NOT NULL DEFAULT 'piece'",
+         "add purchase_items.unit_kind"},
+        // Pieces put *on* the shelf, and named differently on purpose: goods come
+        // in and go out, and a single column would have to mean whichever the row
+        // happened to be. This one is only ever read off a purchase.
+        {"purchase_items", "pieces_received", "INTEGER NOT NULL DEFAULT 0",
+         "add purchase_items.pieces_received"},
+
+        // A return takes goods back, so it is counted in the same terms as a sale
+        // and borrows pieces_consumed rather than inventing a third name.
+        {"supplier_return_items", "unit_kind", "TEXT NOT NULL DEFAULT 'piece'",
+         "add supplier_return_items.unit_kind"},
+        {"supplier_return_items", "pieces_consumed", "INTEGER NOT NULL DEFAULT 0",
+         "add supplier_return_items.pieces_consumed"},
+    };
+
+    for (const PackageColumn& spec : kPackageColumns) {
+        const QString table = QString::fromLatin1(spec.table);
+        const QString column = QString::fromLatin1(spec.column);
+        // A table that is not there yet has nothing to alter. createSchema() runs
+        // before this and creates it with the columns already in place, so on a
+        // fresh install this is the branch that runs for every row above.
+        if (tableColumns(db, table).isEmpty()) {
+            continue;
+        }
+        // SQLite has no ADD COLUMN IF NOT EXISTS, so the presence check is the only
+        // way to write this idempotently. Without it a second run fails with
+        // "duplicate column name" on every open.
+        if (tableColumns(db, table).contains(column)) {
+            continue;
+        }
+        run(db,
+            QStringLiteral("ALTER TABLE %1 ADD COLUMN %2 %3")
+                .arg(QString::fromUtf8(spec.table), QString::fromUtf8(spec.column),
+                     QString::fromUtf8(spec.type)),
+            QString::fromLatin1(spec.what));
+    }
+
+    // The backfills. A row that predates the columns reads 0 pieces, which is a
+    // figure the stock arithmetic would believe: a sale of 5 would empty 5 pieces
+    // on the next count and then some, and the shelves would go negative. Every
+    // such quantity was a count of pieces, because nothing could be sold or bought
+    // by the carton before this migration — so copying quantity across states what
+    // was true, and unit_kind stays at its 'piece' default to say so.
+    struct PackageBackfill {
+        const char* table;
+        const char* column;
+        const char* what;
+    };
+
+    constexpr PackageBackfill kPackageBackfills[] = {
+        {"sale_items", "pieces_consumed", "backfill sale_items.pieces_consumed"},
+        {"customer_transaction_items", "pieces_consumed",
+         "backfill customer_transaction_items.pieces_consumed"},
+        {"purchase_items", "pieces_received", "backfill purchase_items.pieces_received"},
+        {"supplier_return_items", "pieces_consumed",
+         "backfill supplier_return_items.pieces_consumed"},
+    };
+
+    for (const PackageBackfill& spec : kPackageBackfills) {
+        const QString table = QString::fromLatin1(spec.table);
+        const QString column = QString::fromLatin1(spec.column);
+        // Same guard as above: no table, or no column, means there is nothing to
+        // correct. A database where the ALTER failed lands here and is skipped
+        // rather than warned about twice for one problem.
+        if (!tableColumns(db, table).contains(column)) {
+            continue;
+        }
+        QSqlQuery fix(db);
+        if (fix.exec(QStringLiteral("UPDATE %1 SET %2 = quantity WHERE %2 = 0")
+                         .arg(QString::fromUtf8(spec.table), QString::fromUtf8(spec.column)))) {
+            continue;
+        }
+        qWarning() << "schema migration:" << spec.what << "failed:" << fix.lastError().text();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 14 — copy package_size into pieces_per_package
+//
+// Migration 13 added pieces_per_package with a default of 1 and did not copy
+// the figure across, so every product a shop had already described as a tray
+// of twelve read back as one and the first carton sale would have taken a
+// single piece off the shelf. Copy it across where the two disagree and only
+// the old column has a figure in it; rows where the shop has already set the
+// new column to something other than 1 are left alone.
+void migrateBackfillPiecesPerPackage(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("products"));
+    // Either column missing means there is nothing to copy between. A fresh
+    // install has both, but a database that reached this entry without the
+    // ALTER above being applied is skipped rather than warned about twice for
+    // one problem.
+    if (!columns.contains(QStringLiteral("package_size"))
+        || !columns.contains(QStringLiteral("pieces_per_package"))) {
+        return;
+    }
+
+    run(db,
+        QStringLiteral("UPDATE products SET pieces_per_package = package_size "
+                       "WHERE package_size > 1 AND pieces_per_package = 1"),
+        QStringLiteral("backfill products.pieces_per_package from products.package_size"));
+}
+
+// ---------------------------------------------------------------------------
+// The table below is keyed by schema version, and runSchemaMigrations() walks it
 // so a database that has already run it never runs it twice. Every entry is
 // idempotent anyway (each one looks before it creates), because a database
 // restored from a backup taken between two versions can arrive with some of the
@@ -481,6 +669,18 @@ const std::pair<int, std::function<void(const QSqlDatabase&)>> kMigrations[] = {
     // nothing on the invoice to say so. The column is added to both ledgers at 0,
     // which is what every existing row says about itself.
     {12, migrateSaleAdjustment},
+    // Cartons. products gains what a package is called, how many pieces are in it,
+    // its own barcode and its exact cost; every ledger line that moves stock gains
+    // the unit it was counted in and the piece count, because a quantity alone
+    // cannot say whether it meant 3 pieces or 3 cartons. Existing rows are
+    // backfilled from their quantity, which is a count of pieces by definition —
+    // nothing could be sold or bought by the carton before now.
+    {13, migrateProductPackages},
+    // The carton column arrived with its default of 1 and the old tray figure was
+    // left where it was, so the two disagreed on every product a shop had already
+    // described. The old one is copied across only where the new one still holds
+    // its default, so a row a shop has since set by hand is not overwritten.
+    {14, migrateBackfillPiecesPerPackage},
 };
 
 } // namespace

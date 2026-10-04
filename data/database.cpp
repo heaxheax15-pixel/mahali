@@ -442,7 +442,24 @@ void Database::createSchema()
             "unit TEXT NOT NULL DEFAULT '',"
             "package_size INTEGER NOT NULL DEFAULT 1,"
             "active INTEGER NOT NULL DEFAULT 1,"
-            "sold_by_weight INTEGER NOT NULL DEFAULT 0);"),
+            "sold_by_weight INTEGER NOT NULL DEFAULT 0,"
+            // What the shop calls a carton. Stored, not a constant, so a shop
+            // whose word for it is not this one can change it without a build.
+            "package_name TEXT NOT NULL DEFAULT 'كرتونة',"
+            // Kept beside pieces_per_package so the existing form and mapper do
+            // not have to change at once; the dialog writes both from the same
+            // widget. Nothing reads package_size in production — pieces_per_package
+            // is the column the stock arithmetic uses. This one exists only for a
+            // transition, not because two readers need two numbers.
+            "pieces_per_package INTEGER NOT NULL DEFAULT 1,"
+            // The carton's own barcode, NULL when there is none. Deliberately not
+            // UNIQUE, for the same reason products.barcode is allowed to be blank:
+            // one typo would otherwise make a product unsaveable.
+            "package_barcode TEXT,"
+            // What a carton costs, in cents, as invoiced. Not derived by dividing,
+            // because the division rounds and the remainder is exactly what a
+            // shelf price has to be checked against.
+            "package_cost_cents INTEGER NOT NULL DEFAULT 0);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS sales ("
@@ -478,7 +495,15 @@ void Database::createSchema()
             "quantity INTEGER NOT NULL,"
             "unit_price_cents INTEGER NOT NULL,"
             "unit_cost_cents INTEGER NOT NULL,"
-            "reversed_id INTEGER NOT NULL DEFAULT 0);"),
+            "reversed_id INTEGER NOT NULL DEFAULT 0,"
+            // Whether quantity counts pieces or whole cartons. A line of 3 pieces
+            // and a line of 3 cartons are the same number and move the shelf by
+            // different amounts, so the unit has to be stored: once it is not, the
+            // two cannot be told apart by anything left on the row.
+            "unit_kind TEXT NOT NULL DEFAULT 'piece',"
+            // Pieces actually off the shelf, counted rather than re-derived from
+            // quantity, which no longer says what it is counting.
+            "pieces_consumed INTEGER NOT NULL DEFAULT 0);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS customers ("
@@ -504,7 +529,13 @@ void Database::createSchema()
             "quantity INTEGER NOT NULL,"
             "unit_price_cents INTEGER NOT NULL,"
             "unit_cost_cents INTEGER NOT NULL,"
-            "reversed_id INTEGER NOT NULL DEFAULT 0);"),
+            "reversed_id INTEGER NOT NULL DEFAULT 0,"
+            // Pieces or cartons, as on a cash sale line. A credit sale moves stock
+            // exactly as a cash one does, so a carton line here that could not say
+            // how many pieces it took would reconcile the shelf against the till
+            // wrongly — the goods leave the shelf either way.
+            "unit_kind TEXT NOT NULL DEFAULT 'piece',"
+            "pieces_consumed INTEGER NOT NULL DEFAULT 0);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS suppliers ("
@@ -689,6 +720,12 @@ void Database::createSchema()
             "unit TEXT NOT NULL DEFAULT 'piece',"
             "unit_price_cents INTEGER NOT NULL,"
             "total_cents INTEGER NOT NULL,"
+            // Cartons come in as well as go out. Named apart from pieces_consumed
+            // on purpose: goods arrive and goods leave, and one column would have
+            // to mean whichever the row happened to be. This is only ever read off
+            // a purchase.
+            "unit_kind TEXT NOT NULL DEFAULT 'piece',"
+            "pieces_received INTEGER NOT NULL DEFAULT 0,"
             // Links a void item to the original. 0 means "not a void item".
             "reversed_id INTEGER NOT NULL DEFAULT 0,"
             "FOREIGN KEY (purchase_id) REFERENCES purchases(id),"
@@ -738,6 +775,11 @@ void Database::createSchema()
             "quantity INTEGER NOT NULL,"
             "unit_price_cents INTEGER NOT NULL,"
             "total_cents INTEGER NOT NULL,"
+            // Counted the same terms as a sale line, because a return is stock
+            // going back the other way and reuses pieces_consumed rather than
+            // introducing a third name for the same count.
+            "unit_kind TEXT NOT NULL DEFAULT 'piece',"
+            "pieces_consumed INTEGER NOT NULL DEFAULT 0,"
             "FOREIGN KEY (return_id) REFERENCES supplier_returns(id),"
             "FOREIGN KEY (product_id) REFERENCES products(id));"),
 
