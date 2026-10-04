@@ -43,13 +43,37 @@ namespace {
 long long cogsFor(const std::vector<core::SaleItem>& items)
 {
     long long cogs = 0;
+    // unitCostCents is per piece, so the multiplier must be the piece count.
+    // Using quantity here would under-count COGS on a carton sale by a factor
+    // of pieces_per_package, and the shop would report a profit it did not make.
+    // These rows are read back off the ledger rather than off the resolved vector,
+    // which is why the multiplier is spelled out here and not inherited.
     for (const core::SaleItem& item : items) {
-        if (!detail::productFits(item.unitCostCents, item.quantity)) {
+        if (!detail::productFits(item.unitCostCents, item.piecesConsumed)) {
             qWarning() << "sale cost: item" << item.id
                        << "left out, its quantity times its unit cost overflows";
             continue;
         }
-        const long long term = item.unitCostCents * item.quantity;
+        long long term = item.unitCostCents * item.piecesConsumed;
+        // pieces_consumed is always a positive count (it is the number of pieces
+        // involved, not a signed amount), so its sign must not be taken from here.
+        // The direction of the line lives on quantity: a reversal stores quantity
+        // negative and pieces_consumed positive, because the count answers "how many
+        // pieces moved" while the ledger answers "which way". Reading magnitude from
+        // one field and direction from the other is the only combination that nets
+        // a reversal to zero.
+        if (item.quantity < 0) {
+            // The most negative long long has no positive counterpart, so negating
+            // it wraps to itself. A wrapped cost is not a wrong cost, it is a
+            // plausible wrong amount of money, so the line is left out of the sum
+            // and named in the log rather than counted at the wrong figure.
+            if (term == std::numeric_limits<long long>::min()) {
+                qWarning() << "sale cost: item" << item.id
+                           << "left out, its negated cost would overflow";
+                continue;
+            }
+            term = -term;
+        }
         if (!detail::sumFits(cogs, term)) {
             qWarning() << "sale cost: stopped at item" << item.id
                        << ", the running total would overflow";
@@ -68,13 +92,32 @@ long long cogsFor(const std::vector<core::SaleItem>& items)
 long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines)
 {
     long long cogs = 0;
+    // unitCostCents is per piece, so the multiplier must be the piece count.
+    // Using quantity here would under-count COGS on a carton sold on account by a
+    // factor of pieces_per_package, and the shop would report a profit it did not
+    // make. A credit sale moves stock exactly as a cash one does, so it is counted
+    // the same way.
     for (const core::CustomerTransactionItem& line : lines) {
-        if (!detail::productFits(line.unitCostCents, line.quantity)) {
+        if (!detail::productFits(line.unitCostCents, line.piecesConsumed)) {
             qWarning() << "credit sale cost: item" << line.id
                        << "left out, its quantity times its unit cost overflows";
             continue;
         }
-        const long long term = line.unitCostCents * line.quantity;
+        long long term = line.unitCostCents * line.piecesConsumed;
+        // Signed the same way as the cash path above: magnitude from
+        // pieces_consumed, direction from quantity. A cancellation on account
+        // stores quantity negative and pieces_consumed positive, exactly as a cash
+        // reversal does, because a credit sale moves the same goods.
+        if (line.quantity < 0) {
+            // No positive counterpart to negate into, so the line is left out and
+            // named rather than counted at a wrapped figure.
+            if (term == std::numeric_limits<long long>::min()) {
+                qWarning() << "credit sale cost: item" << line.id
+                           << "left out, its negated cost would overflow";
+                continue;
+            }
+            term = -term;
+        }
         // Each term in range is not enough: the running sum can leave it on its
         // own once enough lines are added together.
         if (!detail::sumFits(cogs, term)) {
