@@ -309,11 +309,23 @@ void ProductsPage::onAddClicked()
     if (!maybeProduct) {
         return;
     }
-    if (data::ProductRepository(m_db).save(*maybeProduct) == 0) {
+    const int id = data::ProductRepository(m_db).save(*maybeProduct);
+    if (id == 0) {
         QMessageBox::warning(this, tr("Erreur"),
                              tr("Impossible d'enregistrer le produit — code-barres déjà utilisé "
                                 "ou données incomplètes"));
         return;
+    }
+    // The same second door the till has: the dialog collects the opening count but
+    // the repository refuses to write product.quantity through save() -- INSERT
+    // hardcodes 0 -- because the shelf column is moved by the stock trigger, not by
+    // the product row. Writing the movement here is what makes the count land.
+    // Without it a product created from this page opens with zero on the shelf and
+    // no ledger row explaining it, and fixing only the till would have left this
+    // path still broken.
+    if (maybeProduct->quantity > 0) {
+        data::ProductRepository(m_db).adjustStock(id, maybeProduct->quantity,
+                                                  QStringLiteral("opening"));
     }
     refresh();
 }

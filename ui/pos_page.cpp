@@ -1,6 +1,7 @@
 #include "pos_page.h"
 
 #include <QBrush>
+#include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -15,6 +16,7 @@
 #include <QSet>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QSqlQuery>
 #include <QStackedWidget>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -24,11 +26,13 @@
 #include <functional>
 
 #include "core/barcode_utils.h"
+#include "core/sale_item.h"
 #include "core/session.h"
 #include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/product_repository.h"
+#include "data/sale_rules.h"
 #include "data/sale_service.h"
 #include "dialogs/product_dialog.h"
 #include "dialogs/select_customer_dialog.h"
@@ -106,13 +110,16 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels(
-        {tr("Produit"), tr("Code-barres"), tr("Unité"), tr("Qté"), tr("Prix")});
+        {tr("Produit"), tr("Code-barres"), tr("الوحدة"), tr("Qté"), tr("Prix")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // Only the quantity takes a typed edit, and only from the keyboard: F2 or
     // Enter on the current cell. A second tap does not open an inline editor on
     // top of the dialog a double click opens, and a stray keypress can never
     // rewrite a price, which is a number the audit log ends up holding.
+    // The unit column is not a typed cell either but a dropdown widget sitting in
+    // it, which is why it needs no edit trigger and why no QTableWidgetItem backs
+    // it: a unit chosen from a list of two cannot be a typo.
     m_table->setEditTriggers(QAbstractItemView::EditKeyPressed);
     m_table->horizontalHeader()->setStretchLastSection(false);
     m_table->horizontalHeader()->setSectionResizeMode(NameColumn, QHeaderView::Stretch);
@@ -488,24 +495,119 @@ void PosPage::focusEntry()
     m_entry->selectAll();
 }
 
-std::optional<core::Product> PosPage::findProduct(const QString& text) const
+std::optional<core::Product> PosPage::findProduct(const QString& text, QString* unitKind) const
 {
     data::ProductRepository products(m_db);
+    // A carton code is the piece code plus 'c', so the suffix is the marker that
+    // says which side of the product this scan belongs to. Stripping it to look up
+    // the piece is the fallback for a shop that has not printed the carton label
+    // yet.
+    if (text.endsWith(QLatin1Char('c'))) {
+        // The carton label itself first, so a product whose carton code is not the
+        // piece code plus 'c' — a supplier who numbered them their own way — still
+        // scans.
+        if (const int packageId = productIdForPackageBarcode(text); packageId > 0) {
+            if (auto product = products.findById(packageId)) {
+                if (unitKind) {
+                    *unitKind = QStringLiteral("package");
+                }
+                return product;
+            }
+        }
+        // Then the piece code with the suffix taken off. This is what makes the
+        // convention worth having: one number on the shelf covers the piece, and
+        // the carton label is printed from the same number.
+        if (const auto byPieceBarcode = products.findByBarcode(text.chopped(1))) {
+            if (unitKind) {
+                *unitKind = QStringLiteral("package");
+            }
+            return byPieceBarcode;
+        }
+        // A code ending in 'c' that is no product's carton and no product's piece
+        // once the suffix is off is still possibly a product that does not exist
+        // yet. One last exact match before the new-product dialog: nothing stops a
+        // real piece barcode from ending in 'c', and refusing to sell a code that is
+        // already on a shelf would be a worse answer than the convention deserves.
+        if (const auto byExactBarcode = products.findByBarcode(text)) {
+            if (unitKind) {
+                *unitKind = QStringLiteral("piece");
+            }
+            return byExactBarcode;
+        }
+        return std::nullopt;
+    }
+
     if (const auto byBarcode = products.findByBarcode(text)) {
+        if (unitKind) {
+            *unitKind = QStringLiteral("piece");
+        }
         return byBarcode;
     }
     for (const core::Product& candidate : products.findAll()) {
         if (candidate.active && candidate.name == text) {
+            if (unitKind) {
+                *unitKind = QStringLiteral("piece");
+            }
             return candidate;
         }
     }
     return std::nullopt;
 }
 
-void PosPage::addProductToCart(const core::Product& product, long long quantity)
+int PosPage::productIdForPackageBarcode(const QString& barcode) const
+{
+    QSqlQuery query(m_db.handle());
+    if (!query.prepare(QStringLiteral("SELECT id FROM products WHERE package_barcode = ? LIMIT 1"))) {
+        return 0;
+    }
+    query.addBindValue(barcode);
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toInt();
+}
+
+bool PosPage::repriceLine(PosLine& line, QString* error) const
+{
+    // Priced by the same code that will price the recorded sale, so the figure on
+    // screen is the figure that gets written. Oversold is allowed here on purpose:
+    // this is a display price for a cart still being assembled, and refusing to
+    // show a line the cashier has not finished entering is not the sale's job.
+    // SaleService re-resolves the same line with oversold refused, and that flag
+    // reaches nothing but the stock check.
+    core::SaleItem item;
+    item.productId = line.productId;
+    item.quantity = line.quantity;
+    item.unitKind = line.unitKind;
+    item.unitPriceCents = 0;
+    data::ProductRepository products(m_db);
+    QString resolveError;
+    const QVector<core::SaleItem> resolved =
+        data::resolveSaleItems(products, {item}, /*allowOversold=*/true, &resolveError);
+    if (resolved.size() != 1) {
+        if (error) {
+            *error = resolveError.isEmpty() ? tr("Impossible de chiffrer « %1 »").arg(line.name)
+                                            : resolveError;
+        }
+        return false;
+    }
+    // The unit stays the one the caller asked for rather than the one that came
+    // back: resolveSaleItems fills in an empty unitKind, and a line whose dropdown
+    // says carton must stay a carton.
+    line.unitPriceCents = resolved.first().unitPriceCents;
+    line.piecesConsumed = resolved.first().piecesConsumed;
+    return true;
+}
+
+void PosPage::addProductToCart(const core::Product& product, long long quantity, const QString& unitKind)
 {
     for (PosLine& line : m_lines) {
-        if (line.productId == product.id) {
+        // Product AND unit. The same product twice is one line only when both are
+        // the same: a piece and a carton of one product are two lines, because a
+        // single quantity and a single price cannot mean both. Merging them would
+        // silently sell a carton at the price of a piece, or bill five pieces for
+        // the price of five cartons.
+        if (line.productId == product.id && line.unitKind == unitKind) {
             line.quantity += quantity;
             setNotice(tr("Ajouté : %1 × %2")
                           .arg(line.name, formatMoney(line.unitPriceCents)),
@@ -521,9 +623,18 @@ void PosPage::addProductToCart(const core::Product& product, long long quantity)
     line.barcode = product.barcode;
     line.name = product.name;
     line.unit = product.unit;
+    line.unitKind = unitKind;
+    line.packageName = product.packageName;
     line.quantity = quantity;
-    line.unitPriceCents = product.salePriceCents;
     line.basePriceCents = product.salePriceCents;
+    // The unit price of one piece or of one carton, resolved rather than read off
+    // the product: the carton price is the piece price times the count in the
+    // carton, and no arithmetic on that belongs in this file.
+    if (!repriceLine(line)) {
+        setNotice(tr("Impossible de chiffrer « %1 »").arg(product.name), false);
+        m_entry->setFocus();
+        return;
+    }
     m_lines.append(line);
     setNotice(tr("Ajouté : %1").arg(line.name), true);
     rebuildTable();
@@ -540,7 +651,10 @@ void PosPage::addEntry()
     // submitted again.
     m_entry->clear();
 
-    const std::optional<core::Product> product = findProduct(text);
+    // Which side of the product the code named: a scan ending in 'c' is a carton
+    // even when it matched on the piece barcode underneath.
+    QString unitKind = QStringLiteral("piece");
+    const std::optional<core::Product> product = findProduct(text, &unitKind);
     if (!product) {
         // A code nobody has registered yet is the normal first sale of a new
         // product, so the register offers to create it instead of complaining.
@@ -560,6 +674,16 @@ void PosPage::addEntry()
             m_entry->setFocus();
             return;
         }
+        // The dialog collects the opening count but the repository refuses to
+        // write product.quantity through save() -- INSERT hardcodes 0 -- because
+        // the shelf column is moved by the stock trigger, not by the product row.
+        // Writing the movement here is what makes the count land: without it every
+        // product created at the till opens with zero on the shelf and the cashier
+        // has to visit the products page before the first sale can go through.
+        if (created->quantity > 0) {
+            data::ProductRepository(m_db).adjustStock(id, created->quantity,
+                                                     QStringLiteral("opening"));
+        }
         // save() hands back the row id rather than filling it in, and the cart
         // matches lines by product id: without this every new product would
         // carry id 0 and the second one would land on the first one's line.
@@ -573,14 +697,14 @@ void PosPage::addEntry()
                                   tr("Ajouter « %1 » à la vente en cours ?").arg(label),
                                   QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
         if (answer == QMessageBox::Yes) {
-            addProductToCart(saved, 1);
+            addProductToCart(saved, 1, unitKind);
             return;
         }
         m_entry->setFocus();
         return;
     }
 
-    addProductToCart(*product, 1);
+    addProductToCart(*product, 1, unitKind);
     m_entry->setFocus();
 }
 
@@ -699,6 +823,66 @@ void PosPage::onCellDoubleClicked(int row, int column)
     }
 }
 
+void PosPage::onUnitKindChanged(int row, const QString& kind)
+{
+    // Past the last line sits the adjustment row, which has no unit and no dropdown.
+    if (m_updating || row < 0 || row >= m_lines.size()) {
+        return;
+    }
+    PosLine& line = m_lines[row];
+    if (kind == line.unitKind) {
+        return;
+    }
+
+    const QString previousKind = line.unitKind;
+    const long long previousPrice = line.unitPriceCents;
+    line.unitKind = kind;
+    // A manual price a cashier typed is discarded on purpose when the unit
+    // changes: a piece price is not a carton price, and keeping the figure would
+    // price a tray of twenty-four at the price of one. repriceLine() below asks
+    // resolveSaleItems for the price from zero rather than handing it the old
+    // figure, and this line says the same thing about the line itself, so a line
+    // being repriced is never holding a price from its previous unit even if that
+    // is the only part of the path that runs.
+    line.unitPriceCents = 0;
+    QString error;
+    if (!repriceLine(line, &error)) {
+        // The line goes back the way it was, dropdown included: a change that cannot
+        // be priced has not happened, and leaving the box on "carton" above a piece
+        // price would be the one combination the sale would refuse.
+        line.unitKind = previousKind;
+        line.unitPriceCents = previousPrice;
+        if (auto* combo = qobject_cast<QComboBox*>(m_table->cellWidget(row, UnitColumn))) {
+            const QSignalBlocker blocked(combo);
+            combo->setCurrentIndex(combo->findData(previousKind));
+        }
+        setNotice(error, false);
+        return;
+    }
+
+    // The base price moves with the unit too: a carton is not an overridden piece
+    // price, it is the price a carton costs. Only a figure the cashier typed is an
+    // override, and the audit log reads it off exactly this comparison.
+    line.basePriceCents = line.unitPriceCents;
+    refreshPriceCell(row);
+    refreshTotals();
+}
+
+void PosPage::refreshPriceCell(int row)
+{
+    if (row < 0 || row >= m_lines.size()) {
+        return;
+    }
+    QTableWidgetItem* priceItem = m_table->item(row, PriceColumn);
+    if (!priceItem) {
+        return;
+    }
+    const PosLine& line = m_lines[row];
+    priceItem->setText(formatMoney(line.unitPriceCents));
+    priceItem->setForeground(line.unitPriceCents != line.basePriceCents ? QBrush(Qt::red)
+                                                                        : QBrush());
+}
+
 void PosPage::onCellChanged(int row, int column)
 {
     if (m_updating || row < 0 || row >= m_lines.size()) {
@@ -792,10 +976,26 @@ void PosPage::rebuildTable()
         readOnly(barcodeItem);
         m_table->setItem(row, BarcodeColumn, barcodeItem);
 
-        auto* unitItem = new QTableWidgetItem(line.unit);
-        unitItem->setTextAlignment(Qt::AlignCenter);
-        readOnly(unitItem);
-        m_table->setItem(row, UnitColumn, unitItem);
+        // The unit is a dropdown rather than a cell of text: it is the one thing on
+        // a line that is chosen from a list rather than typed, because a unit typed
+        // as a free word is a unit that can be wrong. Two entries, so nothing can
+        // be a typo, and the carton is named the way this product names it — "باكت"
+        // on one shelf and "كرتونة" on the next, so a fixed label would read as a
+        // different product to the person using it.
+        auto* unitCombo = new QComboBox;
+        unitCombo->addItem(tr("قطعة"), QStringLiteral("piece"));
+        unitCombo->addItem(line.packageName.isEmpty() ? tr("كرتونة") : line.packageName,
+                           QStringLiteral("package"));
+        const int unitIndex = unitCombo->findData(line.unitKind);
+        // An unknown unit can only arrive from a caller that predates the field, and
+        // showing it as a piece is what it would be recorded as.
+        unitCombo->setCurrentIndex(unitIndex >= 0 ? unitIndex : 0);
+        connect(unitCombo, &QComboBox::currentIndexChanged, this, [this, row](int index) {
+            if (auto* combo = qobject_cast<QComboBox*>(sender())) {
+                onUnitKindChanged(row, combo->itemData(index).toString());
+            }
+        });
+        m_table->setCellWidget(row, UnitColumn, unitCombo);
 
         auto* qtyItem = new QTableWidgetItem(QString::number(line.quantity));
         qtyItem->setTextAlignment(Qt::AlignCenter);
@@ -815,7 +1015,8 @@ void PosPage::rebuildTable()
 
     // The adjustment, as a line of the invoice. It is a row rather than a line:
     // there is no product behind it and none is invented, so it carries no id, no
-    // barcode and no quantity, and nothing in this file turns it into a sale item.
+    // barcode, no quantity and no unit, and nothing in this file turns it into a
+    // sale item.
     // Its index is past the end of m_lines, which is what every edit path below
     // checks for, so a click lands on nothing rather than on the line above it.
     // It is only here when there is something to show: at zero the invoice has no
@@ -948,6 +1149,12 @@ void PosPage::completeSale()
         item.productId = line.productId;
         item.quantity = line.quantity;
         item.unitPriceCents = line.unitPriceCents;
+        // The unit the line was sold in, which is what turns this into a carton
+        // sale rather than a piece sale. SaleService resolves it against the
+        // product again, so the price and the piece count on the stored row are
+        // derived from this one string and from the same product row the screen
+        // read.
+        item.unitKind = line.unitKind;
         items.append(item);
 
         if (line.unitPriceCents != line.basePriceCents) {

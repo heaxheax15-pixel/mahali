@@ -27,9 +27,21 @@ struct PosLine {
     QString barcode;
     QString name;
     QString unit;
+    // Which side of the product this line is: "piece" or "package". This is the
+    // unit the whole sale chain agrees on, which is not the product's own display
+    // unit above — a carton of tea is still "علبة" on the product.
+    QString unitKind = QStringLiteral("piece");
+    // How the carton is called on this line's dropdown, cached when the line is
+    // built so that repainting the grid does not have to read the product back
+    // for a label.
+    QString packageName;
     long long quantity = 0;
     long long unitPriceCents = 0;
     long long basePriceCents = 0;
+    // What leaves the shelf, as resolveSaleItems counted it. Refreshed by
+    // repriceLine(). The recorded sale re-derives it from the unit, so this is the
+    // page's view of the line rather than the authority on it.
+    long long piecesConsumed = 0;
 };
 
 // Fast keyboard-driven register (نقطة بيع): scan a barcode and press Enter to
@@ -84,6 +96,7 @@ private slots:
     void onClearCart();
     void onCellChanged(int row, int column);
     void onCellDoubleClicked(int row, int column);
+    void onUnitKindChanged(int row, const QString& kind);
     void onQuickItemClicked(int productId);
     void onAddQuickProduct();
     void onAdjustmentChanged(const QString& text);
@@ -121,10 +134,29 @@ private:
     void refreshQuickItems();
     // Looks up by barcode first, then by exact name, since the entry field
     // advertises both. Returns nothing when neither matches.
-    std::optional<core::Product> findProduct(const QString& text) const;
+    //
+    // A scan ending in 'c' is a carton code and is looked up as one first; see
+    // the body for the full order. unitKind is set to the side of the product the
+    // scan belongs to, which is what the line it becomes is priced as.
+    std::optional<core::Product> findProduct(const QString& text, QString* unitKind = nullptr) const;
+    // The product whose package barcode is exactly this, by id only. Its own
+    // repository has no such lookup, and the page may not add one.
+    int productIdForPackageBarcode(const QString& barcode) const;
+    // Re-prices one line through the same rules the sale will be recorded under,
+    // and takes the resolved fields back onto it. False with error set when the
+    // money does not fit, leaving the line untouched for the caller to refuse.
+    bool repriceLine(PosLine& line, QString* error = nullptr) const;
     // Appends the product as a new line, or bumps the quantity of the line it
     // is already on. Assumes the caller has already cleared the entry field.
-    void addProductToCart(const core::Product& product, long long quantity);
+    //
+    // A line is identified by its product AND its unit: the same product sold as
+    // pieces and as a carton is two lines, because one number cannot be both.
+    void addProductToCart(const core::Product& product, long long quantity,
+                          const QString& unitKind = QStringLiteral("piece"));
+    // Repaints one line's price cell after repriceLine(), without rebuilding the
+    // table: the cell being edited is the one a rebuild would delete, and a combo
+    // deleting itself inside its own signal is not something to walk into.
+    void refreshPriceCell(int row);
 
     void setNotice(const QString& text, bool ok);
 
