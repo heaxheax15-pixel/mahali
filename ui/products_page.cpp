@@ -101,10 +101,20 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     m_add->setObjectName(QStringLiteral("primary"));
     m_add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
 
+    // Beside Ajouter rather than in the grid's context menu, because deleting is
+    // two clicks from anywhere in the list: pick the row, press this. It runs
+    // the same confirmProductRemoval() the product form's own delete button runs,
+    // so the two ways in cannot drift apart.
+    m_remove = new QPushButton(tr("حذف"));
+    m_remove->setObjectName(QStringLiteral("danger"));
+    m_remove->setIcon(appIcon(Icon::Trash, QColor(QStringLiteral("#ffffff")), 18));
+    m_remove->setVisible(false);
+
     auto* toolbar = new QHBoxLayout;
     toolbar->setSpacing(10);
     toolbar->addWidget(m_search, 1);
     toolbar->addLayout(chipRow);
+    toolbar->addWidget(m_remove);
     toolbar->addWidget(m_add);
 
     auto* toolbarCard = makeCard();
@@ -162,6 +172,8 @@ ProductsPage::ProductsPage(app::data::Database& db, QWidget* parent)
     connect(m_search, &QLineEdit::textChanged, this, &ProductsPage::onSearchChanged);
     connect(m_searchDebounce, &QTimer::timeout, this, &ProductsPage::refresh);
     connect(m_add, &QPushButton::clicked, this, &ProductsPage::onAddClicked);
+    connect(m_remove, &QPushButton::clicked, this, &ProductsPage::onRemoveClicked);
+    connect(m_table, &QTableWidget::itemSelectionChanged, this, &ProductsPage::onSelectionChanged);
     connect(m_table, &QTableWidget::itemChanged, this, &ProductsPage::onItemChanged);
     connect(m_table, &QTableWidget::cellDoubleClicked, this, &ProductsPage::onNameActivated);
     for (auto* chip : m_chips) {
@@ -306,6 +318,28 @@ void ProductsPage::onAddClicked()
     refresh();
 }
 
+void ProductsPage::onSelectionChanged()
+{
+    m_remove->setVisible(productIdAt(m_table->currentRow()) != 0);
+}
+
+void ProductsPage::onRemoveClicked()
+{
+    const int id = productIdAt(m_table->currentRow());
+    if (id == 0) {
+        return;
+    }
+    const std::optional<core::Product> existing = data::ProductRepository(m_db).findById(id);
+    if (!existing) {
+        return;
+    }
+    // The repository has written the outcome -- erased or deactivated -- so the
+    // grid is rebuilt either way; only the product's presence in it changes.
+    if (confirmProductRemoval(this, m_db, *existing)) {
+        refresh();
+    }
+}
+
 void ProductsPage::onNameActivated(int row, int column)
 {
     // Only the name opens the form. The price and quantity cells are editable,
@@ -323,6 +357,11 @@ void ProductsPage::onNameActivated(int row, int column)
     }
     const std::optional<core::Product> maybeProduct = showProductDialog(this, m_db, *existing);
     if (!maybeProduct) {
+        // Either the form was cancelled, or the product was erased or
+        // deactivated through its own delete button, which the repository has
+        // already written. Refreshing covers both; on a cancel it rebuilds the
+        // grid from a table nobody changed, so it looks the same as before.
+        refresh();
         return;
     }
     if (data::ProductRepository(m_db).save(*maybeProduct) == 0) {

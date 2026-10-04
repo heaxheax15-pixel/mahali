@@ -24,4 +24,19 @@ namespace app::ui {
 std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Database& db,
                                                const core::Product& initial = {});
 
+// How a product leaves the catalogue, asked and carried out in one place.
+//
+// A product nothing has ever been done to is erased, after a confirmation that
+// says the act cannot be undone. A product with a sale, a purchase or any other
+// document behind it cannot be erased without taking the meaning out of that
+// document, so it is deactivated instead -- the operator is told this in as many
+// words and asked to confirm, and the row stays where the reports can still read
+// it.
+//
+// Returns true when the product left the catalogue, erased or deactivated.
+// Returns false when the operator backed out, or the write failed and the
+// product is exactly as it was. The repository has done the writing by the time
+// this returns, so a caller that wants the grid repainted refreshes on true.
+bool confirmProductRemoval(QWidget* parent, app::data::Database& db, const core::Product& product);
+
 } // namespace app::ui

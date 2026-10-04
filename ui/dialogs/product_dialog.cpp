@@ -102,6 +102,49 @@ QFrame* buildNotice(QWidget* parent, QPushButton** fillOut)
 
 } // namespace
 
+bool confirmProductRemoval(QWidget* parent, app::data::Database& db, const core::Product& product)
+{
+    data::ProductRepository repo(db);
+
+    if (repo.canDeletePermanently(product.id)) {
+        const auto answer = QMessageBox::question(
+            parent, QCoreApplication::translate("ProductDialog", "تأكيد"),
+            QCoreApplication::translate("ProductDialog", "هل أنت متأكد؟ لا يمكن التراجع."),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            return false;
+        }
+        if (repo.removePermanently(product.id)) {
+            return true;
+        }
+        // The check said yes and the delete still refused, so the row is still
+        // there. The operator is told so rather than left believing it went.
+        QMessageBox::warning(parent, QCoreApplication::translate("ProductDialog", "خطأ"),
+                             QCoreApplication::translate("ProductDialog", "تعذر حذف المنتج"));
+        return false;
+    }
+
+    // Deactivate. setActive() writes the same column but fails silently, so
+    // save() is used instead: it reports a refused write by returning 0.
+    const auto answer = QMessageBox::question(
+        parent, QCoreApplication::translate("ProductDialog", "تأكيد"),
+        QCoreApplication::translate(
+            "ProductDialog",
+            "هذا المنتج له تاريخ (بيع أو شراء). لا يمكن حذفه نهائيًا. هل تريد تعطيله بدلًا من ذلك؟"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return false;
+    }
+    core::Product deactivated = product;
+    deactivated.active = false;
+    if (repo.save(deactivated) == 0) {
+        QMessageBox::warning(parent, QCoreApplication::translate("ProductDialog", "خطأ"),
+                             QCoreApplication::translate("ProductDialog", "تعذر تعطيل المنتج"));
+        return false;
+    }
+    return true;
+}
+
 std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Database& db,
                                                const core::Product& initial)
 {
@@ -151,6 +194,21 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     cancelBtn->setText(QStringLiteral("Annuler"));
     okBtn->setIcon(QIcon());
     cancelBtn->setIcon(QIcon());
+
+    // Delete sits in the form rather than only on the products page, so this is
+    // the one place that knows how a product leaves the catalogue, and the page
+    // button below reaches the same decision through the same function.
+    //
+    // Built for editing only. While adding there is no row behind the form, and
+    // the button would be acting on a product that does not exist.
+    auto* removeBtn = new QPushButton(QCoreApplication::translate("ProductDialog", "Supprimer"));
+    removeBtn->setObjectName(QStringLiteral("danger"));
+    removeBtn->setIcon(QIcon());
+    removeBtn->setAutoDefault(false);
+    removeBtn->setDefault(false);
+    if (!forNew) {
+        buttons->addButton(removeBtn, QDialogButtonBox::ActionRole);
+    }
     // A barcode scanner appends Enter to every scan, so no button may claim the
     // default action: Enter must walk the form instead of saving and closing.
     for (QAbstractButton* b : buttons->buttons()) {
@@ -275,6 +333,26 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
         dialog.accept();
     });
 
+    // Set when the product was erased or deactivated through the delete button,
+    // so the form below can tell that apart from a save the caller should make.
+    // Without it the dialog would hand back the product it was given and the
+    // caller would write it straight back: re-inserting a row just erased, or
+    // re-activating one just deactivated.
+    bool removedHere = false;
+    if (!forNew) {
+        QObject::connect(removeBtn, &QPushButton::clicked, &dialog, [&, initial, active]() mutable {
+            if (!confirmProductRemoval(&dialog, db, initial)) {
+                return;
+            }
+            removedHere = true;
+            // The repository has already written the outcome. Unchecking the box
+            // keeps what the form holds in step with what is stored, so a caller
+            // that saves on the way out cannot undo either result.
+            active->setChecked(false);
+            dialog.accept();
+        });
+    }
+
     QVBoxLayout* layout = new QVBoxLayout(&dialog);
     layout->addLayout(form);
     // Above the buttons, so the panel reads as belonging to the form it describes
@@ -285,6 +363,12 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
 
     constrainDialogToAvailableGeometry(&dialog);
     if (dialog.exec() != QDialog::Accepted) {
+        return std::nullopt;
+    }
+    // The product left the catalogue through the delete button and the repository
+    // has already written that. There is nothing for the caller to save: handing
+    // the product back would put the erased row into the table again.
+    if (removedHere) {
         return std::nullopt;
     }
 

@@ -33,6 +33,8 @@ private slots:
     void onSearchChanged();
     void onFilterChipClicked();
     void onAddClicked();
+    void onRemoveClicked();
+    void onSelectionChanged();
     void onItemChanged(QTableWidgetItem* item);
     void onNameActivated(int row, int column);
 
@@ -49,6 +51,10 @@ private:
     app::data::Database& m_db;
     QLineEdit* m_search;
     QPushButton* m_add;
+    // Hidden until a row is selected: with nothing selected there is no product
+    // for it to act on, and a button that can only report an error is worse than
+    // no button.
+    QPushButton* m_remove;
     QTableWidget* m_table;
     QLabel* m_footer;
     QTimer* m_searchDebounce;

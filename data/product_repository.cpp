@@ -39,6 +39,18 @@ const char* kProductColumns =
 
 const char* kQuickItemsFilter = "active = 1 AND (barcode IS NULL OR TRIM(barcode) = '')";
 
+// Every table holding a product line, and so every one whose rows a deleted
+// product would take the meaning of with it. supplier_return_items is here for
+// the same reason as the three beside it: it carries a FOREIGN KEY to
+// products(id) too, so a product that has only been returned to a supplier
+// would fail the DELETE at the driver with nothing the caller could act on.
+const char* const kProductReferenceTables[] = {
+    "sale_items",
+    "customer_transaction_items",
+    "purchase_items",
+    "supplier_return_items",
+};
+
 // Binds a barcode, sending "no barcode" as SQL NULL. The column is UNIQUE, and
 // UNIQUE treats every NULL as different from every other, so any number of
 // products can lack a barcode. Binding a blank string instead would allow exactly
@@ -260,6 +272,71 @@ void ProductRepository::setSoldByWeight(int productId, bool value)
         m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::setSoldByWeight"));
         return;
     }
+}
+
+bool ProductRepository::canDeletePermanently(int productId) const
+{
+    for (const char* table : kProductReferenceTables) {
+        QSqlQuery query(m_db.handle());
+        query.prepare(
+            QStringLiteral("SELECT 1 FROM %1 WHERE product_id = ? LIMIT 1").arg(QLatin1StringView(table)));
+        query.addBindValue(productId);
+        if (!query.exec()) {
+            m_db.recordError(query.lastError(), QStringLiteral("ProductRepository::canDeletePermanently"));
+            return false;
+        }
+        // One row is enough. Whether the product is on a document is a yes-or-no
+        // question, and counting the rest of them would walk a ledger for an
+        // answer already in hand.
+        if (query.next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ProductRepository::removePermanently(int productId) const
+{
+    if (!m_db.beginTransaction()) {
+        return false;
+    }
+
+    // Re-read rather than trusted: the caller asked a moment ago, and a document
+    // written since then would otherwise be left naming a row about to vanish.
+    // Reads on this connection, so they see the transaction just opened.
+    if (!canDeletePermanently(productId)) {
+        m_db.rollback();
+        return false;
+    }
+
+    // The movements first. They are the product's own count trail and go with it
+    // (canDeletePermanently does not count them), and products(id) is their
+    // foreign key, so this order is also the one the driver accepts.
+    QSqlQuery movements(m_db.handle());
+    movements.prepare(QStringLiteral("DELETE FROM stock_movements WHERE product_id = ?"));
+    movements.addBindValue(productId);
+    if (!movements.exec()) {
+        m_db.recordError(movements.lastError(), QStringLiteral("ProductRepository::removePermanently"));
+        m_db.rollback();
+        return false;
+    }
+
+    QSqlQuery row(m_db.handle());
+    row.prepare(QStringLiteral("DELETE FROM products WHERE id = ?"));
+    row.addBindValue(productId);
+    if (!row.exec()) {
+        m_db.recordError(row.lastError(), QStringLiteral("ProductRepository::removePermanently"));
+        m_db.rollback();
+        return false;
+    }
+    // A DELETE that matched nothing did not fail, so this is the only thing that
+    // tells "erased" from "there was no such product".
+    if (row.numRowsAffected() == 0) {
+        m_db.rollback();
+        return false;
+    }
+
+    return m_db.commit();
 }
 
 } // namespace app::data

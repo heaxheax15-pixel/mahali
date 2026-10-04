@@ -41,6 +41,32 @@ public:
     void setActive(int productId, bool active);
     void setSoldByWeight(int productId, bool value);
 
+    // Whether the row may be erased outright. A product that has stood on a
+    // document -- a sale line, a customer transaction line, a purchase line, a
+    // supplier return line -- must stay: those rows carry the quantities and the
+    // unit costs the reports, the stock figures and every past margin are read
+    // from, so removing the product would leave them describing a row that is no
+    // longer there. Such a product is deactivated instead, which takes it off
+    // the shelf and leaves every past figure exactly as it was.
+    //
+    // Stock movements are deliberately not counted here. A movement is a trail
+    // of the product's own count rather than a document somebody else reads, so
+    // it goes with the row -- see removePermanently().
+    //
+    // A table that cannot be read is reported as "not deletable" rather than as
+    // "no references": answering yes would hand the caller a delete that then
+    // fails, and keeping the product is the answer that loses nothing.
+    bool canDeletePermanently(int productId) const;
+
+    // Erases the row and its stock movements, or nothing at all.
+    //
+    // The reference count is re-read inside the transaction rather than trusted
+    // from the caller's earlier canDeletePermanently() call, so a document
+    // written in between cannot be orphaned by a row that then disappears.
+    // Returns false when references exist, when there is no such row, or when a
+    // statement fails -- in each case nothing is left behind.
+    bool removePermanently(int productId) const;
+
     // Moving average cost (PMP) after a purchase line:
     //   newCost = (oldQty * oldCost + addedQty * addedCost) / (oldQty + addedQty)
     // Whole cents only, no float. A stock level that would not move past zero

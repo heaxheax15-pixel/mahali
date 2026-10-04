@@ -78,6 +78,11 @@ private slots:
     void sold_by_weight_persists();
     void legacy_products_migration();
     void update_average_cost_from_zero();
+    void product_delete_allowed_when_unused();
+    void product_delete_blocked_after_sale();
+    void product_delete_allowed_after_stock_movement();
+    void product_delete_blocked_after_supplier_return();
+    void product_delete_reports_failure_on_a_missing_row();
     void stockInvariantIsDerived();
     void stock_movement_reference_roundtrip();
     void saleInsertAndItems();
@@ -662,6 +667,146 @@ void DataLayerTest::update_average_cost_from_zero()
     const auto fourth = products.findById(id);
     QVERIFY(fourth.has_value());
     QCOMPARE(fourth->costPriceCents, 4000LL);
+}
+
+// A product nothing has ever been done to is erasable. save() writes the row and
+// nothing else -- no movement, no document -- so this is the case the delete
+// exists for.
+void DataLayerTest::product_delete_allowed_when_unused()
+{
+    data::ProductRepository products(*m_db);
+
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000701");
+    product.name = QStringLiteral("ماء معدني");
+    product.salePriceCents = 1500;
+    const int id = products.save(product);
+    QVERIFY(id > 0);
+
+    QVERIFY(products.canDeletePermanently(id));
+    QVERIFY(products.removePermanently(id));
+    QVERIFY2(!products.findById(id).has_value(), "the row is gone, not deactivated");
+}
+
+// Once the product has been on a document, erasing it would take the meaning out
+// of that document's quantities and unit costs, so it stays and is deactivated
+// instead. The delete refuses rather than silently orphaning the sale line.
+void DataLayerTest::product_delete_blocked_after_sale()
+{
+    data::ProductRepository products(*m_db);
+    data::SaleRepository sales(*m_db);
+    data::SaleItemRepository items(*m_db);
+
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000702");
+    product.name = QStringLiteral("عصير");
+    product.salePriceCents = 2500;
+    const int id = products.save(product);
+    QVERIFY(id > 0);
+
+    core::Sale sale;
+    sale.totalCents = 2500;
+    sale.deviceId = QStringLiteral("PHONE_01");
+    const int saleId = sales.insert(sale);
+    QVERIFY(saleId > 0);
+
+    core::SaleItem item;
+    item.saleId = saleId;
+    item.productId = id;
+    item.quantity = 1;
+    item.unitPriceCents = 2500;
+    item.unitCostCents = 1800;
+    QVERIFY(items.insert(item) > 0);
+
+    QVERIFY2(!products.canDeletePermanently(id), "a sale line is a document behind the product");
+    QVERIFY2(!products.removePermanently(id), "the delete refuses where the check said no");
+    const auto still = products.findById(id);
+    QVERIFY2(still.has_value(), "the product is still there, to be deactivated instead");
+    QCOMPARE(still->salePriceCents, 2500LL);
+}
+
+// A stock movement is the product's own count trail rather than a document
+// somebody else reads, so it does not block: it goes with the row. Pinned here
+// because it is the one table canDeletePermanently() does not count, and a
+// movement is exactly what editing the quantity in the grid leaves behind.
+void DataLayerTest::product_delete_allowed_after_stock_movement()
+{
+    data::ProductRepository products(*m_db);
+    data::StockMovementRepository movements(*m_db);
+
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000703");
+    product.name = QStringLiteral("عسل");
+    product.salePriceCents = 4000;
+    const int id = products.save(product);
+    QVERIFY(id > 0);
+
+    core::StockMovement movement;
+    movement.productId = id;
+    movement.delta = 3;
+    movement.reason = QStringLiteral("manual_adjustment");
+    QVERIFY(movements.insert(movement) > 0);
+
+    QVERIFY2(products.canDeletePermanently(id), "a movement is a trail, not a document");
+    QVERIFY(products.removePermanently(id));
+    QVERIFY(!products.findById(id).has_value());
+
+    // The movement went with it: products(id) is the movements' foreign key, so
+    // leaving one behind would be a row pointing at nothing.
+    QVERIFY2(movements.findByProductId(id).empty(), "the movements are deleted with the product");
+}
+
+// supplier_return_items carries a foreign key to products(id) like the other
+// three, so a product that has only been returned to a supplier is behind a
+// document too. Left out of the check, the DELETE would fail at the driver and
+// the caller would be told nothing about why.
+void DataLayerTest::product_delete_blocked_after_supplier_return()
+{
+    data::ProductRepository products(*m_db);
+    data::SupplierRepository suppliers(*m_db);
+    data::SupplierReturnRepository returns(*m_db);
+    data::SupplierReturnItemRepository items(*m_db);
+
+    core::Supplier supplier;
+    supplier.name = QStringLiteral("موزع");
+    supplier.active = true;
+    const int supplierId = suppliers.save(supplier);
+    QVERIFY(supplierId > 0);
+
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000704");
+    product.name = QStringLiteral("معجون");
+    product.salePriceCents = 900;
+    const int id = products.save(product);
+    QVERIFY(id > 0);
+
+    core::SupplierReturn header;
+    header.supplierId = supplierId;
+    header.amountCents = 900;
+    header.returnedAt = QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
+    header.createdAt = header.returnedAt;
+    const int returnId = returns.insert(header);
+    QVERIFY(returnId > 0);
+
+    core::SupplierReturnItem item;
+    item.returnId = returnId;
+    item.productId = id;
+    item.quantity = 1;
+    item.unitPriceCents = 900;
+    item.totalCents = 900;
+    QVERIFY(items.insert(item) > 0);
+
+    QVERIFY(!products.canDeletePermanently(id));
+    QVERIFY(!products.removePermanently(id));
+    QVERIFY(products.findById(id).has_value());
+}
+
+// A DELETE that matches nothing does not fail, so "no such row" has to be told
+// apart from "erased" by hand. Without it a typo'd id would read as a success.
+void DataLayerTest::product_delete_reports_failure_on_a_missing_row()
+{
+    data::ProductRepository products(*m_db);
+    QVERIFY(!products.removePermanently(999999999));
 }
 
 void DataLayerTest::stock_movement_reference_roundtrip()
