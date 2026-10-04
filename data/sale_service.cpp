@@ -152,6 +152,15 @@ QString error;
         persisted.quantity = item.quantity;
         persisted.unitPriceCents = item.unitPriceCents;
         persisted.unitCostCents = item.unitCostCents;
+        // The two new fields are copied from the resolved item, which
+        // resolveSaleItems worked out from the product: unitKind says what was
+        // sold and piecesConsumed says how many pieces left the shelf. Deriving
+        // them here instead would let the stored row disagree with the stock
+        // movement and the COGS already written off the same resolved values --
+        // and a row that says 'piece' for a carton sale makes the reversal return
+        // the wrong number of pieces.
+        persisted.unitKind = item.unitKind;
+        persisted.piecesConsumed = item.piecesConsumed;
         if (m_customerTransactionItems.insert(persisted) == 0) {
             m_db.rollback();
             result.error = m_db.lastError();
@@ -286,6 +295,12 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
     }
 
     for (const core::SaleItem& item : resolved) {
+        // persisted is a full copy of the resolved item on purpose: unitKind and
+        // piecesConsumed were computed by resolveSaleItems from the product, and
+        // re-deriving them here would let the stored row disagree with the stock
+        // movement and the COGS that were already written off the same resolved
+        // values -- a row that says 'piece' for a carton sale makes the reversal
+        // return the wrong number of pieces.
         core::SaleItem persisted = item;
         persisted.saleId = saleId;
         if (m_saleItems.insert(persisted) == 0) {
@@ -413,12 +428,39 @@ SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
     }
 
     const auto originalItems = m_saleItems.findBySaleId(saleId);
+    // A primary line must record how many pieces it took off the shelf. A row with
+    // pieces_consumed == 0 is a pre-migration artefact (the backfill should have set
+    // it) or a row written by a caller that bypassed the service. Reversing it would
+    // add back pieces the sale never took -- refused rather than silently corrupting
+    // the shelf count, so the goods stay off the shelf and the refusal names the rows
+    // a developer has to repair.
+    for (const core::SaleItem& originalItem : originalItems) {
+        if (originalItem.piecesConsumed <= 0) {
+            m_db.rollback();
+            r.error = QStringLiteral("reverseSale: sale %1 item %2 records no pieces consumed, "
+                                     "so there is no count to return to the shelf")
+                         .arg(saleId)
+                         .arg(originalItem.id);
+            return r;
+        }
+    }
+
     for (const core::SaleItem& originalItem : originalItems) {
         core::SaleItem reversalItem = originalItem;
         reversalItem.id = 0;
         reversalItem.saleId = reversalId;
         reversalItem.quantity = -originalItem.quantity;
         reversalItem.reversedId = originalItem.id;
+        // Both new columns are mirrored from the original rather than recomputed,
+        // and pieces_consumed is mirrored WITHOUT a sign flip while quantity above
+        // takes one. A reversal of a carton line removes the same number of pieces
+        // it added, and the row says how many pieces that is; the sign lives on
+        // quantity and on the money columns, because a count of pieces is a
+        // quantity of goods and not an amount of anything. Negating it would make
+        // the reversal claim it returned pieces it never touched, and the stock
+        // movement below would put back the wrong number of them.
+        reversalItem.unitKind = originalItem.unitKind;
+        reversalItem.piecesConsumed = originalItem.piecesConsumed;
         if (m_saleItems.insert(reversalItem) == 0) {
             m_db.rollback();
             r.error = m_db.lastError().isEmpty()
@@ -429,7 +471,9 @@ SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
 
         core::StockMovement movement;
         movement.productId = originalItem.productId;
-        movement.delta = originalItem.quantity;
+        // Pieces, to put back exactly what insertSaleStockMovements took off. The
+        // two agree on a piece sale; on a carton sale only pieces_consumed is right.
+        movement.delta = originalItem.piecesConsumed;
         movement.reason = QStringLiteral("sale_reversal");
         movement.createdAt = QDateTime::currentDateTime();
         if (m_stockMovements.insert(movement) == 0) {
@@ -537,12 +581,35 @@ SaleReverseResult SaleService::reverseCustomerDebt(int transactionId)
     // its own items so the negative quantity and the negative total can never
     // drift apart.
     const auto originalItems = m_customerTransactionItems.findByTransactionId(transactionId);
+    // A primary line must record how many pieces it took off the shelf. A row with
+    // pieces_consumed == 0 is a pre-migration artefact (the backfill should have set
+    // it) or a row written by a caller that bypassed the service. Reversing it would
+    // add back pieces the sale never took -- refused rather than silently corrupting
+    // the shelf count, so the goods stay off the shelf and the refusal names the rows
+    // a developer has to repair.
+    for (const core::CustomerTransactionItem& originalItem : originalItems) {
+        if (originalItem.piecesConsumed <= 0) {
+            m_db.rollback();
+            r.error = QStringLiteral("reverseCustomerDebt: transaction %1 item %2 records no pieces "
+                                     "consumed, so there is no count to return to the shelf")
+                         .arg(transactionId)
+                         .arg(originalItem.id);
+            return r;
+        }
+    }
+
     for (const core::CustomerTransactionItem& originalItem : originalItems) {
         core::CustomerTransactionItem reversalItem = originalItem;
         reversalItem.id = 0;
         reversalItem.customerTransactionId = reversalId;
         reversalItem.quantity = -originalItem.quantity;
         reversalItem.reversedId = originalItem.id;
+        // Mirrored from the original, and pieces_consumed without a sign flip for
+        // the reason given in reverseSale: a cancellation puts back the same number
+        // of pieces the sale took, and the count is a quantity of goods rather than
+        // an amount, so the sign stays on quantity and on the money columns.
+        reversalItem.unitKind = originalItem.unitKind;
+        reversalItem.piecesConsumed = originalItem.piecesConsumed;
         if (m_customerTransactionItems.insert(reversalItem) == 0) {
             m_db.rollback();
             r.error = m_db.lastError().isEmpty()
@@ -553,7 +620,9 @@ SaleReverseResult SaleService::reverseCustomerDebt(int transactionId)
 
         core::StockMovement movement;
         movement.productId = originalItem.productId;
-        movement.delta = originalItem.quantity;
+        // Pieces, to put back what the sale on account took off: goods left the
+        // shelf when they were handed over, whether or not money came with them.
+        movement.delta = originalItem.piecesConsumed;
         movement.reason = QStringLiteral("customer_debt_reversal");
         movement.createdAt = QDateTime::currentDateTime();
         if (m_stockMovements.insert(movement) == 0) {

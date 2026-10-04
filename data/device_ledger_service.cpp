@@ -288,6 +288,11 @@ DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVe
         persisted.quantity = item.quantity;
         persisted.unitPriceCents = item.unitPriceCents;
         persisted.unitCostCents = item.unitCostCents;
+        // Copied through from resolved, like every other field -- dropping these two
+        // writes pieces_consumed = 0, and the server would then refuse to reverse a
+        // device-booked credit sale (sale_service's reversal guard).
+        persisted.unitKind = item.unitKind;
+        persisted.piecesConsumed = item.piecesConsumed;
         if (m_customerTransactionItems.insert(persisted) == 0) {
             m_db.rollback();
             result.error = m_db.lastError();
