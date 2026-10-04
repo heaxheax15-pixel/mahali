@@ -4,3 +4,7 @@ build-*/
 *.suo
 .cache/
 compile_commands.json
+
+# Build artifacts produced by ctest and the compiler
+build.log
+Testing/

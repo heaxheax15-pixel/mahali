@@ -345,7 +345,7 @@ La vente reste visible avec un montant négatif et les produits retournent en st
 <context>
     <name>ProductDialog</name>
     <message>
-        <location filename="../ui/dialogs/product_dialog.cpp" line="+63"/>
+        <location filename="../ui/dialogs/product_dialog.cpp" line="+64"/>
         <source>⚠️  Produit existant sans nom</source>
         <translation>⚠️  Produit existant sans nom</translation>
     </message>
@@ -396,7 +396,29 @@ La vente reste visible avec un montant négatif et les produits retournent en st
         <translation>Modifier le produit</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+23"/>
+        <location line="+5"/>
+        <location line="+153"/>
+        <source>كرتونة</source>
+        <translation>Carton</translation>
+    </message>
+    <message>
+        <location line="-157"/>
+        <source>غاجو</source>
+        <translation>Cageot</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>بالة</source>
+        <translation>Balle</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>كوربيّة</source>
+        <translation>Corbeille</translation>
+    </message>
+    <message>
+        <location line="+21"/>
         <source>الباركود</source>
         <translation>Code-barres</translation>
     </message>
@@ -417,21 +439,21 @@ La vente reste visible avec un montant négatif et les produits retournent en st
     </message>
     <message>
         <location line="+1"/>
+        <source>الكمية الافتتاحية</source>
+        <translation>Quantité d'ouverture</translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>الوحدة</source>
         <translation>Unité</translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>المحتوى (عدد وحدات الوجبة)</source>
-        <translation>Contenu (nombre d&apos;unités par colis)</translation>
-    </message>
-    <message>
-        <location line="+1"/>
+        <location line="+3"/>
         <source>مُفعّل</source>
         <translation>Actif</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+27"/>
         <source>Supprimer</source>
         <translation>Supprimer</translation>
     </message>
@@ -447,15 +469,30 @@ Prix revient : %3
 Stock : %4</translation>
     </message>
     <message>
-        <location line="-146"/>
+        <location line="-178"/>
         <location line="+19"/>
-        <location line="+167"/>
+        <location line="+204"/>
         <location line="+19"/>
         <source>خطأ</source>
         <translation>Erreur</translation>
     </message>
     <message>
-        <location line="-19"/>
+        <location line="-157"/>
+        <source>عدد الحبات في العلبة</source>
+        <translation>Nombre de pièces par conditionnement</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>اسم العلبة</source>
+        <translation>Nom de l'emballage</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>الكمية الافتتاحية تُسجَّل مرة واحدة عند إنشاء المنتج. لتعديل المخزون لاحقاً، استخدم صفحة المخزون.</source>
+        <translation>La quantité d'ouverture est saisie une seule fois, à la création du produit. Pour modifier le stock ensuite, utilisez la page Stock.</translation>
+    </message>
+    <message>
+        <location line="+129"/>
         <source>سعر البيع مطلوب ويجب أن يكون أكبر من صفر</source>
         <translation>Le prix de vente est requis et doit être supérieur à zéro</translation>
     </message>
@@ -1986,46 +2023,46 @@ Stock : %4</translation>
 <context>
     <name>app::ui::PosPage</name>
     <message>
-        <location filename="../ui/pos_page.cpp" line="+53"/>
+        <location filename="../ui/pos_page.cpp" line="+57"/>
         <source>Code-barres ou nom du produit</source>
         <translation>Code-barres ou nom du produit</translation>
     </message>
     <message>
         <location line="+56"/>
-        <location line="+59"/>
+        <location line="+62"/>
         <source>Produit</source>
         <translation>Produit</translation>
     </message>
     <message>
-        <location line="-59"/>
-        <location line="+59"/>
+        <location line="-62"/>
+        <location line="+62"/>
         <source>Qté</source>
         <translation>Qté</translation>
     </message>
     <message>
-        <location line="-59"/>
+        <location line="-62"/>
         <source>Code-barres</source>
         <translation>Code-barres</translation>
     </message>
     <message>
         <location line="+0"/>
-        <source>Unité</source>
-        <translation>Unité</translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <location line="+59"/>
+        <location line="+62"/>
         <source>Prix</source>
         <translation>Prix</translation>
     </message>
     <message>
-        <location line="-26"/>
-        <location line="+621"/>
+        <location line="-62"/>
+        <source>الوحدة</source>
+        <translation>Unité</translation>
+    </message>
+    <message>
+        <location line="+36"/>
+        <location line="+798"/>
         <source>Scannez un produit ou choisissez-en un dans la liste</source>
         <translation>Scannez un produit ou choisissez-en un dans la liste</translation>
     </message>
     <message>
-        <location line="-595"/>
+        <location line="-772"/>
         <location line="+29"/>
         <source>Total</source>
         <translation>Total</translation>
@@ -2054,12 +2091,12 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+37"/>
-        <location line="+611"/>
+        <location line="+805"/>
         <source>Ajustement</source>
         <translation>Ajustement</translation>
     </message>
     <message>
-        <location line="-606"/>
+        <location line="-800"/>
         <source>Somme à ajouter (+) ou à retirer (-) sur la facture entière</source>
         <translation>Somme à ajouter (+) ou à retirer (-) sur la facture entière</translation>
     </message>
@@ -2071,24 +2108,30 @@ Stock : %4</translation>
     <message>
         <location line="+4"/>
         <location line="+1"/>
-        <location line="+510"/>
-        <location line="+139"/>
+        <location line="+687"/>
+        <location line="+156"/>
         <source>Valider la vente (Entrée)</source>
         <translation>Valider la vente (Entrée)</translation>
     </message>
     <message>
-        <location line="-393"/>
+        <location line="-515"/>
+        <location line="+45"/>
+        <source>Impossible de chiffrer « %1 »</source>
+        <translation>Impossible de chiffrer « %1 »</translation>
+    </message>
+    <message>
+        <location line="-22"/>
         <source>Ajouté : %1 × %2</source>
         <translation>Ajouté : %1 × %2</translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+27"/>
         <source>Ajouté : %1</source>
         <translation>Ajouté : %1</translation>
     </message>
     <message>
-        <location line="+31"/>
-        <location line="+41"/>
+        <location line="+34"/>
+        <location line="+51"/>
         <source>Impossible d&apos;enregistrer le produit.</source>
         <translation>Impossible d&apos;enregistrer le produit.</translation>
     </message>
@@ -2123,7 +2166,7 @@ Stock : %4</translation>
         <translation>Prix unitaire</translation>
     </message>
     <message>
-        <location line="+71"/>
+        <location line="+131"/>
         <source>Payé : %1</source>
         <translation>Payé : %1</translation>
     </message>
@@ -2133,7 +2176,17 @@ Stock : %4</translation>
         <translation>Reste : %1</translation>
     </message>
     <message>
-        <location line="+129"/>
+        <location line="+42"/>
+        <source>قطعة</source>
+        <translation>Pièce</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>كرتونة</source>
+        <translation>Carton</translation>
+    </message>
+    <message>
+        <location line="+103"/>
         <source>À CRÉDIT : %1 · Solde : %2</source>
         <translation>À CRÉDIT : %1 · Solde : %2</translation>
     </message>
@@ -2143,12 +2196,12 @@ Stock : %4</translation>
         <translation>Enregistrer à crédit (Entrée)</translation>
     </message>
     <message>
-        <location line="-135"/>
+        <location line="-152"/>
         <source>Articles: %1 | Unités: %2</source>
         <translation>Articles: %1 | Unités: %2</translation>
     </message>
     <message>
-        <location line="+158"/>
+        <location line="+175"/>
         <source>الكمية أو السعر غير صالح في أحد الأسطر</source>
         <translation>Quantité ou prix invalide dans l&apos;une des lignes</translation>
     </message>
@@ -2163,7 +2216,7 @@ Stock : %4</translation>
         <translation>Aucune session ouverte — ouvrez d&apos;abord une session dans la section « Session de caisse »</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+43"/>
         <source>تعذر تسجيل الدين: %1</source>
         <translation>Impossible d&apos;enregistrer la dette : %1</translation>
     </message>
@@ -2266,20 +2319,20 @@ Stock : %4</translation>
         <translation>Total : %1 produits · %2 actifs · %3 stock bas</translation>
     </message>
     <message>
-        <location line="+62"/>
-        <location line="+55"/>
+        <location line="+63"/>
+        <location line="+66"/>
         <location line="+100"/>
         <location line="+8"/>
         <source>Erreur</source>
         <translation>Erreur</translation>
     </message>
     <message>
-        <location line="-162"/>
+        <location line="-173"/>
         <source>Impossible d&apos;enregistrer le produit — code-barres déjà utilisé ou données incomplètes</source>
         <translation>Impossible d&apos;enregistrer le produit — code-barres déjà utilisé ou données incomplètes</translation>
     </message>
     <message>
-        <location line="+55"/>
+        <location line="+66"/>
         <source>Impossible d&apos;enregistrer la modification — code-barres déjà utilisé</source>
         <translation>Impossible d&apos;enregistrer la modification — code-barres déjà utilisé</translation>
     </message>
@@ -3225,6 +3278,7 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+34"/>
+        <location filename="../apps/screenshot/main.cpp" line="+15"/>
         <source>محلي — خطأ</source>
         <translation>Mahali — erreur</translation>
     </message>

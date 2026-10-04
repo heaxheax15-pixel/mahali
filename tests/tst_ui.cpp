@@ -2,6 +2,7 @@
 
 #include <QDate>
 #include <QSignalSpy>
+#include <QSpinBox>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -20,6 +21,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QListWidget>
+#include <QMessageBox>
 #include "ui/login_dialog.h"
 #include "ui/users_page.h"
 
@@ -89,12 +91,19 @@ private slots:
     void flexibleAmountParsing();
     void posSaleWithPriceOverride();
     void pos_cart_grid_is_the_wide_table_and_the_narrow_one_is_empty();
+    void pos_line_defaults_to_piece_unit();
+    void pos_unit_switch_reprices_line();
+    void pos_scanned_package_barcode_adds_carton_line();
+    void pos_piece_and_carton_stay_two_rows();
+    void pos_new_product_from_scan_records_opening_stock();
+    void products_page_new_product_records_opening_stock();
     void posSaleRequiresOpenSession();
     void cashSessionLifecycle();
     void cash_session_rejects_invalid_amount();
     void salesPageShowsToday();
     void profit_cents_survives_translation();
     void barcode_dialog_does_not_close();
+    void product_dialog_writes_package_fields_from_the_shared_widget();
     void quick_items_bar_lists_products();
     void customerCreditAndPayment();
     void expensesAndDrawings();
@@ -118,6 +127,11 @@ private:
     void seedSyncDatabase(const QString& path, int* productId, int* sessionId);
     void seedMasterData(const QString& path);
     int seedProduct(const QString& path, int* sessionId, long long salePriceCents);
+    // The widget the form row with this label holds, visible or not -- so a field
+    // that has been hidden can be told from one that is missing. The product dialog
+    // labels its rows in Arabic and sets no object names on them, which is why the
+    // label text is the only handle on a field.
+    static QWidget* fieldLabelled(QDialog* modal, const QString& label);
 
     QTemporaryDir m_dir;
     QByteArray m_key;
@@ -349,6 +363,27 @@ int UiTest::seedProduct(const QString& path, int* sessionId, long long salePrice
     return productId;
 }
 
+QWidget* UiTest::fieldLabelled(QDialog* modal, const QString& label)
+{
+    QFormLayout* form = nullptr;
+    for (QFormLayout* l : modal->findChildren<QFormLayout*>()) {
+        form = l;
+        break;
+    }
+    if (!form) {
+        return nullptr;
+    }
+    for (int row = 0; row < form->rowCount(); ++row) {
+        QLayoutItem* labelItem = form->itemAt(row, QFormLayout::LabelRole);
+        QLayoutItem* fieldItem = form->itemAt(row, QFormLayout::FieldRole);
+        auto* labelWidget = qobject_cast<QLabel*>(labelItem ? labelItem->widget() : nullptr);
+        if (labelWidget && labelWidget->text() == label) {
+            return fieldItem ? fieldItem->widget() : nullptr;
+        }
+    }
+    return nullptr;
+}
+
 void UiTest::flexibleAmountParsing()
 {
     QCOMPARE(ui::parseMoney(QStringLiteral("12")).value_or(-1), 1200LL);
@@ -450,7 +485,7 @@ void UiTest::pos_cart_grid_is_the_wide_table_and_the_narrow_one_is_empty()
     QCOMPARE(grid->rowCount(), 0);
     QCOMPARE(grid->horizontalHeaderItem(0)->text(), QStringLiteral("Produit"));
     QCOMPARE(grid->horizontalHeaderItem(1)->text(), QStringLiteral("Code-barres"));
-    QCOMPARE(grid->horizontalHeaderItem(2)->text(), QStringLiteral("Unité"));
+    QCOMPARE(grid->horizontalHeaderItem(2)->text(), QStringLiteral("الوحدة"));
     QCOMPARE(grid->horizontalHeaderItem(3)->text(), QStringLiteral("Qté"));
     QCOMPARE(grid->horizontalHeaderItem(4)->text(), QStringLiteral("Prix"));
 
@@ -472,7 +507,12 @@ void UiTest::pos_cart_grid_is_the_wide_table_and_the_narrow_one_is_empty()
     QCOMPARE(grid->rowCount(), 1);
     QCOMPARE(grid->item(0, 0)->text(), QStringLiteral("شاي أخضر"));
     QCOMPARE(grid->item(0, 1)->text(), QStringLiteral("10001"));
-    QCOMPARE(grid->item(0, 2)->text(), QStringLiteral("علبة"));
+    // The unit is no longer a cell of text: it is a dropdown, because it is the
+    // one thing on a line that is picked from a list instead of typed. A product
+    // scanned by its plain barcode starts as a piece.
+    auto* unitBox = qobject_cast<QComboBox*>(grid->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    QCOMPARE(unitBox->currentData().toString(), QStringLiteral("piece"));
     QCOMPARE(grid->item(0, 3)->text(), QStringLiteral("1"));
     QCOMPARE(grid->item(0, 4)->text(), ui::formatMoney(350));
 
@@ -493,6 +533,482 @@ void UiTest::pos_cart_grid_is_the_wide_table_and_the_narrow_one_is_empty()
     QVERIFY(QMetaObject::invokeMethod(&page, "onCellChanged", Q_ARG(int, 0), Q_ARG(int, 3)));
     QCOMPARE(page.lineQuantityAt(0), 3LL);
     QCOMPARE(grid->item(0, 3)->text(), QStringLiteral("3"));
+}
+
+void UiTest::pos_line_defaults_to_piece_unit()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-unit-piece.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    QVERIFY(sessions.open(5000) > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("20001");
+    product.name = QStringLiteral("ماء");
+    product.unit = QStringLiteral("قنينة");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    // save() hands back the row id rather than filling it in, so the stock has to
+    // be credited through that id and not through product.id, which is still 0.
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("20001"));
+    page.addEntry();
+
+    // Scanned by its plain code, so it is a piece, and the dropdown says so.
+    QCOMPARE(page.lineCount(), 1);
+    auto* unitBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    QCOMPARE(unitBox->currentData().toString(), QStringLiteral("piece"));
+    QCOMPARE(page.linePriceAt(0), 60LL);
+
+    page.completeSale();
+    QVERIFY(page.lastSaleId() != 0);
+
+    // And it is recorded as a piece: a piece line consumes its quantity in pieces
+    // and stores the word the dropdown showed.
+    QSqlQuery query(db.handle());
+    QVERIFY(query.prepare(QStringLiteral("SELECT unit_kind, pieces_consumed FROM sale_items")));
+    QVERIFY(query.exec());
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toString(), QStringLiteral("piece"));
+    QCOMPARE(query.value(1).toLongLong(), 1LL);
+}
+
+void UiTest::pos_unit_switch_reprices_line()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-unit-switch.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    QVERIFY(sessions.open(5000) > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("20002");
+    product.name = QStringLiteral("شاي");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    // save() hands back the row id rather than filling it in, so the stock has to
+    // be credited through that id and not through product.id, which is still 0.
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("20002"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 1);
+    QCOMPARE(page.linePriceAt(0), 60LL);
+    QCOMPARE(page.totalCents(), 60LL);
+
+    // The cashier turns the line into a carton. 60 x 24 is the price of one
+    // carton, and the quantity does not move: one carton is one carton, not
+    // twenty-four.
+    auto* unitBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    unitBox->setCurrentIndex(unitBox->findData(QStringLiteral("package")));
+    QCOMPARE(page.lineQuantityAt(0), 1LL);
+    QCOMPARE(page.linePriceAt(0), 1440LL);
+    QCOMPARE(page.totalCents(), 1440LL);
+
+    page.completeSale();
+    QVERIFY(page.lastSaleId() != 0);
+
+    QSqlQuery query(db.handle());
+    QVERIFY(query.prepare(QStringLiteral("SELECT unit_kind, pieces_consumed, unit_price_cents "
+                                        "FROM sale_items")));
+    QVERIFY(query.exec());
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toString(), QStringLiteral("package"));
+    QCOMPARE(query.value(1).toLongLong(), 24LL);
+    QCOMPARE(query.value(2).toLongLong(), 1440LL);
+}
+
+void UiTest::pos_scanned_package_barcode_adds_carton_line()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-scan-carton.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("1234567890123");
+    product.packageBarcode = QStringLiteral("1234567890123c");
+    product.name = QStringLiteral("زيت");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    // save() hands back the row id rather than filling it in, so the stock has to
+    // be credited through that id and not through product.id, which is still 0.
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("1234567890123c"));
+    page.addEntry();
+
+    // The 'c' is the marker that says this scan means a carton, so the line comes
+    // in already priced as one: 60 x 24.
+    QCOMPARE(page.lineCount(), 1);
+    auto* unitBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    QCOMPARE(unitBox->currentData().toString(), QStringLiteral("package"));
+    QCOMPARE(page.linePriceAt(0), 1440LL);
+
+    // The other half of the convention: a shop that has not printed the carton
+    // label yet. This product has a piece barcode and no carton barcode at all, so
+    // the only way the scan can mean a carton is that the suffix is taken off and
+    // the piece code underneath is looked up.
+    core::Product unlabelled;
+    unlabelled.barcode = QStringLiteral("5550001112223");
+    unlabelled.packageBarcode = QString();
+    unlabelled.name = QStringLiteral("سكر");
+    unlabelled.salePriceCents = 100;
+    unlabelled.costPriceCents = 90;
+    unlabelled.piecesPerPackage = 10;
+    QVERIFY(products.save(unlabelled) > 0);
+
+    ui::PosPage second(db);
+    second.setEntryText(QStringLiteral("5550001112223c"));
+    second.addEntry();
+
+    QCOMPARE(second.lineCount(), 1);
+    QCOMPARE(qobject_cast<QComboBox*>(second.table()->cellWidget(0, 2))->currentData().toString(),
+             QStringLiteral("package"));
+    QCOMPARE(second.linePriceAt(0), 1000LL);
+    QCOMPARE(second.table()->item(0, 1)->text(), QStringLiteral("5550001112223"));
+}
+
+void UiTest::pos_piece_and_carton_stay_two_rows()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-two-rows.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("1234567890123");
+    product.packageBarcode = QStringLiteral("1234567890123c");
+    product.name = QStringLiteral("زيت");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    // save() hands back the row id rather than filling it in, so the stock has to
+    // be credited through that id and not through product.id, which is still 0.
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("1234567890123"));
+    page.addEntry();
+    page.setEntryText(QStringLiteral("1234567890123c"));
+    page.addEntry();
+
+    // Two scans of one product are two lines, because a piece and a carton of the
+    // same product have one number each and the two numbers are not the same.
+    // Merged, the cart would hold one line at one price for both.
+    QCOMPARE(page.lineCount(), 2);
+    QCOMPARE(qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2))->currentData().toString(),
+             QStringLiteral("piece"));
+    QCOMPARE(qobject_cast<QComboBox*>(page.table()->cellWidget(1, 2))->currentData().toString(),
+             QStringLiteral("package"));
+    QCOMPARE(page.linePriceAt(0), 60LL);
+    QCOMPARE(page.linePriceAt(1), 1440LL);
+    QCOMPARE(page.totalCents(), 1500LL);
+}
+
+// Covers the products-page add path, not the till: the same opening-count
+// field exists on both, and the fix in Phase 5 wired both to write a
+// movement. One path tested is half the fix.
+void UiTest::products_page_new_product_records_opening_stock()
+{
+    const QString path = m_dir.filePath(QStringLiteral("products-page-opening.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    app::ui::ProductsPage page(db);
+    page.refresh();
+
+    QPushButton* addBtn = nullptr;
+    for (QPushButton* b : page.findChildren<QPushButton*>()) {
+        if (b->objectName() == QStringLiteral("primary")) {
+            addBtn = b;
+            break;
+        }
+    }
+    QVERIFY2(addBtn, "could not find the add-product button");
+
+    bool typedOk = false;
+    bool watchdogFired = false;
+
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        auto* barcodeField =
+            qobject_cast<QLineEdit*>(fieldLabelled(modal, QStringLiteral("الباركود")));
+        auto* nameField =
+            qobject_cast<QLineEdit*>(fieldLabelled(modal, QStringLiteral("الاسم")));
+        auto* saleField =
+            qobject_cast<QLineEdit*>(fieldLabelled(modal, QStringLiteral("سعر البيع")));
+        auto* openingBox =
+            qobject_cast<QSpinBox*>(fieldLabelled(modal, QStringLiteral("الكمية الافتتاحية")));
+        if (!barcodeField || !nameField || !saleField || !openingBox) {
+            return;
+        }
+        barcodeField->setText(QStringLiteral("7778889990001"));
+        nameField->setText(QStringLiteral("منتج الصفحة"));
+        saleField->setText(QStringLiteral("150"));
+        openingBox->setValue(30);
+        typedOk = true;
+        if (auto* box = modal->findChild<QDialogButtonBox*>()) {
+            if (QPushButton* ok = box->button(QDialogButtonBox::Ok)) {
+                ok->click();
+            }
+        }
+    });
+
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, [&]() {
+        watchdogFired = true;
+        if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            modal->reject();
+        }
+    });
+    watchdog.start(3000);
+
+    addBtn->click();
+
+    QVERIFY2(!watchdogFired, "the product dialog had to be closed by the watchdog");
+    QVERIFY2(typedOk, "the product dialog was missing one of the fields the test fills");
+
+    const auto saved =
+        data::ProductRepository(db).findByBarcode(QStringLiteral("7778889990001"));
+    QVERIFY2(saved.has_value(), "the product the dialog accepted was not saved");
+    const int productId = saved->id;
+    QVERIFY(productId > 0);
+
+    // One movement, and it says where the first thirty came from. The column on the
+    // product row agreeing with it is the trigger's doing, not this path's.
+    QSqlQuery movements(db.handle());
+    QVERIFY(movements.prepare(QStringLiteral(
+        "SELECT delta, reason FROM stock_movements WHERE product_id = ?")));
+    movements.addBindValue(productId);
+    QVERIFY(movements.exec());
+    int movementCount = 0;
+    while (movements.next()) {
+        ++movementCount;
+        QCOMPARE(movements.value(0).toLongLong(), 30LL);
+        QCOMPARE(movements.value(1).toString(), QStringLiteral("opening"));
+    }
+    QCOMPARE(movementCount, 1);
+
+    QSqlQuery stored(db.handle());
+    QVERIFY(stored.prepare(QStringLiteral("SELECT quantity FROM products WHERE id = ?")));
+    stored.addBindValue(productId);
+    QVERIFY(stored.exec());
+    QVERIFY(stored.next());
+    QCOMPARE(stored.value(0).toLongLong(), 30LL);
+}
+
+void UiTest::pos_new_product_from_scan_records_opening_stock()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-opening-stock.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    ui::PosPage page(db);
+
+    // Two modals come up in sequence inside one addEntry() call: the product form,
+    // then the "Ajouter à la vente ?" question. A timer that looks at whatever is
+    // on top and deals with each in turn, because one singleShot(0) would fire
+    // against the first and be gone before the second ever existed.
+    int phase = 0;
+    bool openingFieldSeen = false;
+    bool openingFieldVisible = false;
+    bool answeredQuestion = false;
+    bool watchdogFired = false;
+
+    QTimer driver;
+    driver.setInterval(10);
+    QObject::connect(&driver, &QTimer::timeout, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        if (phase == 0) {
+            auto* opening = fieldLabelled(modal, QStringLiteral("الكمية الافتتاحية"));
+            if (!opening) {
+                return;
+            }
+            openingFieldSeen = true;
+            openingFieldVisible = opening->isVisible();
+            auto* openingBox = qobject_cast<QSpinBox*>(opening);
+            if (!openingBox) {
+                return;
+            }
+            auto* barcodeField = qobject_cast<QLineEdit*>(
+                fieldLabelled(modal, QStringLiteral("الباركود")));
+            auto* nameField =
+                qobject_cast<QLineEdit*>(fieldLabelled(modal, QStringLiteral("الاسم")));
+            auto* saleField =
+                qobject_cast<QLineEdit*>(fieldLabelled(modal, QStringLiteral("سعر البيع")));
+            if (!barcodeField || !nameField || !saleField) {
+                return;
+            }
+            barcodeField->setText(QStringLiteral("9990001112223"));
+            nameField->setText(QStringLiteral("منتج"));
+            saleField->setText(QStringLiteral("100"));
+            openingBox->setValue(20);
+            if (auto* box = modal->findChild<QDialogButtonBox*>()) {
+                if (QPushButton* ok = box->button(QDialogButtonBox::Ok)) {
+                    ok->click();
+                }
+            }
+            phase = 1;
+            return;
+        }
+        // QMessageBox::question() is itself the modal, and findChild() never returns the
+        // widget it is called on, so the cast on the modal has to come first.
+        auto* box = qobject_cast<QMessageBox*>(modal);
+        if (!box) {
+            box = modal->findChild<QMessageBox*>();
+        }
+        if (box) {
+            if (QAbstractButton* yes = box->button(QMessageBox::Yes)) {
+                yes->click();
+            }
+            answeredQuestion = true;
+            phase = 2;
+            driver.stop();
+        }
+    });
+
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, [&]() {
+        watchdogFired = true;
+        if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            modal->reject();
+        }
+    });
+    watchdog.start(4000);
+    driver.start();
+
+    page.setEntryText(QStringLiteral("9990001112223"));
+    page.addEntry();
+    driver.stop();
+
+    QVERIFY2(!watchdogFired, "a modal was still open when the test gave up");
+    QVERIFY2(openingFieldSeen, "the new-product form had no opening-stock field");
+    // Asked on the way in only: this is the form for a product that does not exist
+    // yet, so the count has to be on it.
+    QVERIFY2(openingFieldVisible, "the opening-stock field was hidden on a new product");
+    QVERIFY2(answeredQuestion, "the 'add to this sale?' question was never answered");
+
+    // The scan added its line, so the product really was created through the till.
+    QCOMPARE(page.lineCount(), 1);
+    QCOMPARE(page.table()->item(0, 0)->text(), QStringLiteral("منتج"));
+    QCOMPARE(page.table()->item(0, 1)->text(), QStringLiteral("9990001112223"));
+
+    const int productId = page.table()->item(0, 0)->data(Qt::UserRole).toInt();
+    QVERIFY(productId > 0);
+
+    // The count landed as a movement and not as a bare column write: this is the
+    // ledger row that says where the first twenty pieces came from, and it is what
+    // the stock page and the reports read.
+    QSqlQuery movements(db.handle());
+    QVERIFY(movements.prepare(QStringLiteral(
+        "SELECT delta, reason FROM stock_movements WHERE product_id = ?")));
+    movements.addBindValue(productId);
+    QVERIFY(movements.exec());
+    int movementCount = 0;
+    while (movements.next()) {
+        ++movementCount;
+        QCOMPARE(movements.value(0).toLongLong(), 20LL);
+        QCOMPARE(movements.value(1).toString(), QStringLiteral("opening"));
+    }
+    QCOMPARE(movementCount, 1);
+
+    // And the shelf agrees with the movement, which it only can because the trigger
+    // moved it.
+    QSqlQuery stored(db.handle());
+    QVERIFY(stored.prepare(QStringLiteral("SELECT quantity FROM products WHERE id = ?")));
+    stored.addBindValue(productId);
+    QVERIFY(stored.exec());
+    QVERIFY(stored.next());
+    QCOMPARE(stored.value(0).toLongLong(), 20LL);
+
+    // ---- The same product, opened for editing. ----
+    // An opening count is a fact about the first day, so the form must not offer it
+    // again, and saving the form untouched must not write a second movement: that
+    // would be the shelf gaining twenty pieces nobody bought.
+    app::ui::ProductsPage catalogue(db);
+    catalogue.refresh();
+
+    bool editFieldSeen = false;
+    bool editFieldVisible = true;
+    bool editSaved = false;
+    watchdog.start(4000);
+    driver.start();
+    QObject::connect(&driver, &QTimer::timeout, [&]() {
+        if (phase != 3) {
+            return;
+        }
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        if (auto* opening = fieldLabelled(modal, QStringLiteral("الكمية الافتتاحية"))) {
+            editFieldSeen = true;
+            editFieldVisible = opening->isVisible();
+            if (auto* box = modal->findChild<QDialogButtonBox*>()) {
+                if (QPushButton* ok = box->button(QDialogButtonBox::Ok)) {
+                    ok->click();
+                }
+            }
+            editSaved = true;
+            driver.stop();
+        }
+    });
+
+    // The name column is the only one that opens the form, and the one product in
+    // the catalogue is on the first row.
+    phase = 3;
+    QVERIFY(QMetaObject::invokeMethod(&catalogue, "onNameActivated", Q_ARG(int, 0),
+                                      Q_ARG(int, 1)));
+    driver.stop();
+
+    QVERIFY2(!watchdogFired, "the edit form was still open when the test gave up");
+    QVERIFY2(editFieldSeen, "the edit form had no opening-stock row to hide");
+    QVERIFY2(!editFieldVisible, "the opening-stock field was offered on an existing product");
+    QVERIFY(editSaved);
+
+    QSqlQuery again(db.handle());
+    QVERIFY(again.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM stock_movements WHERE product_id = ? AND reason = 'opening'")));
+    again.addBindValue(productId);
+    QVERIFY(again.exec());
+    QVERIFY(again.next());
+    QCOMPARE(again.value(0).toInt(), 1);
+
+    QVERIFY(stored.prepare(QStringLiteral("SELECT quantity FROM products WHERE id = ?")));
+    stored.addBindValue(productId);
+    QVERIFY(stored.exec());
+    QVERIFY(stored.next());
+    QCOMPARE(stored.value(0).toLongLong(), 20LL);
 }
 
 void UiTest::posSaleRequiresOpenSession()
@@ -796,6 +1312,126 @@ void UiTest::barcode_dialog_does_not_close()
     QVERIFY2(barcodeHeldScan, "the barcode field lost the scanned digits");
     QVERIFY2(stillOpen, "Enter from the barcode scanner closed the product dialog");
     QVERIFY2(focusMovedToName, "Enter did not move focus from the barcode to the name field");
+}
+
+// The carton fields are written from the one spinbox, so the two columns that hold
+// the figure cannot drift apart: a product saved with one of them at 1 and the other
+// at 24 would have the stock arithmetic believing the shelf holds a single piece.
+// This drives the real form the way barcode_dialog_does_not_close does, through the
+// add button and the modal it opens.
+void UiTest::product_dialog_writes_package_fields_from_the_shared_widget()
+{
+    const QString path = m_dir.filePath(QStringLiteral("product-dialog-package.sqlite"));
+    data::Database db(path);
+
+    app::ui::ProductsPage page(db);
+    page.refresh();
+
+    QPushButton* addBtn = nullptr;
+    for (QPushButton* b : page.findChildren<QPushButton*>()) {
+        if (b->objectName() == QStringLiteral("primary")) {
+            addBtn = b;
+            break;
+        }
+    }
+    QVERIFY2(addBtn, "could not find the add-product button");
+
+    bool modalOpened = false;
+    bool typedOk = false;
+    bool watchdogFired = false;
+
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        modalOpened = true;
+
+        QFormLayout* form = nullptr;
+        for (QFormLayout* l : modal->findChildren<QFormLayout*>()) {
+            form = l;
+            break;
+        }
+        if (!form) {
+            return;
+        }
+
+        // One walk for every field: the labels are Arabic and the dialog sets no
+        // object names on them, so the label text is what identifies a row.
+        QLineEdit* barcodeField = nullptr;
+        QLineEdit* nameField = nullptr;
+        QLineEdit* saleField = nullptr;
+        QSpinBox* piecesField = nullptr;
+        QComboBox* packageNameField = nullptr;
+        for (int row = 0; row < form->rowCount(); ++row) {
+            QLayoutItem* labelItem = form->itemAt(row, QFormLayout::LabelRole);
+            QLayoutItem* fieldItem = form->itemAt(row, QFormLayout::FieldRole);
+            auto* label = qobject_cast<QLabel*>(labelItem ? labelItem->widget() : nullptr);
+            if (!label) {
+                continue;
+            }
+            QWidget* field = fieldItem ? fieldItem->widget() : nullptr;
+            const QString text = label->text();
+            if (text == QStringLiteral("الباركود")) {
+                barcodeField = qobject_cast<QLineEdit*>(field);
+            } else if (text == QStringLiteral("الاسم")) {
+                nameField = qobject_cast<QLineEdit*>(field);
+            } else if (text == QStringLiteral("سعر البيع")) {
+                saleField = qobject_cast<QLineEdit*>(field);
+            } else if (text == QStringLiteral("عدد الحبات في العلبة")) {
+                piecesField = qobject_cast<QSpinBox*>(field);
+            } else if (text == QStringLiteral("اسم العلبة")) {
+                packageNameField = qobject_cast<QComboBox*>(field);
+            }
+        }
+        if (!barcodeField || !nameField || !saleField || !piecesField || !packageNameField) {
+            return;
+        }
+
+        barcodeField->setText(QStringLiteral("1234567890123"));
+        nameField->setText(QStringLiteral("بسكويت"));
+        saleField->setText(QStringLiteral("60"));
+        piecesField->setValue(24);
+        // Left at whatever the form opened on: the combo is seeded from the
+        // product, which for a new one is the default word for a carton.
+        const QString chosenName = packageNameField->currentText();
+        typedOk = (chosenName == QStringLiteral("كرتونة"));
+
+        auto* box = modal->findChild<QDialogButtonBox*>();
+        if (box) {
+            if (QPushButton* ok = box->button(QDialogButtonBox::Ok)) {
+                ok->click();
+            }
+        }
+    });
+
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, [&]() {
+        watchdogFired = true;
+        if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            modal->reject();
+        }
+    });
+    watchdog.start(3000);
+
+    addBtn->click();
+
+    QVERIFY2(!watchdogFired, "the product dialog had to be closed by the watchdog");
+    QVERIFY2(modalOpened, "the add-product button did not open the product dialog");
+    QVERIFY2(typedOk, "the carton-name combo did not open on the default word");
+
+    const auto saved = data::ProductRepository(db).findByBarcode(QStringLiteral("1234567890123"));
+    QVERIFY2(saved.has_value(), "the product the dialog accepted was not saved");
+
+    // Both columns carry the one figure the spinbox held. They are written from the
+    // same widget on purpose, so a mismatch here would mean the form had grown a
+    // second source for the number.
+    QCOMPARE(saved->piecesPerPackage, 24);
+    QCOMPARE(saved->packageSize, 24);
+    QCOMPARE(saved->packageName, QStringLiteral("كرتونة"));
+    // Computed rather than typed: the carton's code is the piece's plus a marker.
+    QCOMPARE(saved->packageBarcode, QStringLiteral("1234567890123c"));
 }
 
 void UiTest::quick_items_bar_lists_products()

@@ -70,6 +70,7 @@ private slots:
     void schemaContainsAllTables();
     void productSaveAndFind();
     void product_visibility_filter();
+    void product_repository_round_trips_package_fields();
     void quick_items_roundtrip();
     void two_products_without_barcode();
     void barcode_with_value_still_unique();
@@ -91,12 +92,15 @@ private slots:
     void customer_debt_with_adjustment();
     void sale_without_adjustment_unchanged();
     void adjustment_migration_adds_the_column_to_a_legacy_ledger();
+    void product_packages_migration_adds_columns_to_a_legacy_ledger();
+    void migration_14_backfills_pieces_per_package_from_package_size();
     void customer_balance_uses_opening_and_transactions();
     void reverse_customer_debt_offsets_the_ledger_and_returns_stock();
     void reverse_customer_debt_touches_no_cash();
     void reverse_customer_debt_refuses_a_second_reversal();
     void reverse_customer_debt_refuses_a_payment_row();
     void reverse_customer_debt_refuses_a_missing_sale();
+    void reverse_refuses_a_line_with_pieces_consumed_zero();
     void unique_indexes_reject_a_second_reversal();
     void unique_indexes_never_reject_an_ordinary_row();
     void audit_row_is_written_by_the_service_not_the_caller();
@@ -147,6 +151,9 @@ private slots:
     void refund_customer_payment_refuses_a_second_refund();
     void reverseSale_refuses_double_reversal();
     void overflow_guard();
+    void resolve_sale_items_marks_package_line_and_prices_it();
+    void record_sale_of_a_package_line_stores_resolved_fields();
+    void cogs_negation_refuses_llong_min_instead_of_wrapping();
     void overflow_guard_cogs();
     void cogs_guard_allows_negative_quantity();
     void supplier_new_fields_roundtrip();
@@ -232,6 +239,128 @@ void DataLayerTest::productSaveAndFind()
     QCOMPARE(found->quantity, 0LL);
 
     QVERIFY(!repo.findByBarcode(QStringLiteral("9999999999999")).has_value());
+}
+
+// The packaging columns have to survive a save and come back unchanged, and the
+// two rules save() enforces on them -- the carton is never empty, never smaller
+// than one piece -- have to hold for a caller that never sets them.
+void DataLayerTest::product_repository_round_trips_package_fields()
+{
+    data::ProductRepository repo(*m_db);
+
+    // A full carton, with its own barcode and its own cost. package_cost_cents is
+    // 140000 rather than a clean division of the piece price on purpose: the point
+    // of keeping it is that it is what the supplier invoiced and is not reworked
+    // into a piece price, so a test that divided would not catch it doing so.
+    core::Product cartoned;
+    cartoned.barcode = QStringLiteral("1234567890123");
+    cartoned.name = QStringLiteral("بسكويت");
+    cartoned.salePriceCents = 6000;
+    cartoned.costPriceCents = 4000;
+    cartoned.quantity = 0;
+    cartoned.packageName = QStringLiteral("كرتونة");
+    cartoned.piecesPerPackage = 24;
+    cartoned.packageBarcode = QStringLiteral("1234567890123c");
+    cartoned.packageCostCents = 140000;
+    const int id = repo.save(cartoned);
+    QVERIFY(id > 0);
+
+    const auto found = repo.findById(id);
+    QVERIFY(found.has_value());
+    QCOMPARE(found->barcode, QStringLiteral("1234567890123"));
+    QCOMPARE(found->name, QStringLiteral("بسكويت"));
+    QCOMPARE(found->salePriceCents, 6000LL);
+    QCOMPARE(found->costPriceCents, 4000LL);
+    QCOMPARE(found->packageName, QStringLiteral("كرتونة"));
+    QCOMPARE(found->piecesPerPackage, 24);
+    QCOMPARE(found->packageBarcode, QStringLiteral("1234567890123c"));
+    QCOMPARE(found->packageCostCents, 140000LL);
+
+    // An UPDATE goes through the same four columns, so the carton a product was
+    // saved with is still there after the product is edited.
+    core::Product edited = *found;
+    edited.salePriceCents = 6500;
+    QVERIFY(repo.save(edited) == id);
+    const auto reread = repo.findById(id);
+    QVERIFY(reread.has_value());
+    QCOMPARE(reread->salePriceCents, 6500LL);
+    QCOMPARE(reread->piecesPerPackage, 24);
+    QCOMPARE(reread->packageCostCents, 140000LL);
+
+    // A carton cannot hold zero pieces: the figure comes back as 1 because that is
+    // the smallest count of anything, and a 0 left to stand here would be divided
+    // into a carton price further down.
+    core::Product floored;
+    floored.barcode = QStringLiteral("1234567890124");
+    floored.name = QStringLiteral("زيت");
+    floored.piecesPerPackage = 0;
+    const int floorId = repo.save(floored);
+    QVERIFY(floorId > 0);
+    const auto flooredBack = repo.findById(floorId);
+    QVERIFY(flooredBack.has_value());
+    QCOMPARE(flooredBack->piecesPerPackage, 1);
+
+    // The same floor holds on the way through an edit, not only on the way in.
+    core::Product refloored = *flooredBack;
+    refloored.piecesPerPackage = -5;
+    QVERIFY(repo.save(refloored) == floorId);
+    const auto reflooredBack = repo.findById(floorId);
+    QVERIFY(reflooredBack.has_value());
+    QCOMPARE(reflooredBack->piecesPerPackage, 1);
+
+    // A blank carton name is not stored blank. save() writes the column on every
+    // call, so the column's own DEFAULT would never get the chance, and a product
+    // with no name for its carton at all is not a state the form can produce.
+    core::Product unnamed;
+    unnamed.barcode = QStringLiteral("1234567890125");
+    unnamed.name = QStringLiteral("سكر");
+    unnamed.packageName = QStringLiteral("");
+    const int unnamedId = repo.save(unnamed);
+    QVERIFY(unnamedId > 0);
+    const auto unnamedBack = repo.findById(unnamedId);
+    QVERIFY(unnamedBack.has_value());
+    QCOMPARE(unnamedBack->packageName, QStringLiteral("كرتونة"));
+
+    // The barcode of a carton that has none is stored as SQL NULL, and reads back
+    // as the empty string -- how products.barcode already behaves. Only the C++
+    // value is promised here: whether the column holds NULL or '' is the storage
+    // detail the loader is there to hide.
+    core::Product noCartonBarcode;
+    noCartonBarcode.barcode = QStringLiteral("1234567890126");
+    noCartonBarcode.name = QStringLiteral("ملح");
+    noCartonBarcode.packageBarcode = QStringLiteral("");
+    const int noBarcodeId = repo.save(noCartonBarcode);
+    QVERIFY(noBarcodeId > 0);
+    const auto noBarcodeBack = repo.findById(noBarcodeId);
+    QVERIFY(noBarcodeBack.has_value());
+    QCOMPARE(noBarcodeBack->packageBarcode, QStringLiteral(""));
+
+    // Whitespace is blank too, the same rule barcodeVariant() applies to a product
+    // barcode. A stray space would otherwise be a barcode no scanner would ever read.
+    core::Product spacedBarcode = *noBarcodeBack;
+    spacedBarcode.packageBarcode = QStringLiteral("   ");
+    QVERIFY(repo.save(spacedBarcode) == noBarcodeId);
+    const auto spacedBack = repo.findById(noBarcodeId);
+    QVERIFY(spacedBack.has_value());
+    QCOMPARE(spacedBack->packageBarcode, QStringLiteral(""));
+
+    // The legacy path: a product saved with nothing but a barcode, a name and a
+    // price, which is what every caller wrote before the packaging columns existed.
+    // The struct's own defaults are what reach the database, so it must come back
+    // saying what a product with no carton on it says.
+    core::Product legacy;
+    legacy.barcode = QStringLiteral("1234567890127");
+    legacy.name = QStringLiteral("أرز");
+    legacy.salePriceCents = 3000;
+    legacy.costPriceCents = 2500;
+    const int legacyId = repo.save(legacy);
+    QVERIFY(legacyId > 0);
+    const auto legacyBack = repo.findById(legacyId);
+    QVERIFY(legacyBack.has_value());
+    QCOMPARE(legacyBack->piecesPerPackage, 1);
+    QCOMPARE(legacyBack->packageName, QStringLiteral("كرتونة"));
+    QCOMPARE(legacyBack->packageCostCents, 0LL);
+    QCOMPARE(legacyBack->packageBarcode, QStringLiteral(""));
 }
 
 // An import from another till leaves rows whose name is not a name at all --
@@ -1140,11 +1269,281 @@ void DataLayerTest::adjustment_migration_adds_the_column_to_a_legacy_ledger()
 }
 
 
+// Cartons on a ledger that has never heard of them: the five tables as they were
+// before the packaging work, each holding a row whose quantity was a count of
+// pieces.
+void DataLayerTest::product_packages_migration_adds_columns_to_a_legacy_ledger()
+{
+    const QString path = m_dir.filePath(QStringLiteral("product_packages_migration.sqlite"));
+    QFile::remove(path);
+    const QString connectionName = QStringLiteral("product_packages_migration_test");
+    {
+        QSqlDatabase legacyDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacyDb.setDatabaseName(path);
+        QVERIFY(legacyDb.open());
+        QSqlQuery legacy(legacyDb);
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE products (id INTEGER PRIMARY KEY, barcode TEXT UNIQUE, "
+            "name TEXT NOT NULL, cost_price_cents INTEGER NOT NULL DEFAULT 0, "
+            "sale_price_cents INTEGER NOT NULL DEFAULT 0, quantity INTEGER NOT NULL DEFAULT 0, "
+            "unit TEXT NOT NULL DEFAULT '', package_size INTEGER NOT NULL DEFAULT 1, "
+            "active INTEGER NOT NULL DEFAULT 1, sold_by_weight INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE sales (id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, "
+            "total_cents INTEGER NOT NULL, adjustment_cents INTEGER NOT NULL DEFAULT 0, "
+            "device_id TEXT NOT NULL, oversold INTEGER NOT NULL DEFAULT 0, "
+            "reversed_sale_id INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE sale_items (id INTEGER PRIMARY KEY, sale_id INTEGER NOT NULL, "
+            "product_id INTEGER NOT NULL, quantity INTEGER NOT NULL, "
+            "unit_price_cents INTEGER NOT NULL, unit_cost_cents INTEGER NOT NULL, "
+            "reversed_id INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE customer_transactions (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, "
+            "amount_cents INTEGER NOT NULL, created_at TEXT NOT NULL, "
+            "reversed_transaction_id INTEGER NOT NULL DEFAULT 0, "
+            "adjustment_cents INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE customer_transaction_items (id INTEGER PRIMARY KEY, "
+            "customer_transaction_id INTEGER NOT NULL, product_id INTEGER NOT NULL, "
+            "quantity INTEGER NOT NULL, unit_price_cents INTEGER NOT NULL, "
+            "unit_cost_cents INTEGER NOT NULL, reversed_id INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE purchases (id INTEGER PRIMARY KEY, supplier_id INTEGER NOT NULL, "
+            "created_at TEXT NOT NULL, total_cents INTEGER NOT NULL, method TEXT NOT NULL DEFAULT 'cash', "
+            "initial_payment_cents INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE purchase_items (id INTEGER PRIMARY KEY, purchase_id INTEGER NOT NULL, "
+            "product_id INTEGER, description TEXT NOT NULL DEFAULT '', quantity INTEGER NOT NULL, "
+            "unit TEXT NOT NULL DEFAULT 'piece', unit_price_cents INTEGER NOT NULL, "
+            "total_cents INTEGER NOT NULL, reversed_id INTEGER NOT NULL DEFAULT 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE supplier_returns (id INTEGER PRIMARY KEY, supplier_id INTEGER NOT NULL, "
+            "created_at TEXT NOT NULL, total_cents INTEGER NOT NULL)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE supplier_return_items (id INTEGER PRIMARY KEY, return_id INTEGER NOT NULL, "
+            "product_id INTEGER, quantity INTEGER NOT NULL, unit_price_cents INTEGER NOT NULL, "
+            "total_cents INTEGER NOT NULL)")));
+
+        // One row each, on the tables that have to read back as more than zero
+        // pieces. The quantities are deliberately unlike each other so a backfill
+        // that copied the wrong table's figure could not pass by accident.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO products VALUES (1, '6221001', 'Cola', 750, 1000, 24, 'piece', 12, 1, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO sales VALUES (1, '2026-10-01T00:00:00.000', 5000, 0, 'dev', 0, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO sale_items VALUES (1, 1, 1, 5, 1000, 750, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO customer_transactions VALUES (1, 1, 3000, '2026-10-01T00:00:00.000', 0, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO customer_transaction_items VALUES (1, 1, 1, 3, 1000, 750, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO purchases VALUES (1, 1, '2026-10-01T00:00:00.000', 4500, 'cash', 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO purchase_items VALUES (1, 1, 1, 'Cola', 24, 'piece', 750, 18000, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO supplier_returns VALUES (1, 1, '2026-10-01T00:00:00.000', 1500)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO supplier_return_items VALUES (1, 1, 1, 2, 750, 1500)")));
+
+        // One below this build, so exactly the packaging migration is pending.
+        QVERIFY(legacy.exec(QStringLiteral("PRAGMA user_version = 12")));
+        legacyDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    {
+        QSqlDatabase migratedDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        migratedDb.setDatabaseName(path);
+        QVERIFY(migratedDb.open());
+        data::runSchemaMigrations(migratedDb);
+        // Run twice: SQLite has no ADD COLUMN IF NOT EXISTS, so a migration that
+        // did not look before it altered would fail on every open after the first.
+        data::runSchemaMigrations(migratedDb);
+
+        // Every column the packaging work promised, on every table that promised it.
+        const QHash<QString, QStringList> expected = {
+            {QStringLiteral("products"),
+             {QStringLiteral("package_name"), QStringLiteral("pieces_per_package"),
+              QStringLiteral("package_barcode"), QStringLiteral("package_cost_cents")}},
+            {QStringLiteral("sale_items"),
+             {QStringLiteral("unit_kind"), QStringLiteral("pieces_consumed")}},
+            {QStringLiteral("customer_transaction_items"),
+             {QStringLiteral("unit_kind"), QStringLiteral("pieces_consumed")}},
+            {QStringLiteral("purchase_items"),
+             {QStringLiteral("unit_kind"), QStringLiteral("pieces_received")}},
+            {QStringLiteral("supplier_return_items"),
+             {QStringLiteral("unit_kind"), QStringLiteral("pieces_consumed")}},
+        };
+        for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
+            QSqlQuery columns(migratedDb);
+            QVERIFY(columns.exec(QStringLiteral("PRAGMA table_info(%1)").arg(it.key())));
+            QStringList found;
+            while (columns.next()) {
+                found << columns.value(1).toString();
+            }
+            for (const QString& column : it.value()) {
+                QVERIFY2(found.contains(column),
+                         qPrintable(QStringLiteral("no %1 on %2").arg(column, it.key())));
+            }
+        }
+
+        // The product row kept everything it had, and migration 14 copies the old
+        // package_size figure into pieces_per_package, because leaving it at 1 would
+        // have recorded a tray of twelve as a single piece and the first carton sale
+        // would have emptied one piece off a shelf holding twelve. The old
+        // expectation of 1 was correct only before migration 14 existed; it recorded
+        // the gap this migration closes.
+        QSqlQuery product(migratedDb);
+        QVERIFY(product.exec(QStringLiteral(
+            "SELECT name, package_size, pieces_per_package, package_name, package_barcode, "
+            "package_cost_cents FROM products WHERE id = 1")));
+        QVERIFY(product.next());
+        QCOMPARE(product.value(0).toString(), QStringLiteral("Cola"));
+        QCOMPARE(product.value(1).toInt(), 12);
+        QCOMPARE(product.value(2).toInt(), 12);
+        QCOMPARE(product.value(3).toString(), QString::fromUtf8("كرتونة"));
+        QVERIFY(product.value(4).isNull());
+        QCOMPARE(product.value(5).toLongLong(), 0LL);
+
+        // The backfill is the whole point of these columns. A row that predates them
+        // reads 0 pieces, and 0 is a figure the stock arithmetic believes: a sale
+        // of 5 would empty nothing on the next count and then some. Each row gets
+        // its own quantity back, and each says 'piece', which is the truth about
+        // every row that existed before cartons could be sold.
+        struct Backfilled {
+            QString table;
+            QString column;
+            long long quantity;
+            long long pieces;
+        };
+        for (const Backfilled& row : {
+                 Backfilled{QStringLiteral("sale_items"), QStringLiteral("pieces_consumed"), 5, 5},
+                 Backfilled{QStringLiteral("customer_transaction_items"),
+                            QStringLiteral("pieces_consumed"), 3, 3},
+                 Backfilled{QStringLiteral("purchase_items"), QStringLiteral("pieces_received"), 24, 24},
+                 Backfilled{QStringLiteral("supplier_return_items"),
+                            QStringLiteral("pieces_consumed"), 2, 2},
+             }) {
+            QSqlQuery line(migratedDb);
+            QVERIFY(line.exec(QStringLiteral("SELECT %1, %2 FROM %3 WHERE id = 1")
+                                  .arg(row.column, row.column, row.table)));
+            QVERIFY(line.next());
+            QCOMPARE(line.value(0).toLongLong(), row.quantity);
+            QCOMPARE(line.value(1).toLongLong(), row.pieces);
+
+            QSqlQuery unit(migratedDb);
+            QVERIFY(unit.exec(QStringLiteral("SELECT unit_kind FROM %1 WHERE id = 1").arg(row.table)));
+            QVERIFY(unit.next());
+            QCOMPARE(unit.value(0).toString(), QStringLiteral("piece"));
+        }
+
+        // A second run of a migration that reads before it writes leaves the
+        // backfilled figures alone: they are no longer zero, so they are no longer
+        // rewritten, and the rows above would read as zeroes if the guard were not
+        // there.
+        // Pinned to the literal rather than to kSchemaVersion, which would make the
+        // assertion true whatever the stamp was and stop it testing anything.
+        QCOMPARE(data::readSchemaVersion(migratedDb), 14);
+        migratedDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+}
+
+// Migration 13 gave products a carton size that started at 1 and never copied the
+// tray figure a shop had already typed into package_size. So a product the shop
+// had described as a dozen read back as holding one piece, and the first carton
+// sold from it would have taken a single piece off the shelf and left eleven
+// behind. Migration 14 copies the old figure across.
+//
+// The three rows below are the three cases that have to be told apart: the tray
+// figure with nothing in the new column, a product that is one piece either way
+// and must not be written at all, and a product whose new column has been set by
+// hand to something the old column disagrees with, which is the shop's answer and
+// not an oversight.
+void DataLayerTest::migration_14_backfills_pieces_per_package_from_package_size()
+{
+    const QString path = m_dir.filePath(QStringLiteral("backfill_pieces_per_package.sqlite"));
+    QFile::remove(path);
+    const QString connectionName = QStringLiteral("backfill_pieces_per_package_test");
+    {
+        QSqlDatabase legacyDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacyDb.setDatabaseName(path);
+        QVERIFY(legacyDb.open());
+        QSqlQuery legacy(legacyDb);
+        // The post-migration-13 shape: the packaging columns are already there,
+        // which is the whole point -- this migration has nothing to add.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE products (id INTEGER PRIMARY KEY, barcode TEXT UNIQUE, "
+            "name TEXT NOT NULL, cost_price_cents INTEGER NOT NULL DEFAULT 0, "
+            "sale_price_cents INTEGER NOT NULL DEFAULT 0, quantity INTEGER NOT NULL DEFAULT 0, "
+            "unit TEXT NOT NULL DEFAULT '', package_size INTEGER NOT NULL DEFAULT 1, "
+            "active INTEGER NOT NULL DEFAULT 1, sold_by_weight INTEGER NOT NULL DEFAULT 0, "
+            "package_name TEXT NOT NULL DEFAULT 'كرتونة', "
+            "pieces_per_package INTEGER NOT NULL DEFAULT 1, package_barcode TEXT, "
+            "package_cost_cents INTEGER NOT NULL DEFAULT 0)")));
+        // A: the tray the shop described, never copied across.
+        // B: one piece either way -- nothing to copy.
+        // C: the new column already set by hand, and the old one disagrees.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO products (id, name, package_size, pieces_per_package) VALUES "
+            "(1, 'Cola', 12, 1), (2, 'Water', 1, 1), (3, 'Juice', 6, 4)")));
+        QVERIFY(legacy.exec(QStringLiteral("PRAGMA user_version = 13")));
+
+        data::runSchemaMigrations(legacyDb);
+
+        QSqlQuery after(legacyDb);
+        QVERIFY(after.exec(QStringLiteral(
+            "SELECT id, pieces_per_package FROM products ORDER BY id")));
+        // Copied across, because only the old column had a figure in it.
+        QVERIFY(after.next());
+        QCOMPARE(after.value(0).toInt(), 1);
+        QCOMPARE(after.value(1).toInt(), 12);
+        // Left alone: package_size is 1, so there was never a tray figure to copy
+        // and writing the new column would only have restated its default.
+        QVERIFY(after.next());
+        QCOMPARE(after.value(0).toInt(), 2);
+        QCOMPARE(after.value(1).toInt(), 1);
+        // Left alone: the shop set this one. Its new column is not the default, so
+        // overwriting it with the old column's 6 would throw away a decision.
+        QVERIFY(after.next());
+        QCOMPARE(after.value(0).toInt(), 3);
+        QCOMPARE(after.value(1).toInt(), 4);
+        QVERIFY(!after.next());
+
+        QCOMPARE(data::readSchemaVersion(legacyDb), 14);
+
+        // A second run changes nothing. The first run moved row 1's new column off
+        // the default, so the guard's WHERE clause no longer matches it, and the two
+        // rows it does not match were never in scope.
+        data::runSchemaMigrations(legacyDb);
+
+        QSqlQuery again(legacyDb);
+        QVERIFY(again.exec(QStringLiteral(
+            "SELECT pieces_per_package FROM products ORDER BY id")));
+        const std::vector<int> expected = {12, 1, 4};
+        for (const int want : expected) {
+            QVERIFY(again.next());
+            QCOMPARE(again.value(0).toInt(), want);
+        }
+        QVERIFY(!again.next());
+        QCOMPARE(data::readSchemaVersion(legacyDb), 14);
+
+        legacyDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+}
+
+
 // A helper that puts one credit sale on a ledger, so the reversal cases below
 // each start from the same shape: a positive transaction, its items, and the
 // stock already gone out.
 namespace {
 
+// The ledger row is built through SaleService::recordCustomerDebt, not through the
+// repository: a direct write leaves pieces_consumed at 0, and the reversal then
+// refuses rather than returning the goods to the shelf.
 struct DebtFixture {
     data::Database db;
     int customerId = 0;
@@ -1166,28 +1565,16 @@ struct DebtFixture {
         customer.name = QStringLiteral("زبون");
         customerId = data::CustomerRepository(db).save(customer);
 
-        core::CustomerTransaction tx;
-        tx.customerId = customerId;
-        tx.amountCents = 14000;
-        transactionId = data::CustomerTransactionRepository(db).insert(tx);
-
-        core::CustomerTransactionItem item;
-        item.customerTransactionId = transactionId;
+        core::SaleItem item;
         item.productId = productId;
         item.quantity = 2;
         item.unitPriceCents = 7000;
         item.unitCostCents = 5000;
-        data::CustomerTransactionItemRepository(db).insert(item);
-
-        data::StockMovementRepository movements(db);
-        movements.insert([] {
-            core::StockMovement movement;
-            movement.productId = 0;
-            movement.delta = -2;
-            movement.reason = QStringLiteral("customer_debt");
-            movement.createdAt = QDateTime::currentDateTime();
-            return movement;
-        }());
+        const data::SaleRecordResult booked =
+            data::SaleService(db).recordCustomerDebt(customerId, {item}, QStringLiteral("dev"),
+                                                     /*allowOversold=*/false);
+        Q_UNUSED(booked)
+        transactionId = data::CustomerTransactionRepository(db).findByCustomerId(customerId).back().id;
     }
 
     long long stock()
@@ -1318,6 +1705,66 @@ void DataLayerTest::reverse_customer_debt_refuses_a_missing_sale()
                  .size(),
              std::size_t(1));
     QCOMPARE(data::CustomerRepository(f.db).balanceCentsFor(f.customerId), 14000LL);
+}
+
+// A reversal puts back what the sale took, so it needs the sale to have recorded
+// what that was. A line whose pieces_consumed is zero cannot say, and returning
+// stock on the strength of it would put pieces on the shelf that were never off
+// it — the shelf count would drift up by exactly the sale, and nothing else would
+// ever correct it. So the reversal refuses, and says which rows are at fault.
+void DataLayerTest::reverse_refuses_a_line_with_pieces_consumed_zero()
+{
+    const QString path = m_dir.filePath(QStringLiteral("reverse_pieces_consumed_zero.sqlite"));
+    QFile::remove(path);
+    data::Database ownDb(path);
+    data::ProductRepository products(ownDb);
+
+    core::Product product;
+    product.name = QStringLiteral("شاي");
+    product.salePriceCents = 7000;
+    product.costPriceCents = 5000;
+    const int productId = products.save(product);
+    products.adjustStock(productId, 10, QStringLiteral("opening"));
+
+    data::CashSessionRepository sessions(ownDb);
+    const int sessionId = sessions.open(100000);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    const data::SaleRecordResult sold = data::SaleService(ownDb).recordSale(
+        {item}, sessionId, QStringLiteral("dev"), /*allowOversold=*/false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    // The service recorded the sale correctly — this zeroes the column behind its
+    // back, which is what a pre-migration row or a caller bypassing the service
+    // would leave behind. There is no CHECK constraint to stop it.
+    QSqlQuery zero(ownDb.handle());
+    zero.prepare(QStringLiteral("UPDATE sale_items SET pieces_consumed = 0 WHERE sale_id = ?"));
+    zero.addBindValue(sold.saleId);
+    QVERIFY2(zero.exec(), qPrintable(zero.lastError().text()));
+
+    const long long stockBefore = products.findById(productId)->quantity;
+    QCOMPARE(stockBefore, 8LL);
+
+    const data::SaleReverseResult result =
+        data::SaleService(ownDb).reverseSale(sold.saleId, sessionId);
+    QVERIFY(!result.ok);
+    QVERIFY(!result.error.isEmpty());
+    // The message has to carry enough for a developer to find the row: the sale
+    // and the item. An error that only said "refused" would leave the repair to
+    // a search of every line on the till.
+    QVERIFY2(result.error.contains(QString::number(sold.saleId)), qPrintable(result.error));
+
+    // Nothing came back, and no reversal row or mirrored line was written: the
+    // refusal happens before any of that, so the ledger is left as it was.
+    QCOMPARE(products.findById(productId)->quantity, stockBefore);
+    QSqlQuery reversals(ownDb.handle());
+    reversals.prepare(QStringLiteral("SELECT COUNT(*) FROM sales WHERE reversed_sale_id = ?"));
+    reversals.addBindValue(sold.saleId);
+    QVERIFY2(reversals.exec(), qPrintable(reversals.lastError().text()));
+    QVERIFY(reversals.next());
+    QCOMPARE(reversals.value(0).toInt(), 0);
 }
 
 
@@ -3208,14 +3655,20 @@ void DataLayerTest::overflow_guard_cogs()
     line.productId = 1;
     line.unitCostCents = 100;
     line.quantity = 5;
+    // Cost is counted in pieces since Phase 2B, so the guard is exercised on
+    // pieces_consumed rather than quantity. Every line below is a piece sale, and
+    // the two are the same figure there -- set both so the test keeps testing the
+    // arithmetic rather than the field it happens to read.
+    line.piecesConsumed = line.quantity;
     ordinary.append(line);
     QCOMPARE(data::cogsCentsFor(ordinary), std::optional<long long>(500));
 
-    // Cost is multiplied by quantity the same way price is, and it reaches the
-    // profit and loss statement, so it gets the same guard.
+    // Cost is multiplied by the piece count the same way price is, and it reaches
+    // the profit and loss statement, so it gets the same guard.
     QVector<core::SaleItem> overflowing;
     line.unitCostCents = std::numeric_limits<long long>::max();
     line.quantity = 2;
+    line.piecesConsumed = line.quantity;
     overflowing.append(line);
     QVERIFY2(!data::cogsCentsFor(overflowing).has_value(),
              "a cost past the range must be refused, not wrapped");
@@ -3223,6 +3676,7 @@ void DataLayerTest::overflow_guard_cogs()
     QVector<core::SaleItem> summing;
     line.unitCostCents = std::numeric_limits<long long>::max() / 2 + 1;
     line.quantity = 1;
+    line.piecesConsumed = line.quantity;
     summing.append(line);
     summing.append(line);
     QVERIFY2(!data::cogsCentsFor(summing).has_value(),
@@ -3231,6 +3685,7 @@ void DataLayerTest::overflow_guard_cogs()
     QVector<core::SaleItem> boundary;
     line.unitCostCents = std::numeric_limits<long long>::max();
     line.quantity = 1;
+    line.piecesConsumed = line.quantity;
     boundary.append(line);
     QCOMPARE(data::cogsCentsFor(boundary),
              std::optional<long long>(std::numeric_limits<long long>::max()));
@@ -3251,6 +3706,10 @@ void DataLayerTest::cogs_guard_allows_negative_quantity()
     line.unitCostCents = 5000;
     line.unitPriceCents = 5000;
     line.quantity = -2;
+    // Cost reads pieces_consumed; revenue still reads quantity. On a piece sale the
+    // two are the same number, which is what makes this one line the right test of
+    // both: the cost comes to the same figure either way, and it is negative.
+    line.piecesConsumed = line.quantity;
     cancellation.append(line);
     QCOMPARE(data::cogsCentsFor(cancellation), std::optional<long long>(-10000));
     QCOMPARE(data::totalCentsFor(cancellation), std::optional<long long>(-10000));
@@ -3259,6 +3718,7 @@ void DataLayerTest::cogs_guard_allows_negative_quantity()
     QVector<core::SaleItem> floorCase;
     line.unitCostCents = std::numeric_limits<long long>::max();
     line.quantity = -1;
+    line.piecesConsumed = line.quantity;
     floorCase.append(line);
     QCOMPARE(data::cogsCentsFor(floorCase),
              std::optional<long long>(-std::numeric_limits<long long>::max()));
@@ -3268,6 +3728,7 @@ void DataLayerTest::cogs_guard_allows_negative_quantity()
     QVector<core::SaleItem> exactFloor;
     line.unitCostCents = 1;
     line.quantity = std::numeric_limits<long long>::min();
+    line.piecesConsumed = line.quantity;
     exactFloor.append(line);
     QCOMPARE(data::cogsCentsFor(exactFloor),
              std::optional<long long>(std::numeric_limits<long long>::min()));
@@ -3278,6 +3739,7 @@ void DataLayerTest::cogs_guard_allows_negative_quantity()
     QVector<core::SaleItem> negativeOverflow;
     line.unitCostCents = std::numeric_limits<long long>::max();
     line.quantity = -2;
+    line.piecesConsumed = line.quantity;
     negativeOverflow.append(line);
     QVERIFY2(!data::cogsCentsFor(negativeOverflow).has_value(),
              "a negative product past the range must still be refused");
@@ -3285,6 +3747,7 @@ void DataLayerTest::cogs_guard_allows_negative_quantity()
     QVector<core::SaleItem> negativeSumming;
     line.unitCostCents = std::numeric_limits<long long>::max();
     line.quantity = -1;
+    line.piecesConsumed = line.quantity;
     negativeSumming.append(line);
     negativeSumming.append(line);
     QVERIFY2(!data::cogsCentsFor(negativeSumming).has_value(),
@@ -3295,10 +3758,217 @@ void DataLayerTest::cogs_guard_allows_negative_quantity()
     QVector<core::SaleItem> pair;
     line.unitCostCents = std::numeric_limits<long long>::max();
     line.quantity = 1;
+    line.piecesConsumed = line.quantity;
     pair.append(line);
     line.quantity = -1;
+    line.piecesConsumed = line.quantity;
     pair.append(line);
     QCOMPARE(data::cogsCentsFor(pair), std::optional<long long>(0));
+}
+
+// A carton line is the case where quantity and the piece count are different
+// numbers, so it is the only place the two can be told apart. What resolveSaleItems
+// has to arrive at, from a product that says nothing about units, is: the line is a
+// package line, it left 48 pieces on the shelf rather than 2, and it is priced as
+// ONE carton.
+//
+// The price is the figure worth stating twice, because there are two ways to get it
+// wrong and they differ by the quantity. Sixty a piece is 1440 for the carton, and
+// 2880 if the carton price is multiplied by the two cartons as well -- which would
+// then be multiplied by the quantity a third time downstream in totalCentsFor and
+// charge the customer for four cartons.
+void DataLayerTest::resolve_sale_items_marks_package_line_and_prices_it()
+{
+    const QString path = m_dir.filePath(QStringLiteral("resolve_package_line.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product product;
+    product.name = QStringLiteral("بسكويت");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitKind = QStringLiteral("package");
+    // Left at zero on purpose: this is the caller that does not know the carton
+    // price, and resolveSaleItems is what has to work it out.
+    item.unitPriceCents = 0;
+    item.unitCostCents = 0;
+
+    QString error;
+    const QVector<core::SaleItem> resolved =
+        data::resolveSaleItems(products, {item}, /*allowOversold=*/false, &error);
+    QVERIFY2(!resolved.isEmpty(), qPrintable(error));
+    QCOMPARE(resolved.size(), 1);
+
+    const core::SaleItem& line = resolved.first();
+    // The caller's word is kept rather than folded into 'piece'.
+    QCOMPARE(line.unitKind, QStringLiteral("package"));
+    // 2 cartons of 24, and this is the figure the cost and the stock movement are
+    // counted from. Reading quantity here would take 2 pieces off a shelf of 100
+    // and leave 22 of the goods that actually left.
+    QCOMPARE(line.piecesConsumed, 48LL);
+    // One carton, not two: 60 a piece times 24.
+    QCOMPARE(line.unitPriceCents, 1440LL);
+    // Cost stays per piece. It is the piece the shop bought, so nothing multiplies
+    // it here; cogsCentsFor does that against piecesConsumed.
+    QCOMPARE(line.unitCostCents, 58LL);
+}
+
+// The row on disk has to say what the resolved vector said. If the insert path
+// re-derives either field from quantity instead of carrying it over, the money is
+// still right -- COGS and the stock movement both run off the resolved vector
+// before the row is ever built -- so nothing short of reading the ledger back sees
+// the difference. The reversal is what feels it: it mirrors the STORED row, so a
+// row claiming 'piece' and 2 pieces would put 2 back on the shelf and leave 46
+// pieces of stock that was sold still on it.
+void DataLayerTest::record_sale_of_a_package_line_stores_resolved_fields()
+{
+    const QString path = m_dir.filePath(QStringLiteral("package_line_stored.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product product;
+    product.name = QStringLiteral("بسكويت");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(100000);
+    QVERIFY(sessionId > 0);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitKind = QStringLiteral("package");
+    item.unitPriceCents = 1440;
+
+    data::SaleService sales(db);
+    const data::SaleRecordResult sold =
+        sales.recordSale({item}, sessionId, QStringLiteral("dev"), /*allowOversold=*/false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    // Read the ledger back by hand: the repositories are what a report reads, and
+    // a round trip through them would hide a column that was written wrongly.
+    QSqlQuery sale(db.handle());
+    sale.prepare(QStringLiteral("SELECT total_cents FROM sales WHERE id = ?"));
+    sale.addBindValue(sold.saleId);
+    QVERIFY2(sale.exec(), qPrintable(sale.lastError().text()));
+    QVERIFY(sale.next());
+    // Revenue counts cartons: 2 x 1440.
+    QCOMPARE(sale.value(0).toLongLong(), 2880LL);
+
+    // Cost is not a column on the sale. COGS is derived from the item rows every
+    // time a report is built, which is why the multiplier those rows are read with
+    // is the whole of this change. Read through ReportService so the assertion is
+    // on the path that was fixed rather than on a stored copy of it.
+    const QDate day = QDate::currentDate();
+    const data::StoreReport report = data::ReportService(db).build(
+        QDateTime(day, QTime(0, 0, 0)), QDateTime(day, QTime(23, 59, 59)));
+    QCOMPARE(report.revenueCents, 2880LL);
+    // Cost counts pieces: 48 x 58. The 2 x 58 that the old report path produced is
+    // the under-count this whole change exists to stop, and it would have shown the
+    // shop a profit on a sale that made none.
+    QCOMPARE(report.cogsCents, 2784LL);
+
+    QSqlQuery line(db.handle());
+    line.prepare(QStringLiteral(
+        "SELECT unit_kind, pieces_consumed FROM sale_items WHERE sale_id = ?"));
+    line.addBindValue(sold.saleId);
+    QVERIFY2(line.exec(), qPrintable(line.lastError().text()));
+    QVERIFY(line.next());
+    // The row's own account of what was sold and how much of it left the shelf.
+    QCOMPARE(line.value(0).toString(), QStringLiteral("package"));
+    QCOMPARE(line.value(1).toLongLong(), 48LL);
+
+    // Down by the pieces, not by the cartons.
+    QCOMPARE(products.findById(productId)->quantity, 52LL);
+
+    QVERIFY2(sales.reverseSale(sold.saleId, sessionId).ok, "the package sale was not reversed");
+
+    // Back to exactly where it started, which is only true if the stored row said
+    // 48. A row that said 2 -- the bug this test exists to catch -- leaves the shelf
+    // at 54, with 46 pieces of sold stock still counted as though it were there.
+    QCOMPARE(products.findById(productId)->quantity, 100LL);
+}
+
+// Negating the cost of a reversal is an arithmetic operation that can fail, and the
+// figure it fails to produce is not obviously wrong: LLONG_MIN negated is itself, so
+// a line landing exactly on it and being negated would add a most-negative-long-long
+// to the day's cost and report a loss of nine quintillion cents. That is a plausible
+// looking figure rather than an obviously broken one, so it has to be refused.
+//
+// Getting there needs the term to BE LLONG_MIN before the negation, which is not the
+// same as being LLONG_MAX: negating LLONG_MAX is perfectly representable and gives
+// LLONG_MIN + 1. Only the most negative value has no positive counterpart to turn
+// into, so the cost is set to LLONG_MIN itself and the piece count to 1. Written by
+// raw SQL because no service produces it -- it is the shape a corrupted or hand-edited
+// ledger takes, and asking the service to refuse to create it tests the wrong thing.
+void DataLayerTest::cogs_negation_refuses_llong_min_instead_of_wrapping()
+{
+    const QString path = m_dir.filePath(QStringLiteral("cogs_negation_overflow.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product product;
+    product.name = QStringLiteral("بضاعة");
+    product.salePriceCents = 100;
+    product.costPriceCents = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(100000);
+    QVERIFY(sessionId > 0);
+
+    // created_at goes in as toIso(currentDateTime()), which is how every service
+    // writes it and how findBetween compares it. SQLite's own datetime('now') would
+    // store UTC with a space where the ISO format has a 'T', so the row would sort
+    // outside the range the report asks for -- and this test would then measure
+    // nothing at all, passing with the guard deleted.
+    QSqlQuery insert(db.handle());
+    insert.prepare(QStringLiteral(
+        "INSERT INTO sales (created_at, total_cents, adjustment_cents, device_id, oversold, "
+        "reversed_sale_id) VALUES (?, 0, 0, 'dev', 0, 0)"));
+    insert.addBindValue(data::toIso(QDateTime::currentDateTime()));
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+    const int saleId = insert.lastInsertId().toInt();
+    QVERIFY(saleId > 0);
+
+    // The line is a reversal (quantity negative) whose cost term is exactly
+    // LLONG_MIN, which has no positive counterpart to be negated into.
+    insert.prepare(QStringLiteral(
+        "INSERT INTO sale_items (sale_id, product_id, quantity, unit_price_cents, "
+        "unit_cost_cents, reversed_id, unit_kind, pieces_consumed) "
+        "VALUES (?, ?, -1, 0, ?, 0, 'piece', 1)"));
+    insert.addBindValue(saleId);
+    insert.addBindValue(productId);
+    insert.addBindValue(std::numeric_limits<long long>::min());
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+
+    const data::StoreReport report = data::ReportService(db).build(
+        QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+        QDateTime(QDate::currentDate(), QTime(23, 59, 59)));
+
+    // The line is left out and named in the log, so the day's cost is untouched. The
+    // figure to rule out is LLONG_MIN itself: a negation that came back as itself
+    // would have added a loss of nine quintillion cents to the margin.
+    QVERIFY2(report.cogsCents != std::numeric_limits<long long>::min(),
+             "the negation wrapped instead of being refused");
+    QCOMPARE(report.cogsCents, 0LL);
 }
 
 void DataLayerTest::supplier_new_fields_roundtrip()

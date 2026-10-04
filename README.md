@@ -117,10 +117,10 @@ cmake --build build -j"$(nproc)"
 ```bash
 cmake -S . -B build
 cmake --build build
-ctest --test-dir build --output-on-failure   # 10 اختبارات
+ctest --test-dir build --output-on-failure   # 16 اختبار
 ```
 
-اختبارات الواجهة (19 سيناريو) تعمل بدون شاشة عبر `offscreen`:
+اختبارات الواجهة (40 سيناريو) تعمل بدون شاشة عبر `offscreen`:
 
 ```bash
 QT_QPA_PLATFORM=offscreen ./build/tests/tst_ui
