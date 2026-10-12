@@ -6,14 +6,15 @@
 - [ ] **`apps/android/main.cpp` مفقود**. `-DMAHALI_ANDROID=ON` مكسور.
 
 ## 🟡 مهمة
-- [ ] تقرير COGS في `report_service.cpp` يتخطى الصفوف ذات الفائض بـ`qWarning` بدل الرفض. يجب أن يُعلَّم التقرير "غير مكتمل" عند التخطي.
-- [ ] `Q_OBJECT` مفقود في `purchase_dialog.cpp:104` و`select_customer_dialog.cpp:58` و`mini_bar_chart.cpp:19`.
-- [ ] `refreshTotals()` في POS يسجّل "Unités: N" بـ`line.quantity`. الكرتونة تُحسب 1 لا 24. قرار UX.
-- [ ] `Impossible de chiffrer « %1 »` — سلسلة فرنسية داخل كود عربي. مراجعة مستقبلية.
+- [ ] `refreshTotals()` في POS يسجّل "Unités: N" بـ`line.quantity`. الكرتونة تُحسب 1 لا 24. قرار UX مطلوب.
 - [ ] `sync_hmac_key` الافتراضي يُغيَّر عند أول تشغيل.
-- [ ] `SyncProtocol::errorClassForStatus` يعيد `Network` لـ3xx/1xx (redirect loop محتمل).
 - [ ] `13cba43` "WIP: audit fixes (unverified)" — يستحق مراجعة.
 - [ ] `.vscode/launch.json` يشغّل Chrome — مخلّف.
+
+## 🟡 مقبولة (لن تُصلَح، موثَّقة)
+- [x] `Q_OBJECT` تحذيرات `lupdate` في ثلاثة ملفات:
+  - `purchase_dialog.cpp:104` و`select_customer_dialog.cpp:58` — **تحذيران كاذبان**: هما namespace + دالة حرّة، لا صنف.
+  - `mini_bar_chart.cpp:19` — صنف حقيقي بلا `Q_OBJECT`، لكنه لا يستخدم signals/slots/qobject_cast. الإصلاح يُغيِّر سياق الترجمة بلا فائدة.
 
 ## 🟢 مؤجلة
 - [ ] FIFO للدفعات.
@@ -24,11 +25,17 @@
 - [ ] LTR (fr/en) — هل جُرِّب فعلاً؟
 - [ ] قناة الإصدار: GitHub Release تلقائي أم يدوي؟
 - [ ] `apps/android/main.cpp`.
+- [ ] الفاتورة المطبوعة (لا كود طباعة/PDF في المشروع).
+- [ ] Code signing لـ`mahali-desktop.exe` (لتفادي حجب Chrome/Windows).
 
 ## ✅ مُنجَز
+
+### الجلسات السابقة
 - [x] Ajustement (adjustment_cents) end-to-end — `6d32a5d`.
 - [x] Zakat overhaul + credit sale button.
 - [x] fr + ar 606/606.
+
+### هذه الجلسة
 - [x] حقول الحزمة (pieces_per_package, package_name, package_barcode, package_cost_cents).
 - [x] ترحيل 13 + 14 (backfill).
 - [x] `pieces_consumed` في كل مسار المال.
@@ -39,3 +46,10 @@
 - [x] الكمية الافتتاحية تُكتب كحركة `opening`.
 - [x] الحارس `reverse` يرفض `piecesConsumed <= 0`.
 - [x] 16/16 اختبار أخضر.
+- [x] ذاكرة المشروع (CONTEXT/TASKS/DECISIONS/COMMANDS).
+- [x] `constantTimeEquals` لـ`verifyMaster` — commit `59bd395`.
+- [x] تصنيف 1xx/3xx كـPermanent في `errorClassForStatus` — commit `59bd395`.
+- [x] `.gitignore` يشمل `build.log`, `Testing/`, `translations/*.qm` — commit `59bd395`.
+- [x] ترجمة عربية لسلسلة "chiffrer" — commit `59bd395`.
+- [x] تحذير COGS في صفحة التقارير — commit `bd13833`.
+- [x] D25 في `DECISIONS.md` — commit `34f9c47`.
