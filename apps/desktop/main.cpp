@@ -12,6 +12,7 @@
 #include "data/setting_repository.h"
 #include "data/user_repository.h"
 #include "core/format_utils.h"
+#include "dialogs/language_dialog.h"
 #include "ui/login_dialog.h"
 #include "ui/main_window.h"
 #include "ui/server_controller.h"
@@ -72,10 +73,17 @@ int main(int argc, char* argv[])
                                    .value_or(QStringLiteral("mahali-local-key"))
                                    .toUtf8();
 
-    // Language: persist the default on first launch, then load the catalogue and
-    // pin the layout direction before any window is built.
+    // Language: on a first launch, ask. The dialog must be shown before any
+    // catalogue is loaded, because the question is which catalogue to load.
+    // Once the setting holds a value (chosen here, or picked later in the
+    // Settings page), it is never asked again.
     if (!settings.value(QStringLiteral("language")).has_value()) {
-        settings.set(QStringLiteral("language"), app::core::defaultLanguage());
+        app::ui::LanguageDialog languageDialog;
+        const QString chosen = (languageDialog.exec() == QDialog::Accepted)
+                                   ? languageDialog.chosenCode()
+                                   : QString();
+        settings.set(QStringLiteral("language"),
+                     chosen.isEmpty() ? app::core::defaultLanguage() : chosen);
     }
     app::core::applyLanguage(app::core::currentLanguage(*db));
 

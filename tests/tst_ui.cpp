@@ -22,6 +22,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include "ui/dialogs/language_dialog.h"
 #include "ui/login_dialog.h"
 #include "ui/users_page.h"
 
@@ -83,6 +84,8 @@ class UiTest : public QObject
 
 private slots:
     void initTestCase();
+    void language_dialog_returns_the_chosen_code();
+    void language_dialog_returns_empty_on_dismiss();
     void serverStartStop();
     void serverAppliesOverLoopback();
     void serverEmitsStatsOnTimer();
@@ -2570,6 +2573,28 @@ void UiTest::status_bar_shows_occasion_when_active()
         QVERIFY(!window.activateOccasion(occasionId + 999));
         QVERIFY(window.occasionLabelText().contains(occasion.name));
     }
+}
+
+void UiTest::language_dialog_returns_the_chosen_code()
+{
+    ui::LanguageDialog dialog;
+    const QList<QPushButton*> buttons =
+        dialog.findChildren<QPushButton*>(QStringLiteral("languageChoice"));
+    QCOMPARE(buttons.size(), 3);
+    QCOMPARE(buttons.at(0)->text(), QStringLiteral("العربية"));
+    QCOMPARE(buttons.at(1)->text(), QStringLiteral("Français"));
+    QCOMPARE(buttons.at(2)->text(), QStringLiteral("English"));
+
+    buttons.at(1)->click();
+    QCOMPARE(dialog.result(), static_cast<int>(QDialog::Accepted));
+    QCOMPARE(dialog.chosenCode(), QStringLiteral("fr"));
+}
+
+void UiTest::language_dialog_returns_empty_on_dismiss()
+{
+    ui::LanguageDialog dialog;
+    dialog.reject();
+    QVERIFY(dialog.chosenCode().isEmpty());
 }
 
 QTEST_MAIN(UiTest)

@@ -28,6 +28,8 @@ target_sources(mahali-ui PRIVATE
     dialogs/product_dialog.h
     dialogs/customer_dialog.cpp
     dialogs/customer_dialog.h
+    dialogs/language_dialog.cpp
+    dialogs/language_dialog.h
     dialogs/select_customer_dialog.cpp
     dialogs/select_customer_dialog.h
     dialogs/supplier_dialog.cpp
