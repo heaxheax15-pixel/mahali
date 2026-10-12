@@ -124,7 +124,10 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
 
     m_add = new QPushButton(tr("إضافة كاشير"));
     m_add->setObjectName(QStringLiteral("primary"));
-    m_add->setIcon(appIcon(Icon::Plus, QColor(QStringLiteral("#ffffff")), 18));
+    // Icon removed: the drawn-plus was rendered as a stray mark on both themes.
+    // Text-only is unambiguous, and the button still reads as the page's primary
+    // action through its #primary role.
+    m_add->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     connect(m_add, &QPushButton::clicked, this, &UsersPage::onAddClicked);
 
     auto* headerRow = new QHBoxLayout;
@@ -136,9 +139,9 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->setAlternatingRowColors(true);
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(true);
-    m_table->setColumnCount(5);
+    m_table->setColumnCount(4);
     m_table->setHorizontalHeaderLabels(
-        {tr("الاسم"), tr("الدور"), tr("PIN"), tr("نشط"), tr("إجراءات")});
+        {tr("الاسم"), tr("الدور"), tr("نشط"), tr("إجراءات")});
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -149,9 +152,13 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->horizontalHeader()->setStretchLastSection(false);
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    // The active column holds only a checkbox cell widget, which a
+    // ResizeToContents section does not measure: it would size to the short "نشط"
+    // header and the item padding would clip the indicator. Fixed width is what
+    // the checkbox needs.
+    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_table->horizontalHeader()->resizeSection(2, 80);
     m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     m_table->verticalHeader()->setDefaultSectionSize(42);
     m_table->verticalHeader()->hide();
 
@@ -177,6 +184,11 @@ int UsersPage::rowCount() const
 
 void UsersPage::rebuildTable()
 {
+    // The PIN column was removed: an administrator does not need to read a
+    // cashier's PIN to manage their account — resetting it is enough, and a
+    // number everyone can see stops being a secret. listAll() still returns
+    // the field; only the render is gone, so the row-level callers that need
+    // user.pin (edit dialog) keep working.
     data::UserRepository repo(m_db);
     const auto users = repo.listAll();
 
@@ -194,32 +206,29 @@ void UsersPage::rebuildTable()
         roleItem->setTextAlignment(Qt::AlignCenter);
         m_table->setItem(row, 1, roleItem);
 
-        auto* pinItem = new QTableWidgetItem(user.pin);
-        pinItem->setTextAlignment(Qt::AlignCenter);
-        pinItem->setFont(QFont(QStringLiteral("monospace"), 14));
-        m_table->setItem(row, 2, pinItem);
-
         auto* checkBox = new QCheckBox;
         checkBox->setChecked(user.active);
         checkBox->setProperty("userId", user.id);
+        // The column holds only this widget, so it is given a width that fits the
+        // 21px indicator plus the row padding; the header text alone is narrower.
+        checkBox->setMinimumWidth(60);
+        checkBox->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         connect(checkBox, &QCheckBox::stateChanged, this, [this, row](int state) {
             onActiveChanged(row, state);
         });
-        m_table->setCellWidget(row, 3, checkBox);
+        m_table->setCellWidget(row, 2, checkBox);
 
         auto* actionsWidget = new QWidget;
         auto* actionsLayout = new QHBoxLayout(actionsWidget);
         actionsLayout->setContentsMargins(4, 2, 4, 2);
         actionsLayout->setSpacing(6);
 
-        // No width is set on either button, and that is the fix rather than an
-        // omission: the themes pad a button by 21px a side, so "تعديل" needs
-        // 87px of button to show its 42px of text and "حذف" needs 81. The 70
-        // that was here left 26px for the label, which Qt elided to nothing --
-        // the red button had no readable text. Sizing to the label lets the
-        // ResizeToContents section be as wide as the buttons actually are, and
-        // the themes scale the padding down inside this table (see the
-        // #usersTable rules) so both fit a 42px row.
+        // Each button is held at its own size hint. The themes pad a button by
+        // 21px a side, so "تعديل" needs 87px to show its 42px of text and "حذف"
+        // needs 81; without a floor the measured section could land narrower than
+        // the buttons and Qt would elide the labels. The themes scale the padding
+        // down inside this table (see the #usersTable rules) so both fit a 42px
+        // row.
         auto* editBtn = new QPushButton(tr("تعديل"));
         editBtn->setObjectName(QStringLiteral("secondary"));
         editBtn->setProperty("userId", user.id);
@@ -245,8 +254,14 @@ void UsersPage::rebuildTable()
         for (QPushButton* b : {editBtn, removeBtn}) {
             b->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         }
+        // Force each button to at least its own size hint. QHeaderView measures the
+        // cell delegate, not the widget it holds, so a Fixed policy alone is not
+        // enough: the column can land narrower than the button and the text elides.
+        for (QPushButton* b : {editBtn, removeBtn}) {
+            b->setMinimumWidth(b->sizeHint().width());
+        }
 
-        m_table->setCellWidget(row, 4, actionsWidget);
+        m_table->setCellWidget(row, 3, actionsWidget);
     }
 
     // Size the actions section to what the buttons need, and to nothing else.
@@ -254,7 +269,7 @@ void UsersPage::rebuildTable()
     // It used to be the last section with stretchLastSection on, which meant its
     // width came from the window rather than from its contents: the header
     // measures the item delegate for a ResizeToContents section, and a cell
-    // widget is not the delegate, so sizeHintForColumn(4) was 0 and the column
+    // widget is not the delegate, so sizeHintForColumn(3) was 0 and the column
     // was in effect stretched. At the window's 900px minimum the section came out
     // 196px against the 217px the two buttons need, the cell widget could not grow
     // past it, and the row clipped the buttons to 77px -- "Modifier" and
@@ -262,8 +277,9 @@ void UsersPage::rebuildTable()
     // makes this survive a translation longer than the two shipped, which a
     // hardcoded width would not.
     //
-    // 120px is the floor for a table with no rows yet, where there are no buttons
-    // to measure; below that the header text itself starts to elide.
+    // 180px is the floor for a table with no rows yet, where there are no buttons
+    // to measure; below that the two buttons plus spacing and padding cannot fit
+    // for a translation that has never been shipped.
     //
     // The themes' QTableWidget::item rule carries 10px 14px of padding for the
     // text columns, and QTableView insets a cell widget's rect by that same
@@ -279,7 +295,7 @@ void UsersPage::rebuildTable()
     constexpr int kGridLine = 1;
     int actionsWidth = 0;
     for (int row = 0; row < m_table->rowCount(); ++row) {
-        if (auto* cell = m_table->cellWidget(row, 4)) {
+        if (auto* cell = m_table->cellWidget(row, 3)) {
             int buttons = 0;
             for (const auto* b : cell->findChildren<QPushButton*>()) {
                 buttons += b->sizeHint().width();
@@ -289,9 +305,9 @@ void UsersPage::rebuildTable()
             actionsWidth = qMax(actionsWidth, buttons + 6 + 8);
         }
     }
-    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
     m_table->horizontalHeader()->resizeSection(
-        4, qMax(actionsWidth + 2 * kItemPaddingX + kGridLine, 120));
+        3, qMax(actionsWidth + 2 * kItemPaddingX + kGridLine, 180));
 }
 
 void UsersPage::onAddClicked()

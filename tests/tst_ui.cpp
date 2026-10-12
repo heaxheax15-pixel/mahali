@@ -124,7 +124,9 @@ private slots:
     void login_basic();
     // void statusBarSwitchUserButton();
     void users_page_lists_users();
-    void users_page_shows_all_pins();
+    void users_page_does_not_render_pins();
+    void users_page_shows_no_pin_column();
+    void users_page_actions_column_is_wide_enough();
     void user_edit_pin_persists();
     void master_recovery_grants_access();
     void status_bar_shows_occasion_when_active();
@@ -2309,7 +2311,10 @@ void UiTest::users_page_lists_users()
     QCOMPARE(page.rowCount(), 2);
 }
 
-void UiTest::users_page_shows_all_pins()
+// The users table no longer renders PINs. This drives the page directly and
+// checks that every seeded user still has a row while no PIN leaks into any
+// cell -- neither the removed column nor any other.
+void UiTest::users_page_does_not_render_pins()
 {
     const QString path = m_dir.filePath(QStringLiteral("users_page_pins_test.sqlite"));
     QFile::remove(path);
@@ -2340,25 +2345,102 @@ void UiTest::users_page_shows_all_pins()
     page.refresh();
     QCOMPARE(page.rowCount(), seeds.size());
 
-    // Every row must show its own PIN, whatever the role.
     QTableWidget* table = page.table();
     QVERIFY(table);
 
-    QHash<QString, QString> pinByName;
+    QHash<QString, bool> seen;
     for (int row = 0; row < table->rowCount(); ++row) {
         QTableWidgetItem* nameItem = table->item(row, 0);
-        QTableWidgetItem* pinItem = table->item(row, 2);
         QVERIFY2(nameItem, qPrintable(QStringLiteral("missing name cell on row %1").arg(row)));
-        QVERIFY2(pinItem, qPrintable(QStringLiteral("missing PIN cell on row %1").arg(row)));
-        pinByName.insert(nameItem->text(), pinItem->text());
+        seen.insert(nameItem->text(), true);
+
+        // Column 2 is the active checkbox, not a PIN text cell.
+        QVERIFY2(!table->item(row, 2),
+                 qPrintable(QStringLiteral("unexpected text cell in the active column on row %1")
+                                .arg(row)));
+
+        for (int col = 0; col < table->columnCount(); ++col) {
+            QTableWidgetItem* item = table->item(row, col);
+            if (!item) {
+                continue;
+            }
+            for (const Seed& seed : seeds) {
+                QVERIFY2(!item->text().contains(seed.pin),
+                         qPrintable(QStringLiteral("PIN %1 leaked into cell %2,%3")
+                                        .arg(seed.pin).arg(row).arg(col)));
+            }
+        }
     }
 
-    QCOMPARE(pinByName.size(), seeds.size());
+    QCOMPARE(seen.size(), seeds.size());
     for (const Seed& seed : seeds) {
-        QVERIFY2(pinByName.contains(seed.name),
+        QVERIFY2(seen.contains(seed.name),
                  qPrintable(QStringLiteral("no row for user %1").arg(seed.name)));
-        QCOMPARE(pinByName.value(seed.name), seed.pin);
     }
+}
+
+void UiTest::users_page_shows_no_pin_column()
+{
+    const QString path = m_dir.filePath(QStringLiteral("users_page_no_pin_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    data::UserRepository repo(db);
+
+    core::User user;
+    user.name = QStringLiteral("المدير");
+    user.role = QStringLiteral("admin");
+    const int id = repo.save(user);
+    QVERIFY(id > 0);
+    QVERIFY(repo.savePin(id, QStringLiteral("1234")));
+
+    app::ui::UsersPage page(db);
+    page.refresh();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table);
+    QCOMPARE(table->columnCount(), 4);
+    QCOMPARE(table->horizontalHeaderItem(0)->text(), QStringLiteral("الاسم"));
+    QCOMPARE(table->horizontalHeaderItem(1)->text(), QStringLiteral("الدور"));
+    QCOMPARE(table->horizontalHeaderItem(2)->text(), QStringLiteral("نشط"));
+    QCOMPARE(table->horizontalHeaderItem(3)->text(), QStringLiteral("إجراءات"));
+
+    for (int col = 0; col < table->columnCount(); ++col) {
+        QVERIFY2(table->horizontalHeaderItem(col)->text() != QStringLiteral("PIN"),
+                 qPrintable(QStringLiteral("header %1 still reads PIN").arg(col)));
+    }
+
+    for (int row = 0; row < table->rowCount(); ++row) {
+        for (int col = 1; col <= 3; ++col) {
+            QTableWidgetItem* item = table->item(row, col);
+            if (item) {
+                QVERIFY2(!item->text().contains(QStringLiteral("1234")),
+                         qPrintable(QStringLiteral("PIN leaked into cell %1,%2")
+                                        .arg(row).arg(col)));
+            }
+        }
+    }
+}
+
+void UiTest::users_page_actions_column_is_wide_enough()
+{
+    const QString path = m_dir.filePath(QStringLiteral("users_page_actions_width_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    data::UserRepository repo(db);
+
+    core::User user;
+    user.name = QStringLiteral("المدير");
+    user.role = QStringLiteral("admin");
+    QVERIFY(repo.save(user) > 0);
+
+    app::ui::UsersPage page(db);
+    page.refresh();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table);
+    QVERIFY2(table->columnWidth(3) >= 180,
+             qPrintable(QStringLiteral("actions column is only %1px wide")
+                            .arg(table->columnWidth(3))));
 }
 
 // Drives the real modal that UsersPage::userDialog() opens, so the PIN the
@@ -2384,7 +2466,7 @@ void UiTest::user_edit_pin_persists()
     QVERIFY(table);
     QCOMPARE(table->rowCount(), 1);
 
-    QWidget* actions = table->cellWidget(0, 4);
+    QWidget* actions = table->cellWidget(0, 3);
     QVERIFY(actions);
     QPushButton* editBtn = nullptr;
     for (QPushButton* b : actions->findChildren<QPushButton*>()) {
@@ -2445,14 +2527,20 @@ void UiTest::user_edit_pin_persists()
     const auto byOldPin = repo.findByPin(QStringLiteral("12"));
     QVERIFY2(!byOldPin.has_value(), "the old PIN 12 still grants access after the edit");
 
-    // And the users table must now render the new PIN.
+    // The users table no longer renders PINs; the edit is reflected in the
+    // repository (checked above) and the row must otherwise remain intact.
     page.refresh();
     QTableWidgetItem* nameItem = table->item(0, 0);
-    QTableWidgetItem* pinItem = table->item(0, 2);
     QVERIFY(nameItem);
-    QVERIFY(pinItem);
     QCOMPARE(nameItem->text(), QStringLiteral("المدير"));
-    QCOMPARE(pinItem->text(), QStringLiteral("34"));
+    QVERIFY2(!table->item(0, 2), "the active column must not hold a PIN text cell");
+    for (int col = 0; col < table->columnCount(); ++col) {
+        QTableWidgetItem* item = table->item(0, col);
+        if (item) {
+            QVERIFY2(!item->text().contains(QStringLiteral("34")),
+                     qPrintable(QStringLiteral("PIN leaked into cell 0,%1").arg(col)));
+        }
+    }
 }
 
 void UiTest::master_recovery_grants_access()
