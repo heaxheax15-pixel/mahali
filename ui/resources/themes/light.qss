@@ -1435,3 +1435,12 @@ QTabBar::tab:selected {
     border-bottom-color: @SURFACE@;
     font-weight: 700;
 }
+
+QLabel#reportWarning {
+    background: #fff4e5;
+    color: #7a4a00;
+    border: 1px solid #f0c98a;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-weight: 600;
+}

@@ -31,6 +31,12 @@ struct StoreReport {
     long long cashOnHandCents = 0;
     long long receivablesCents = 0;
     long long supplierDebtCents = 0;
+    // True when the P&L could not finish one or more line items because their
+    // arithmetic overflowed. cogsCents then holds a partial sum, and the report
+    // is not trustworthy until the offending rows are found. The reports page
+    // shows a banner when this is set; without it the number would look complete
+    // and the shop would read a wrong margin with no way to know.
+    bool cogsOverflowOccurred = false;
     std::vector<CashLine> cashLines;
 };
 

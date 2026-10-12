@@ -176,6 +176,16 @@ ReportsPage::ReportsPage(app::data::Database& db, QWidget* parent)
     dateControls->addWidget(m_toEdit, 1);
     root->addLayout(dateControls);
 
+    // Created up front and hidden: the banner has to be a fixed position in the
+    // layout so it does not push the metric cards down when it appears. A label
+    // inserted on demand would move every figure on the page the moment a
+    // problem was found, which is the opposite of what a warning is for.
+    m_cogsWarning = new QLabel;
+    m_cogsWarning->setObjectName(QStringLiteral("reportWarning"));
+    m_cogsWarning->setWordWrap(true);
+    m_cogsWarning->setVisible(false);
+    root->addWidget(m_cogsWarning);
+
     auto* metricGrid = new QGridLayout;
     metricGrid->setContentsMargins(0, 0, 0, 0);
     metricGrid->setSpacing(8);
@@ -423,6 +433,14 @@ void ReportsPage::rebuild()
     setValue(12, formatMoney(m_report.zakatCents), m_report.zakatCents);
     setValue(13, QString::number(m_report.sessionsOpened), 0, false);
     setValue(14, formatMoney(m_report.openingFloatCents), m_report.openingFloatCents);
+
+    if (m_report.cogsOverflowOccurred) {
+        m_cogsWarning->setText(
+            tr("تحذير: تعذّر حساب تكلفة بعض الصفوف. الأرقام المعروضة قد تكون ناقصة."));
+        m_cogsWarning->setVisible(true);
+    } else {
+        m_cogsWarning->setVisible(false);
+    }
 
     long long totalCount = 0;
     long long totalCents = 0;

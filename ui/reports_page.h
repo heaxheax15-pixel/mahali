@@ -46,6 +46,7 @@ private:
     QDateEdit* m_toEdit = nullptr;
     QButtonGroup* m_periodButtons = nullptr;
     QLabel* m_salesDetail = nullptr;
+    QLabel* m_cogsWarning = nullptr;
     QVector<QLabel*> m_metricValues;
     QVector<QPushButton*> m_periodControls;
     QStackedWidget* m_tableStack = nullptr;

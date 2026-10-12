@@ -133,6 +133,8 @@ private slots:
     void report_net_zero_after_reverse_debt();
     void report_includes_credit_sales();
     void report_excludes_reversed_credit_cogs();
+    void report_sets_cogs_overflow_flag_on_a_bad_item();
+    void report_leaves_cogs_overflow_flag_false_on_clean_input();
     void should_notify_does_not_claim_year();
     void zakat_history_roundtrip();
     void appendOnlyGuard();
@@ -3001,6 +3003,100 @@ void DataLayerTest::report_excludes_reversed_credit_cogs()
     QCOMPARE(report.revenueCents, 0LL);
     // And a cancelled sale is not a sale to count.
     QCOMPARE(report.salesCount, 0LL);
+}
+
+void DataLayerTest::report_sets_cogs_overflow_flag_on_a_bad_item()
+{
+    const QString path = m_dir.filePath(QStringLiteral("report_cogs_overflow_flag.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product product;
+    product.name = QStringLiteral("بضاعة");
+    product.salePriceCents = 100;
+    product.costPriceCents = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(100000);
+    QVERIFY(sessionId > 0);
+    Q_UNUSED(sessionId)
+
+    QSqlQuery insert(db.handle());
+    insert.prepare(QStringLiteral(
+        "INSERT INTO sales (created_at, total_cents, adjustment_cents, device_id, oversold, "
+        "reversed_sale_id) VALUES (?, 0, 0, 'dev', 0, 0)"));
+    insert.addBindValue(data::toIso(QDateTime::currentDateTime()));
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+    const int saleId = insert.lastInsertId().toInt();
+    QVERIFY(saleId > 0);
+
+    // unit_cost_cents x pieces_consumed overflows, which is the guard the report
+    // applies before it will trust a cost term. The item is left out of the sum,
+    // and the flag is what tells the page the figure is partial.
+    insert.prepare(QStringLiteral(
+        "INSERT INTO sale_items (sale_id, product_id, quantity, unit_price_cents, "
+        "unit_cost_cents, reversed_id, unit_kind, pieces_consumed) "
+        "VALUES (?, ?, 1, 0, ?, 0, 'piece', 2)"));
+    insert.addBindValue(saleId);
+    insert.addBindValue(productId);
+    insert.addBindValue(std::numeric_limits<long long>::max());
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+
+    const data::StoreReport report = data::ReportService(db).build(
+        QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+        QDateTime(QDate::currentDate(), QTime(23, 59, 59)));
+
+    QCOMPARE(report.cogsOverflowOccurred, true);
+}
+
+// Name deliberately does not end in "_data": QtTest drops any slot with that
+// suffix as a data-provider function, and the test would never run.
+void DataLayerTest::report_leaves_cogs_overflow_flag_false_on_clean_input()
+{
+    const QString path = m_dir.filePath(QStringLiteral("report_cogs_overflow_clean.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product product;
+    product.name = QStringLiteral("بضاعة");
+    product.salePriceCents = 100;
+    product.costPriceCents = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(100000);
+    QVERIFY(sessionId > 0);
+    Q_UNUSED(sessionId)
+
+    QSqlQuery insert(db.handle());
+    insert.prepare(QStringLiteral(
+        "INSERT INTO sales (created_at, total_cents, adjustment_cents, device_id, oversold, "
+        "reversed_sale_id) VALUES (?, 0, 0, 'dev', 0, 0)"));
+    insert.addBindValue(data::toIso(QDateTime::currentDateTime()));
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+    const int saleId = insert.lastInsertId().toInt();
+    QVERIFY(saleId > 0);
+
+    // 100 x 5 fits, so nothing is skipped and the flag stays clear.
+    insert.prepare(QStringLiteral(
+        "INSERT INTO sale_items (sale_id, product_id, quantity, unit_price_cents, "
+        "unit_cost_cents, reversed_id, unit_kind, pieces_consumed) "
+        "VALUES (?, ?, 1, 0, 100, 0, 'piece', 5)"));
+    insert.addBindValue(saleId);
+    insert.addBindValue(productId);
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+
+    const data::StoreReport report = data::ReportService(db).build(
+        QDateTime(QDate::currentDate(), QTime(0, 0, 0)),
+        QDateTime(QDate::currentDate(), QTime(23, 59, 59)));
+
+    QCOMPARE(report.cogsOverflowOccurred, false);
+    QCOMPARE(report.cogsCents, 500LL);
 }
 
 void DataLayerTest::should_notify_does_not_claim_year()

@@ -40,7 +40,7 @@ namespace {
 // because the terms are now negative as well as positive: a wrapped cost is not
 // a wrong cost, it is a plausible wrong amount of money, and it reaches the
 // profit and loss statement.
-long long cogsFor(const std::vector<core::SaleItem>& items)
+long long cogsFor(const std::vector<core::SaleItem>& items, bool* overflow)
 {
     long long cogs = 0;
     // unitCostCents is per piece, so the multiplier must be the piece count.
@@ -52,6 +52,9 @@ long long cogsFor(const std::vector<core::SaleItem>& items)
         if (!detail::productFits(item.unitCostCents, item.piecesConsumed)) {
             qWarning() << "sale cost: item" << item.id
                        << "left out, its quantity times its unit cost overflows";
+            if (overflow) {
+                *overflow = true;
+            }
             continue;
         }
         long long term = item.unitCostCents * item.piecesConsumed;
@@ -70,6 +73,9 @@ long long cogsFor(const std::vector<core::SaleItem>& items)
             if (term == std::numeric_limits<long long>::min()) {
                 qWarning() << "sale cost: item" << item.id
                            << "left out, its negated cost would overflow";
+                if (overflow) {
+                    *overflow = true;
+                }
                 continue;
             }
             term = -term;
@@ -77,6 +83,9 @@ long long cogsFor(const std::vector<core::SaleItem>& items)
         if (!detail::sumFits(cogs, term)) {
             qWarning() << "sale cost: stopped at item" << item.id
                        << ", the running total would overflow";
+            if (overflow) {
+                *overflow = true;
+            }
             break;
         }
         cogs += term;
@@ -89,7 +98,8 @@ long long cogsFor(const std::vector<core::SaleItem>& items)
 // out and a reversed sale lands on zero. Deliberately no "skip the cancellation"
 // test — the cancellation carries its own items, exactly as the cash reversal
 // does, and skipping them would count the cost of goods that came back.
-long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines)
+long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines,
+                        bool* overflow)
 {
     long long cogs = 0;
     // unitCostCents is per piece, so the multiplier must be the piece count.
@@ -101,6 +111,9 @@ long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines)
         if (!detail::productFits(line.unitCostCents, line.piecesConsumed)) {
             qWarning() << "credit sale cost: item" << line.id
                        << "left out, its quantity times its unit cost overflows";
+            if (overflow) {
+                *overflow = true;
+            }
             continue;
         }
         long long term = line.unitCostCents * line.piecesConsumed;
@@ -114,6 +127,9 @@ long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines)
             if (term == std::numeric_limits<long long>::min()) {
                 qWarning() << "credit sale cost: item" << line.id
                            << "left out, its negated cost would overflow";
+                if (overflow) {
+                    *overflow = true;
+                }
                 continue;
             }
             term = -term;
@@ -123,6 +139,9 @@ long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines)
         if (!detail::sumFits(cogs, term)) {
             qWarning() << "credit sale cost: stopped at item" << line.id
                        << ", the running total would overflow";
+            if (overflow) {
+                *overflow = true;
+            }
             break;
         }
         cogs += term;
@@ -195,7 +214,9 @@ StoreReport ReportService::build(const QDateTime& from, const QDateTime& to) con
         // shelf again sitting in the profit and loss statement, while the revenue
         // above had already been cancelled. Same summing as the credit path below,
         // and for the same reason.
-        report.cogsCents += cogsFor(saleItems.findBySaleId(sale.id));
+        bool saleOverflow = false;
+        report.cogsCents += cogsFor(saleItems.findBySaleId(sale.id), &saleOverflow);
+        report.cogsOverflowOccurred = report.cogsOverflowOccurred || saleOverflow;
     }
 
     // Credit sales happened too, in the same period, and left out they made
@@ -223,7 +244,10 @@ StoreReport ReportService::build(const QDateTime& from, const QDateTime& to) con
         // and "-1 ventes" would be a worse answer than 0. The revenue line is not
         // floored — it carries the reversal honestly.
         report.salesCount += tx.amountCents > 0 ? 1 : -1;
-        report.cogsCents += creditCogsFor(creditItems.findByTransactionId(tx.id));
+        bool creditOverflow = false;
+        report.cogsCents += creditCogsFor(creditItems.findByTransactionId(tx.id),
+                                          &creditOverflow);
+        report.cogsOverflowOccurred = report.cogsOverflowOccurred || creditOverflow;
     }
     if (report.salesCount < 0) {
         report.salesCount = 0;
