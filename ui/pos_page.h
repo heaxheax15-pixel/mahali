@@ -64,6 +64,7 @@ public:
     long long linePriceAt(int row) const;
     int lastSaleId() const;
     QString noticeText() const;
+    QString countLabelText() const;
     void setEntryText(const QString& text);
     void setAdjustmentText(const QString& text);
     QTableWidget* table() const { return m_table; }

@@ -95,6 +95,9 @@ private slots:
     void pos_unit_switch_reprices_line();
     void pos_scanned_package_barcode_adds_carton_line();
     void pos_piece_and_carton_stay_two_rows();
+    void pos_count_label_shows_only_pieces_for_piece_lines();
+    void pos_count_label_shows_packages_then_pieces();
+    void pos_count_label_groups_packages_by_their_own_name();
     void pos_new_product_from_scan_records_opening_stock();
     void products_page_new_product_records_opening_stock();
     void posSaleRequiresOpenSession();
@@ -725,6 +728,150 @@ void UiTest::pos_piece_and_carton_stay_two_rows()
     QCOMPARE(page.linePriceAt(0), 60LL);
     QCOMPARE(page.linePriceAt(1), 1440LL);
     QCOMPARE(page.totalCents(), 1500LL);
+}
+
+void UiTest::pos_count_label_shows_only_pieces_for_piece_lines()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-count-pieces.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("20003");
+    product.name = QStringLiteral("ماء");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    product.packageName = QStringLiteral("كرتونة");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("20003"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 1);
+
+    // The quantity is the one editable cell, so it is set the way an edit
+    // reaches the page rather than through a setter the grid would bypass.
+    page.table()->item(0, 3)->setText(QStringLiteral("5"));
+    QVERIFY(QMetaObject::invokeMethod(&page, "onCellChanged", Q_ARG(int, 0), Q_ARG(int, 3)));
+    QCOMPARE(page.lineQuantityAt(0), 5LL);
+
+    const QString label = page.countLabelText();
+    QVERIFY(label.contains(QStringLiteral("5 قطعة")));
+    // A piece-only cart has no carton to name, so the word must not appear.
+    QVERIFY(!label.contains(QStringLiteral("كرتونة")));
+    QVERIFY(label.contains(QStringLiteral("Articles: 1")));
+}
+
+void UiTest::pos_count_label_shows_packages_then_pieces()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-count-pack-then-piece.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("20004");
+    product.name = QStringLiteral("ماء");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    product.packageName = QStringLiteral("كرتونة");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+
+    // Two cartons: scan the piece code, turn the line into a carton, then type the
+    // count. One carton is one carton, so the number is what the cashier enters.
+    page.setEntryText(QStringLiteral("20004"));
+    page.addEntry();
+    auto* unitBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    unitBox->setCurrentIndex(unitBox->findData(QStringLiteral("package")));
+    page.table()->item(0, 3)->setText(QStringLiteral("2"));
+    QVERIFY(QMetaObject::invokeMethod(&page, "onCellChanged", Q_ARG(int, 0), Q_ARG(int, 3)));
+
+    // Three pieces of the same product: a second scan defaults to a piece, which
+    // lands on a line of its own because the unit differs from the carton line.
+    page.setEntryText(QStringLiteral("20004"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 2);
+    page.table()->item(1, 3)->setText(QStringLiteral("3"));
+    QVERIFY(QMetaObject::invokeMethod(&page, "onCellChanged", Q_ARG(int, 1), Q_ARG(int, 3)));
+
+    const QString label = page.countLabelText();
+    QVERIFY(label.contains(QStringLiteral("2 كرتونة")));
+    QVERIFY(label.contains(QStringLiteral("3 قطعة")));
+    QVERIFY(label.contains(QStringLiteral(" + ")));
+    // Packages lead and pieces follow, so the carton the cashier read first stays
+    // in front of the loose count.
+    const int carton = label.indexOf(QStringLiteral("كرتونة"));
+    const int piece = label.indexOf(QStringLiteral("قطعة"));
+    QVERIFY(carton >= 0);
+    QVERIFY(piece >= 0);
+    QVERIFY(carton < piece);
+}
+
+void UiTest::pos_count_label_groups_packages_by_their_own_name()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-count-package-names.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product bala;
+    bala.barcode = QStringLiteral("30001");
+    bala.name = QStringLiteral("تفاح");
+    bala.salePriceCents = 100;
+    bala.costPriceCents = 90;
+    bala.piecesPerPackage = 12;
+    bala.packageName = QStringLiteral("بالة");
+    const int balaId = products.save(bala);
+    QVERIFY(balaId > 0);
+    products.adjustStock(balaId, 50, QStringLiteral("purchase"));
+
+    core::Product carton;
+    carton.barcode = QStringLiteral("30002");
+    carton.name = QStringLiteral("برتقال");
+    carton.salePriceCents = 60;
+    carton.costPriceCents = 58;
+    carton.piecesPerPackage = 24;
+    carton.packageName = QStringLiteral("كرتونة");
+    const int cartonId = products.save(carton);
+    QVERIFY(cartonId > 0);
+    products.adjustStock(cartonId, 50, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+
+    page.setEntryText(QStringLiteral("30001"));
+    page.addEntry();
+    auto* balaBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(balaBox);
+    balaBox->setCurrentIndex(balaBox->findData(QStringLiteral("package")));
+
+    page.setEntryText(QStringLiteral("30002"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 2);
+    auto* cartonBox = qobject_cast<QComboBox*>(page.table()->cellWidget(1, 2));
+    QVERIFY(cartonBox);
+    cartonBox->setCurrentIndex(cartonBox->findData(QStringLiteral("package")));
+
+    // Each carton is counted under its own name, not folded into one "carton"
+    // figure, and the first-seen order puts "بالة" before "كرتونة".
+    const QString label = page.countLabelText();
+    QVERIFY(label.contains(QStringLiteral("1 بالة")));
+    QVERIFY(label.contains(QStringLiteral("1 كرتونة")));
+    QVERIFY(label.contains(QStringLiteral(" + ")));
+    const int balaPos = label.indexOf(QStringLiteral("بالة"));
+    const int cartonPos = label.indexOf(QStringLiteral("كرتونة"));
+    QVERIFY(balaPos >= 0);
+    QVERIFY(cartonPos >= 0);
+    QVERIFY(balaPos < cartonPos);
 }
 
 // Covers the products-page add path, not the till: the same opening-count

@@ -481,6 +481,11 @@ QString PosPage::noticeText() const
     return m_notice->text();
 }
 
+QString PosPage::countLabelText() const
+{
+    return m_countLabel->text();
+}
+
 void PosPage::setEntryText(const QString& text)
 {
     m_entry->setText(text);
@@ -928,17 +933,49 @@ void PosPage::setNotice(const QString& text, bool ok)
 void PosPage::refreshTotals()
 {
     long long total = 0;
-    long long units = 0;
     for (const PosLine& line : m_lines) {
         total += line.unitPriceCents * line.quantity;
-        units += line.quantity;
     }
     const long long adjustment = m_adjustmentCents;
     // The hero figure is what the customer is charged, so the adjustment is inside
     // it rather than a correction shown next to it: a total the till is about to
     // disagree with is worse than one line too many.
     const long long payable = total + adjustment;
-    m_countLabel->setText(tr("Articles: %1 | Unités: %2").arg(m_lines.size()).arg(units));
+    // Group by unit so a carton line is not shown as one "unit". Two cartons and
+    // three pieces are 2 + 3 = 5 lines if you sum the numbers, but they are 48
+    // pieces and 3 pieces on the shelf, and a cashier reading "Unités: 5" cannot
+    // see that. First-seen order is kept so a carton renamed mid-cart does not
+    // silently reorder the label between repaints.
+    QHash<QString, long long> byPackageName;
+    QStringList packageOrder;
+    long long pieceQty = 0;
+    for (const PosLine& line : m_lines) {
+        if (line.unitKind == QStringLiteral("package")) {
+            const QString name = line.packageName.isEmpty() ? tr("كرتونة")
+                                                            : line.packageName;
+            if (!byPackageName.contains(name)) {
+                packageOrder.append(name);
+            }
+            byPackageName[name] += line.quantity;
+        } else {
+            pieceQty += line.quantity;
+        }
+    }
+
+    QStringList parts;
+    parts.reserve(packageOrder.size() + 1);
+    for (const QString& name : packageOrder) {
+        parts.append(QStringLiteral("%1 %2").arg(byPackageName.value(name)).arg(name));
+    }
+    if (pieceQty > 0) {
+        parts.append(QStringLiteral("%1 %2").arg(pieceQty).arg(tr("قطعة")));
+    }
+
+    QString label = tr("Articles: %1").arg(m_lines.size());
+    if (!parts.isEmpty()) {
+        label += QStringLiteral(" | ") + parts.join(QStringLiteral(" + "));
+    }
+    m_countLabel->setText(label);
     m_totalLabel->setText(formatMoney(payable));
     m_paidLabel->setText(tr("Payé : %1").arg(formatMoney(0)));
     m_remainingLabel->setText(tr("Reste : %1").arg(formatMoney(payable)));
