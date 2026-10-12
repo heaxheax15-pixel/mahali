@@ -1331,12 +1331,12 @@ QTableWidget#productTable QLineEdit {
 
 /* A button inside a row suffers the same overflow as the editor above it, and
    for the same reason: the general rule gives a button 42px of content plus
-   14px of padding above and below, which is 72px in all, while the row is 42px,
+   14px of padding above and below, which is 72px in all, while the row is 54px,
    so the button hung past the row and its label was clipped. The padding drops
    to 7px inside a table cell, which is what lets both action buttons fit. */
 QTableWidget#usersTable QPushButton {
     min-height: 21px;
-    padding: 7px 14px;
+    padding: 4px 14px;
 }
 
 /* ---------- التبويبات ---------- */

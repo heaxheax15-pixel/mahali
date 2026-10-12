@@ -159,7 +159,11 @@ UsersPage::UsersPage(app::data::Database& db, QWidget* parent)
     m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     m_table->horizontalHeader()->resizeSection(2, 80);
     m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_table->verticalHeader()->setDefaultSectionSize(42);
+    // 54px clears the tallest state a row can be in: a 21px text line plus the
+    // themes' in-table button padding, plus the item's own 10px top and bottom.
+    // The previous 42 left 22px for the cell widget while the buttons need more
+    // than that, and Qt clipped the labels from above.
+    m_table->verticalHeader()->setDefaultSectionSize(54);
     m_table->verticalHeader()->hide();
 
     auto* mainLayout = new QVBoxLayout(this);
@@ -220,7 +224,10 @@ void UsersPage::rebuildTable()
 
         auto* actionsWidget = new QWidget;
         auto* actionsLayout = new QHBoxLayout(actionsWidget);
-        actionsLayout->setContentsMargins(4, 2, 4, 2);
+        // No vertical margin: the row now provides the height the buttons need
+        // and a 2px inset on top and bottom was the last of the space being
+        // taken from them.
+        actionsLayout->setContentsMargins(4, 0, 4, 0);
         actionsLayout->setSpacing(6);
 
         // Each button is held at its own size hint. The themes pad a button by

@@ -127,6 +127,7 @@ private slots:
     void users_page_does_not_render_pins();
     void users_page_shows_no_pin_column();
     void users_page_actions_column_is_wide_enough();
+    void users_page_action_buttons_fit_inside_the_row();
     void user_edit_pin_persists();
     void master_recovery_grants_access();
     void status_bar_shows_occasion_when_active();
@@ -2441,6 +2442,49 @@ void UiTest::users_page_actions_column_is_wide_enough()
     QVERIFY2(table->columnWidth(3) >= 180,
              qPrintable(QStringLiteral("actions column is only %1px wide")
                             .arg(table->columnWidth(3))));
+}
+
+void UiTest::users_page_action_buttons_fit_inside_the_row()
+{
+    const QString path = m_dir.filePath(QStringLiteral("users_page_action_height_test.sqlite"));
+    QFile::remove(path);
+    data::Database db(path, data::DatabaseMode::Server);
+    data::UserRepository repo(db);
+
+    core::User user;
+    user.name = QStringLiteral("المدير");
+    user.role = QStringLiteral("admin");
+    QVERIFY(repo.save(user) > 0);
+
+    app::ui::UsersPage page(db);
+    page.refresh();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table);
+    QVERIFY2(table->rowHeight(0) >= 54,
+             qPrintable(QStringLiteral("row 0 is only %1px tall").arg(table->rowHeight(0))));
+
+    QWidget* actions = table->cellWidget(0, 3);
+    QVERIFY2(actions, "no actions cell widget on row 0");
+
+    const QList<QPushButton*> buttons = actions->findChildren<QPushButton*>();
+    QVERIFY(!buttons.isEmpty());
+    for (QPushButton* button : buttons) {
+        QVERIFY2(button->height() <= actions->height(),
+                 qPrintable(QStringLiteral("button \"%1\" is %2px in a %3px cell widget")
+                                .arg(button->text())
+                                .arg(button->height())
+                                .arg(actions->height())));
+        QVERIFY2(button->height() >= button->sizeHint().height(),
+                 qPrintable(QStringLiteral("button \"%1\" is clipped to %2px under its %3px hint")
+                                .arg(button->text())
+                                .arg(button->height())
+                                .arg(button->sizeHint().height())));
+        QVERIFY2(actions->height() <= table->rowHeight(0),
+                 qPrintable(QStringLiteral("cell widget %1px exceeds the %2px row")
+                                .arg(actions->height())
+                                .arg(table->rowHeight(0))));
+    }
 }
 
 // Drives the real modal that UsersPage::userDialog() opens, so the PIN the
