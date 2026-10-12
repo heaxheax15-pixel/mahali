@@ -35,6 +35,25 @@ QByteArray fromHex(const QString& hex)
     return QByteArray::fromHex(hex.toLatin1());
 }
 
+// Constant-time equality on two byte arrays of the same length. The
+// length check can short-circuit because the hash length is fixed by
+// PBKDF2 and is not attacker-controlled — every guess produces the same
+// output size. The byte loop cannot: a plain == returns at the first
+// mismatch, so the time to reject a wrong password would grow with the
+// number of leading bytes guessed correctly, and that is a timing oracle
+// for the stored hash. |= (not ||) keeps the loop running to the end.
+bool constantTimeEquals(const QByteArray& a, const QByteArray& b)
+{
+    if (a.size() != b.size()) {
+        return false;
+    }
+    unsigned char acc = 0;
+    for (qsizetype i = 0; i < a.size(); ++i) {
+        acc |= static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]);
+    }
+    return acc == 0;
+}
+
 } // namespace
 
 AdminSecretRepository::AdminSecretRepository(Database& db)
@@ -73,7 +92,7 @@ bool AdminSecretRepository::verifyMaster(int userId, const QString& password) co
 
     const QByteArray salt = fromHex(storedSaltHex);
     const QByteArray derived = deriveKey(password, salt);
-    return toHex(derived) == storedHashHex;
+    return constantTimeEquals(derived, fromHex(storedHashHex));
 }
 
 std::optional<int> AdminSecretRepository::findAdminByMaster(const QString& password) const
@@ -91,7 +110,7 @@ std::optional<int> AdminSecretRepository::findAdminByMaster(const QString& passw
 
         const QByteArray salt = fromHex(storedSaltHex);
         const QByteArray derived = deriveKey(password, salt);
-        if (toHex(derived) == storedHashHex) {
+        if (constantTimeEquals(derived, fromHex(storedHashHex))) {
             return userId;
         }
     }

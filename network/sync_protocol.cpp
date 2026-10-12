@@ -29,6 +29,17 @@ bool SyncProtocol::batchSizeValid(int count)
 
 SyncErrorClass SyncProtocol::errorClassForStatus(int httpStatus)
 {
+    if (httpStatus >= 100 && httpStatus <= 199) {
+        // Informational only: no final status means the server never answered,
+        // and re-sending will get the same non-answer.
+        return SyncErrorClass::Permanent;
+    }
+    if (httpStatus >= 300 && httpStatus <= 399) {
+        // Reached only when the client refused to follow the redirect (e.g. an
+        // https->http downgrade); re-requesting the same URL hits the same
+        // refusal.
+        return SyncErrorClass::Permanent;
+    }
     if (httpStatus >= 400 && httpStatus <= 499) {
         return SyncErrorClass::Permanent;
     }

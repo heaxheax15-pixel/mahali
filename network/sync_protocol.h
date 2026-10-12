@@ -28,7 +28,8 @@ public:
 
     // Batches are capped at 50 operations and must be non-empty.
     static bool batchSizeValid(int count);
-    // HTTP status taxa: 4xx permanent, 5xx retryable, 2xx none, else network.
+    // HTTP status taxa: 1xx/3xx/4xx permanent, 5xx retryable, 2xx none, else
+    // network.
     static SyncErrorClass errorClassForStatus(int httpStatus);
 };
 

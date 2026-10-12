@@ -2117,7 +2117,7 @@ Stock : %4</translation>
         <location line="-515"/>
         <location line="+45"/>
         <source>Impossible de chiffrer « %1 »</source>
-        <translation>Impossible de chiffrer « %1 »</translation>
+        <translation>تعذّر تحويل « %1 » إلى رقم</translation>
     </message>
     <message>
         <location line="-22"/>

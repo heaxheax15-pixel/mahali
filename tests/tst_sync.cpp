@@ -18,6 +18,7 @@ private slots:
     void rejectInvalidLegacyNumericAmounts();
     void batchSizeLimits();
     void errorClassForStatus();
+    void error_class_treats_1xx_and_3xx_as_permanent();
 };
 
 void SyncTest::hmacSha256IsDeterministic()
@@ -117,7 +118,27 @@ void SyncTest::errorClassForStatus()
     QCOMPARE(SyncProtocol::errorClassForStatus(500), SyncErrorClass::Retry);
     QCOMPARE(SyncProtocol::errorClassForStatus(503), SyncErrorClass::Retry);
     QCOMPARE(SyncProtocol::errorClassForStatus(0), SyncErrorClass::Network);
-    QCOMPARE(SyncProtocol::errorClassForStatus(100), SyncErrorClass::Network);
+    // 1xx is an informational response with no final status — the server has
+    // not answered, and re-sending will get the same non-answer. Permanent.
+    // 3xx reaches this branch only when Qt refused to follow a redirect
+    // (usually an https→http downgrade), and re-sending hits the same refusal.
+    QCOMPARE(SyncProtocol::errorClassForStatus(100), SyncErrorClass::Permanent);
+}
+
+void SyncTest::error_class_treats_1xx_and_3xx_as_permanent()
+{
+    using app::network::SyncErrorClass;
+    using app::network::SyncProtocol;
+
+    const SyncErrorClass permanent = SyncProtocol::errorClassForStatus(400);
+    QCOMPARE(permanent, SyncErrorClass::Permanent);
+
+    for (const int status : { 100, 199, 300, 301, 399 }) {
+        QCOMPARE(SyncProtocol::errorClassForStatus(status), permanent);
+    }
+
+    QCOMPARE(SyncProtocol::errorClassForStatus(500), SyncErrorClass::Retry);
+    QCOMPARE(SyncProtocol::errorClassForStatus(200), SyncErrorClass::None);
 }
 
 QTEST_GUILESS_MAIN(SyncTest)

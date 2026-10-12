@@ -142,6 +142,7 @@ private slots:
     void invalid_outbox_payload_is_permanently_failed_with_error();
     void user_pin_roundtrip();
     void admin_master_roundtrip();
+    void verify_master_rejects_wrong_password();
     void language_setting_persists();
     void repository_error_is_recorded();
     void last_error_clears_on_success();
@@ -3307,6 +3308,28 @@ void DataLayerTest::admin_master_roundtrip()
     QCOMPARE(*found, id);
 
     QVERIFY(!secretRepo.findAdminByMaster(QStringLiteral("wrong")).has_value());
+}
+
+void DataLayerTest::verify_master_rejects_wrong_password()
+{
+    const QString path = m_dir.filePath(QStringLiteral("verify-master.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::UserRepository userRepo(db);
+    data::AdminSecretRepository secretRepo(db);
+
+    core::User admin;
+    admin.name = QStringLiteral("المدير");
+    admin.role = QStringLiteral("admin");
+    const int id = userRepo.save(admin);
+    QVERIFY(id > 0);
+
+    QVERIFY(secretRepo.setMaster(id, QStringLiteral("correct")));
+    QVERIFY(secretRepo.verifyMaster(id, QStringLiteral("correct")));
+    QVERIFY(!secretRepo.verifyMaster(id, QStringLiteral("wrong")));
+    QVERIFY(!secretRepo.verifyMaster(id, QString()));
+    QVERIFY(!secretRepo.verifyMaster(id, QStringLiteral("correct ")));
+    QVERIFY(!secretRepo.verifyMaster(id, QStringLiteral("Correct")));
 }
 
 void DataLayerTest::language_setting_persists()

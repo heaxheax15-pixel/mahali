@@ -8,3 +8,6 @@ compile_commands.json
 # Build artifacts produced by ctest and the compiler
 build.log
 Testing/
+
+# Bare lrelease writes .qm next to the .ts; the build writes to build/
+translations/*.qm
