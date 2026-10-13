@@ -23,6 +23,10 @@ struct Sale {
     // The occasion running when the sale was recorded, absent when the shop had
     // none running. A sale outside every occasion is a normal day, not a gap.
     std::optional<int> occasionId;
+    // A-YYYY-NNNN as printed on the customer's paper. Null until minted, and
+    // never set on a reversal row — a reversal is not a new sale, it is a
+    // reference to the sale it undoes, and that sale still owns the number.
+    QString receiptNumber;
 };
 
 } // namespace app::core

@@ -50,6 +50,8 @@ target_sources(mahali-data PRIVATE
     purchase_item_repository.cpp
     purchase_repository.cpp
     purchase_service.cpp
+    receipt_number_service.cpp
+    receipt_number_service.h
     report_service.cpp
     schema_migrations.cpp
     sale_item_repository.cpp

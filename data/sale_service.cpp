@@ -8,6 +8,7 @@
 #include "cash_drawer.h"
 #include "date_utils.h"
 #include "audit_log_repository.h"
+#include "receipt_number_service.h"
 #include "sale_rules.h"
 
 namespace app::data {
@@ -138,6 +139,13 @@ QString error;
     transaction.amountCents = total;
     transaction.adjustmentCents = adjustmentCents;
     transaction.createdAt = QDateTime::currentDateTime();
+    const QString receiptNumber = mintReceiptNumber(m_db);
+    if (receiptNumber.isEmpty()) {
+        m_db.rollback();
+        result.error = QStringLiteral("recordCustomerDebt: receipt number could not be minted");
+        return result;
+    }
+    transaction.receiptNumber = receiptNumber;
     const int transactionId = m_customerTransactions.insert(transaction);
     if (transactionId == 0) {
         m_db.rollback();
@@ -287,6 +295,13 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
     if (const std::optional<core::Occasion> occasion = m_occasionService.current()) {
         sale.occasionId = occasion->id;
     }
+    const QString receiptNumber = mintReceiptNumber(m_db);
+    if (receiptNumber.isEmpty()) {
+        m_db.rollback();
+        result.error = QStringLiteral("recordSale: receipt number could not be minted");
+        return result;
+    }
+    sale.receiptNumber = receiptNumber;
     const int saleId = m_sales.insert(sale);
     if (saleId == 0) {
         m_db.rollback();
@@ -418,6 +433,8 @@ SaleReverseResult SaleService::reverseSale(int saleId, int cashSessionId)
     reversal.deviceId = original->deviceId;
     reversal.occasionId = original->occasionId;
     reversal.reversedSaleId = saleId;
+    // A reversal carries no receipt number: it is a reference to the sale it
+    // undoes, and that sale still owns the paper.
     const int reversalId = m_sales.insert(reversal);
     if (reversalId == 0) {
         m_db.rollback();
@@ -569,6 +586,8 @@ SaleReverseResult SaleService::reverseCustomerDebt(int transactionId)
     reversal.adjustmentCents = -original->adjustmentCents;
     reversal.createdAt = QDateTime::currentDateTime();
     reversal.reversedTransactionId = transactionId;
+    // A reversal carries no receipt number: it is a reference to the sale it
+    // undoes, and that sale still owns the paper.
     const int reversalId = m_customerTransactions.insert(reversal);
     if (reversalId == 0) {
         m_db.rollback();

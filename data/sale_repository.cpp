@@ -29,14 +29,19 @@ core::Sale saleFromQuery(const QSqlQuery& query)
     if (const std::optional<long long> occasionId = toLongLong(query.value(6))) {
         sale.occasionId = static_cast<int>(*occasionId);
     }
+    sale.receiptNumber = query.value(8).toString();
     return sale;
 }
 
 // adjustment_cents comes last so the indices above keep their meaning: the column
 // was added to the table after the rest of it, and every query in this file reads
-// by position.
+// by position. receipt_number follows it for the same reason, and customer_id
+// after that is selected but read by nothing yet: nothing writes it in this
+// phase, so it is NULL on every row and a reader that ignored the column would
+// see exactly the same sales.
 const char* kSaleColumns =
-    "id, created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id, adjustment_cents";
+    "id, created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id, adjustment_cents, "
+    "receipt_number, customer_id";
 
 } // namespace
 
@@ -99,8 +104,8 @@ int SaleRepository::insert(const core::Sale& sale)
 {
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("INSERT INTO sales (created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id, adjustment_cents) "
-                       "VALUES (?, ?, ?, ?, ?, ?, ?)"));
+        QStringLiteral("INSERT INTO sales (created_at, total_cents, device_id, oversold, reversed_sale_id, occasion_id, adjustment_cents, receipt_number) "
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(toIso(sale.createdAt.isValid() ? sale.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(sale.totalCents);
     query.addBindValue(sale.deviceId);
@@ -114,6 +119,15 @@ int SaleRepository::insert(const core::Sale& sale)
         query.addBindValue(QVariant());
     }
     query.addBindValue(sale.adjustmentCents);
+    // An empty number binds a real NULL rather than "". A row that has not been
+    // through the numbering service holds no number at all, and the distinction
+    // has to survive storage: `WHERE receipt_number IS NULL` is what finds the
+    // unreceipted rows, a query that can never be written against "".
+    if (sale.receiptNumber.isEmpty()) {
+        query.addBindValue(QVariant());
+    } else {
+        query.addBindValue(sale.receiptNumber);
+    }
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("SaleRepository::insert"));
         return 0;

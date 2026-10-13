@@ -475,7 +475,15 @@ void Database::createSchema()
             "reversed_sale_id INTEGER NOT NULL DEFAULT 0,"
             // Nullable on purpose, unlike the 0 sentinels above: no occasion
             // running is a real state, and occasion_id is never 0.
-            "occasion_id INTEGER);"),
+            "occasion_id INTEGER,"
+            // A-YYYY-NNNN on paper; NULL until migration 15 backfills it or a
+            // fresh sale mints one. TEXT because the device prefix is part of it.
+            "receipt_number TEXT,"
+            // NULL for a walk-in sale; set only when the sale is deliberately
+            // attached to a registered customer so the receipt can carry the name.
+            // Credit sales do not use this column: they live in
+            // customer_transactions, which already owns the customer link.
+            "customer_id INTEGER);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS occasions ("
@@ -519,7 +527,11 @@ void Database::createSchema()
             // Same meaning as sales.adjustment_cents, and 0 for the same reason.
             "adjustment_cents INTEGER NOT NULL DEFAULT 0,"
             "created_at TEXT NOT NULL,"
-            "reversed_transaction_id INTEGER NOT NULL DEFAULT 0);"),
+            "reversed_transaction_id INTEGER NOT NULL DEFAULT 0,"
+            // A-YYYY-NNNN on paper; NULL until migration 15 backfills it or a
+            // fresh credit sale mints one. TEXT because the device prefix is part
+            // of it.
+            "receipt_number TEXT);"),
 
         QStringLiteral(
             "CREATE TABLE IF NOT EXISTS customer_transaction_items ("
@@ -782,6 +794,16 @@ void Database::createSchema()
             "pieces_consumed INTEGER NOT NULL DEFAULT 0,"
             "FOREIGN KEY (return_id) REFERENCES supplier_returns(id),"
             "FOREIGN KEY (product_id) REFERENCES products(id));"),
+
+        QStringLiteral(
+            // One row per calendar year. last_number is the highest receipt number
+            // issued that year across both cash and credit sales, because the paper
+            // a customer holds does not distinguish the two. The increment runs
+            // inside the same transaction that writes the sale, so a crash between
+            // the two can never lose a number or issue the same one twice.
+            "CREATE TABLE IF NOT EXISTS receipt_sequences ("
+            "year INTEGER PRIMARY KEY,"
+            "last_number INTEGER NOT NULL DEFAULT 0);"),
 
         QStringLiteral(
             "INSERT OR IGNORE INTO sync_sequence (id, value) VALUES (1, 0);"),

@@ -173,6 +173,10 @@ private slots:
     void occasion_roundtrip();
     void occasion_service_activate_deactivate();
     void findBetween_includes_boundary_days();
+    void receipt_number_migration_adds_columns_and_backfills();
+    void receipt_number_mints_sequentially_within_a_year();
+    void receipt_number_shared_between_cash_and_credit();
+    void receipt_number_not_minted_on_reversal();
 
 private:
     QTemporaryDir m_dir;
@@ -1447,8 +1451,10 @@ void DataLayerTest::product_packages_migration_adds_columns_to_a_legacy_ledger()
         // rewritten, and the rows above would read as zeroes if the guard were not
         // there.
         // Pinned to the literal rather than to kSchemaVersion, which would make the
-        // assertion true whatever the stamp was and stop it testing anything.
-        QCOMPARE(data::readSchemaVersion(migratedDb), 14);
+        // assertion true whatever the stamp was and stop it testing anything. The
+        // figure moves with every new migration, which is the whole point: a bump
+        // that forgot to actually stamp this database would leave it one short.
+        QCOMPARE(data::readSchemaVersion(migratedDb), 15);
         migratedDb.close();
     }
     QSqlDatabase::removeDatabase(connectionName);
@@ -1515,7 +1521,9 @@ void DataLayerTest::migration_14_backfills_pieces_per_package_from_package_size(
         QCOMPARE(after.value(1).toInt(), 4);
         QVERIFY(!after.next());
 
-        QCOMPARE(data::readSchemaVersion(legacyDb), 14);
+        // Pinned to the literal for the same reason as the package migration test:
+        // it must move with each new migration, or it stops testing the stamp.
+        QCOMPARE(data::readSchemaVersion(legacyDb), 15);
 
         // A second run changes nothing. The first run moved row 1's new column off
         // the default, so the guard's WHERE clause no longer matches it, and the two
@@ -1531,7 +1539,8 @@ void DataLayerTest::migration_14_backfills_pieces_per_package_from_package_size(
             QCOMPARE(again.value(0).toInt(), want);
         }
         QVERIFY(!again.next());
-        QCOMPARE(data::readSchemaVersion(legacyDb), 14);
+        // Still stamped after the second, idempotent run.
+        QCOMPARE(data::readSchemaVersion(legacyDb), 15);
 
         legacyDb.close();
     }
@@ -5007,6 +5016,234 @@ void DataLayerTest::invalid_outbox_payload_is_permanently_failed_with_error()
     QVERIFY(failed.has_value());
     QCOMPARE(failed->status, core::SyncOutboxStatus::PermanentFailed);
     QVERIFY2(failed->lastError.contains(QStringLiteral("fractional")), qPrintable(failed->lastError));
+}
+
+// A shop that upgrades arrives at this build with rows already in its ledgers and
+// no receipt number on any of them. The migration gives every one of them a number
+// in the order it was written, from one counter shared by both ledgers, and seeds
+// that counter so the next sale continues the sequence rather than restarting it.
+void DataLayerTest::receipt_number_migration_adds_columns_and_backfills()
+{
+    const QString path = m_dir.filePath(QStringLiteral("receipt_number_migration.sqlite"));
+    QFile::remove(path);
+    const QString connectionName = QStringLiteral("receipt_number_migration_test");
+    {
+        QSqlDatabase legacyDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacyDb.setDatabaseName(path);
+        QVERIFY(legacyDb.open());
+        QSqlQuery legacy(legacyDb);
+        // Both ledgers as they were before numbering: no receipt_number on either,
+        // and no customer_id on sales.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE sales (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, "
+            "total_cents INTEGER NOT NULL, adjustment_cents INTEGER NOT NULL DEFAULT 0, "
+            "device_id TEXT NOT NULL, oversold INTEGER NOT NULL DEFAULT 0, "
+            "reversed_sale_id INTEGER NOT NULL DEFAULT 0, occasion_id INTEGER)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE customer_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "customer_id INTEGER NOT NULL, amount_cents INTEGER NOT NULL, "
+            "adjustment_cents INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, "
+            "reversed_transaction_id INTEGER NOT NULL DEFAULT 0)")));
+        // The migration seeds a defaulted setting, so the table has to be there.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE settings (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "key TEXT UNIQUE NOT NULL, value TEXT NOT NULL)")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO sales (created_at, total_cents, device_id) VALUES "
+            "('2026-01-02T10:00:00.000', 900, 'dev'), "
+            "('2026-01-02T11:00:00.000', 900, 'dev'), "
+            "('2026-01-02T12:00:00.000', 900, 'dev')")));
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO customer_transactions (customer_id, amount_cents, created_at) VALUES "
+            "(1, 900, '2026-01-02T13:00:00.000'), "
+            "(1, 900, '2026-01-02T14:00:00.000')")));
+        // One below this build, so exactly the numbering migration is pending.
+        QVERIFY(legacy.exec(QStringLiteral("PRAGMA user_version = 14")));
+        legacyDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    QStringList firstSales;
+    QStringList firstCredit;
+    int seededLastNumber = -1;
+    {
+        QSqlDatabase migratedDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        migratedDb.setDatabaseName(path);
+        QVERIFY(migratedDb.open());
+
+        const auto columnsOf = [&migratedDb](const QString& table) {
+            QStringList columns;
+            QSqlQuery info(migratedDb);
+            if (!info.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table))) {
+                return columns;
+            }
+            while (info.next()) {
+                columns << info.value(1).toString();
+            }
+            return columns;
+        };
+
+        data::runSchemaMigrations(migratedDb);
+
+        const QStringList saleColumns = columnsOf(QStringLiteral("sales"));
+        QVERIFY2(saleColumns.contains(QStringLiteral("receipt_number")),
+                 "sales.receipt_number was not added");
+        QVERIFY2(saleColumns.contains(QStringLiteral("customer_id")),
+                 "sales.customer_id was not added");
+        QVERIFY2(columnsOf(QStringLiteral("customer_transactions"))
+                     .contains(QStringLiteral("receipt_number")),
+                 "customer_transactions.receipt_number was not added");
+
+        // The three cash sales in the order they were written.
+        QSqlQuery sales(migratedDb);
+        QVERIFY(sales.exec(QStringLiteral(
+            "SELECT receipt_number FROM sales ORDER BY created_at ASC, id ASC")));
+        while (sales.next()) {
+            firstSales << sales.value(0).toString();
+        }
+        // Then the two credit sales, continuing the same counter.
+        QSqlQuery credit(migratedDb);
+        QVERIFY(credit.exec(QStringLiteral(
+            "SELECT receipt_number FROM customer_transactions ORDER BY created_at ASC, id ASC")));
+        while (credit.next()) {
+            firstCredit << credit.value(0).toString();
+        }
+
+        QSqlQuery sequence(migratedDb);
+        QVERIFY(sequence.exec(QStringLiteral("SELECT last_number FROM receipt_sequences WHERE year = 2026")));
+        QVERIFY(sequence.next());
+        seededLastNumber = sequence.value(0).toInt();
+
+        // The migration is idempotent: run again and the numbers are untouched.
+        data::runSchemaMigrations(migratedDb);
+        QStringList secondSales;
+        QSqlQuery again(migratedDb);
+        QVERIFY(again.exec(QStringLiteral(
+            "SELECT receipt_number FROM sales ORDER BY created_at ASC, id ASC")));
+        while (again.next()) {
+            secondSales << again.value(0).toString();
+        }
+        QCOMPARE(secondSales, firstSales);
+
+        migratedDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    QCOMPARE(firstSales,
+             (QStringList{QStringLiteral("A-2026-0001"), QStringLiteral("A-2026-0002"),
+                          QStringLiteral("A-2026-0003")}));
+    // One shared counter across both ledgers: the credit rows follow the cash ones.
+    QCOMPARE(firstCredit,
+             (QStringList{QStringLiteral("A-2026-0004"), QStringLiteral("A-2026-0005")}));
+    QCOMPARE(seededLastNumber, 5);
+}
+
+// Minting is sequential within a year, and the counter records the highest number
+// issued so the sequence survives a restart.
+void DataLayerTest::receipt_number_mints_sequentially_within_a_year()
+{
+    AdjustmentFixture f(m_dir.filePath(QStringLiteral("receipt_mint_within_year.sqlite")));
+    QVERIFY(f.sessionId > 0);
+
+    data::SaleService sales(f.db);
+    for (int i = 0; i < 3; ++i) {
+        const data::SaleRecordResult recorded =
+            sales.recordSale({f.one()}, f.sessionId, QStringLiteral("dev"), /*allowOversold=*/false);
+        QVERIFY2(recorded.ok, qPrintable(recorded.error));
+    }
+
+    const int year = QDate::currentDate().year();
+    QStringList numbers;
+    QSqlQuery query(f.db.handle());
+    QVERIFY(query.exec(QStringLiteral("SELECT receipt_number FROM sales ORDER BY id ASC")));
+    while (query.next()) {
+        numbers << query.value(0).toString();
+    }
+    QCOMPARE(numbers,
+             (QStringList{QStringLiteral("A-%1-0001").arg(year),
+                          QStringLiteral("A-%1-0002").arg(year),
+                          QStringLiteral("A-%1-0003").arg(year)}));
+
+    QSqlQuery sequence(f.db.handle());
+    QVERIFY(sequence.exec(
+        QStringLiteral("SELECT last_number FROM receipt_sequences WHERE year = %1").arg(year)));
+    QVERIFY(sequence.next());
+    QCOMPARE(sequence.value(0).toInt(), 3);
+}
+
+// Cash and credit draw on the same counter: the paper a customer holds does not
+// say which ledger the sale went to.
+void DataLayerTest::receipt_number_shared_between_cash_and_credit()
+{
+    AdjustmentFixture f(m_dir.filePath(QStringLiteral("receipt_shared_sequence.sqlite")));
+    QVERIFY(f.sessionId > 0);
+
+    core::Customer customer;
+    customer.name = QStringLiteral("زبون-تسلسل");
+    data::CustomerRepository customers(f.db);
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    data::SaleService sales(f.db);
+    QVERIFY2(sales.recordSale({f.one()}, f.sessionId, QStringLiteral("dev"), false).ok,
+             "the first cash sale did not record");
+    QVERIFY2(sales.recordCustomerDebt(customerId, {f.one()}, QStringLiteral("dev"), false).ok,
+             "the credit sale did not record");
+    QVERIFY2(sales.recordSale({f.one()}, f.sessionId, QStringLiteral("dev"), false).ok,
+             "the second cash sale did not record");
+
+    const int year = QDate::currentDate().year();
+    const QString prefix = QStringLiteral("A-%1-").arg(year);
+
+    QStringList cashNumbers;
+    QSqlQuery cash(f.db.handle());
+    QVERIFY(cash.exec(QStringLiteral("SELECT receipt_number FROM sales ORDER BY id ASC")));
+    while (cash.next()) {
+        cashNumbers << cash.value(0).toString();
+    }
+    QCOMPARE(cashNumbers,
+             (QStringList{prefix + QStringLiteral("0001"), prefix + QStringLiteral("0003")}));
+
+    QSqlQuery credit(f.db.handle());
+    QVERIFY(credit.exec(QStringLiteral(
+        "SELECT receipt_number FROM customer_transactions ORDER BY id ASC")));
+    QVERIFY(credit.next());
+    QCOMPARE(credit.value(0).toString(), prefix + QStringLiteral("0002"));
+}
+
+// A reversal is a reference to the sale it undoes, not a new sale, so it is never
+// given a number of its own; the paper the customer holds still owns the original.
+void DataLayerTest::receipt_number_not_minted_on_reversal()
+{
+    AdjustmentFixture f(m_dir.filePath(QStringLiteral("receipt_reversal.sqlite")));
+    QVERIFY(f.sessionId > 0);
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult sold =
+        sales.recordSale({f.one()}, f.sessionId, QStringLiteral("dev"), /*allowOversold=*/false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const int year = QDate::currentDate().year();
+    QSqlQuery original(f.db.handle());
+    original.prepare(QStringLiteral("SELECT receipt_number FROM sales WHERE id = ?"));
+    original.addBindValue(sold.saleId);
+    QVERIFY(original.exec() && original.next());
+    QCOMPARE(original.value(0).toString(), QStringLiteral("A-%1-0001").arg(year));
+
+    QVERIFY2(sales.reverseSale(sold.saleId, f.sessionId).ok, "the sale was not reversed");
+
+    QSqlQuery reversal(f.db.handle());
+    reversal.prepare(QStringLiteral("SELECT receipt_number FROM sales WHERE reversed_sale_id = ?"));
+    reversal.addBindValue(sold.saleId);
+    QVERIFY(reversal.exec() && reversal.next());
+    QVERIFY2(reversal.value(0).isNull(), "the reversal row carries a receipt number");
+
+    // And the original keeps the paper it was issued.
+    QSqlQuery kept(f.db.handle());
+    kept.prepare(QStringLiteral("SELECT receipt_number FROM sales WHERE id = ?"));
+    kept.addBindValue(sold.saleId);
+    QVERIFY(kept.exec() && kept.next());
+    QCOMPARE(kept.value(0).toString(), QStringLiteral("A-%1-0001").arg(year));
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)

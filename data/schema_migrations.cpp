@@ -1,11 +1,13 @@
 #include "schema_migrations.h"
 
 #include <QDebug>
+#include <QHash>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStringList>
 
 #include <functional>
+#include <vector>
 
 namespace app::data {
 
@@ -628,6 +630,181 @@ void migrateBackfillPiecesPerPackage(const QSqlDatabase& db)
 }
 
 // ---------------------------------------------------------------------------
+// 15 — receipt numbering
+//
+// A customer's paper carries a number, and until now nothing minted one: the
+// ledgers had ids and no human handle, so a receipt could only quote the id and
+// the shop had no sequence a customer could recognise. The number is
+// "A-YYYY-NNNN" and it is issued from one counter per calendar year that both
+// cash sales and credit sales draw on, because the paper a customer holds does
+// not say which of the two it was.
+//
+// The new columns are nullable and read as NULL until this migration backfills
+// them, which is the truth for a row that predates numbering. The backfill
+// assigns every old row an A-prefixed number in the order it was written and
+// seeds the counter from the highest number issued, so a fresh sale continues
+// the sequence rather than restarting it.
+void migrateReceiptNumbering(const QSqlDatabase& db)
+{
+    // Idempotent on its own, so no presence check: CREATE TABLE IF NOT EXISTS.
+    run(db,
+        QStringLiteral("CREATE TABLE IF NOT EXISTS receipt_sequences ("
+                       "year INTEGER PRIMARY KEY,"
+                       "last_number INTEGER NOT NULL DEFAULT 0)"),
+        QStringLiteral("create receipt_sequences"));
+
+    // SQLite has no ADD COLUMN IF NOT EXISTS, so like migrateSaleAdjustment the
+    // presence check is the only way to write these idempotently; without it a
+    // second run fails with "duplicate column name" on every open.
+    struct ReceiptColumn {
+        const char* table;
+        const char* column;
+        const char* type;
+        const char* what;
+    };
+
+    constexpr ReceiptColumn kReceiptColumns[] = {
+        {"sales", "receipt_number", "TEXT", "add sales.receipt_number"},
+        {"sales", "customer_id", "INTEGER", "add sales.customer_id"},
+        {"customer_transactions", "receipt_number", "TEXT",
+         "add customer_transactions.receipt_number"},
+    };
+
+    for (const ReceiptColumn& spec : kReceiptColumns) {
+        const QString table = QString::fromLatin1(spec.table);
+        // A table that is not there yet has nothing to alter. createSchema() runs
+        // before this and creates it with the column already in place, so on a
+        // fresh install this is the branch that runs for every row above.
+        if (tableColumns(db, table).isEmpty()) {
+            continue;
+        }
+        if (tableColumns(db, table).contains(QString::fromLatin1(spec.column))) {
+            continue;
+        }
+        if (!run(db,
+                 QStringLiteral("ALTER TABLE %1 ADD COLUMN %2 %3")
+                     .arg(QString::fromUtf8(spec.table), QString::fromUtf8(spec.column),
+                          QString::fromUtf8(spec.type)),
+                 QString::fromLatin1(spec.what))) {
+            continue;
+        }
+    }
+
+    // The prefix exists because two tills can mint the same number otherwise, and
+    // the prefix is what keeps them apart after a sync. Seeded with INSERT OR
+    // IGNORE so a shop that has already chosen a letter keeps it.
+    run(db,
+        QStringLiteral("INSERT OR IGNORE INTO settings(key, value) VALUES ('device_prefix', 'A')"),
+        QStringLiteral("seed settings.device_prefix"));
+
+    // Already numbered is already done: an existing receipt_sequences row means
+    // this migration (or a fresh install) has issued numbers, and replaying the
+    // backfill would renumber rows a customer may already hold. Checked before
+    // the backfill rather than after, so the common second open does nothing.
+    QSqlQuery counted(db);
+    if (!counted.exec(QStringLiteral("SELECT COUNT(*) FROM receipt_sequences")) || !counted.next()) {
+        qWarning() << "schema migration: could not read receipt_sequences:"
+                   << counted.lastError().text();
+        return;
+    }
+    if (counted.value(0).toInt() > 0) {
+        return;
+    }
+
+    // The backfill cannot know which device issued an old row: sales carries a
+    // device_id but no letter, and giving each device its own letter is a
+    // decision a shop makes when a second till arrives, not something to guess
+    // at migration time. "A" is what a single-till shop has been using since its
+    // first sale, so every historical receipt gets an A-prefix and the sequence
+    // stays contiguous.
+    QString prefix;
+    {
+        QSqlQuery query(db);
+        query.prepare(QStringLiteral("SELECT value FROM settings WHERE key = 'device_prefix'"));
+        if (query.exec() && query.next()) {
+            prefix = query.value(0).toString();
+        }
+        if (prefix.isEmpty()) {
+            prefix = QStringLiteral("A");
+        }
+    }
+
+    struct ReceiptLedger {
+        const char* table;
+        const char* what;
+    };
+
+    // Sales first, then the credit ledger, each ordered by created_at then id:
+    // the order a customer would have received the paper in, so the numbers read
+    // back the way the day happened. One counter runs across both.
+    constexpr ReceiptLedger kReceiptLedgers[] = {
+        {"sales", "backfill sales.receipt_number"},
+        {"customer_transactions", "backfill customer_transactions.receipt_number"},
+    };
+
+    QHash<int, int> perYear;
+
+    for (const ReceiptLedger& ledger : kReceiptLedgers) {
+        const QString table = QString::fromLatin1(ledger.table);
+        if (!tableColumns(db, table).contains(QStringLiteral("receipt_number"))) {
+            continue;
+        }
+        QSqlQuery select(db);
+        select.prepare(QStringLiteral("SELECT id, created_at FROM %1 "
+                                      "WHERE receipt_number IS NULL "
+                                      "ORDER BY created_at ASC, id ASC")
+                           .arg(QLatin1StringView(ledger.table)));
+        if (!select.exec()) {
+            qWarning() << "schema migration:" << ledger.what << "read failed:"
+                       << select.lastError().text();
+            continue;
+        }
+        struct Pending {
+            int id;
+            int year;
+        };
+        std::vector<Pending> pending;
+        while (select.next()) {
+            Pending row;
+            row.id = select.value(0).toInt();
+            // created_at is ISO-8601 text, so its leading four characters are the
+            // year. A malformed row reads 0 and lands in a year of its own rather
+            // than losing its number.
+            row.year = select.value(1).toString().left(4).toInt();
+            pending.push_back(row);
+        }
+        for (const Pending& row : pending) {
+            const int next = ++perYear[row.year];
+            const QString number = QStringLiteral("%1-%2-%3")
+                                       .arg(prefix)
+                                       .arg(row.year, 4, 10, QLatin1Char('0'))
+                                       .arg(next, 4, 10, QLatin1Char('0'));
+            QSqlQuery update(db);
+            update.prepare(QStringLiteral("UPDATE %1 SET receipt_number = ? WHERE id = ?")
+                               .arg(QLatin1StringView(ledger.table)));
+            update.addBindValue(number);
+            update.addBindValue(row.id);
+            if (!update.exec()) {
+                qWarning() << "schema migration:" << ledger.what << "write failed:"
+                           << update.lastError().text();
+            }
+        }
+    }
+
+    for (auto it = perYear.constBegin(); it != perYear.constEnd(); ++it) {
+        QSqlQuery replace(db);
+        replace.prepare(QStringLiteral("INSERT OR REPLACE INTO receipt_sequences "
+                                       "(year, last_number) VALUES (?, ?)"));
+        replace.addBindValue(it.key());
+        replace.addBindValue(it.value());
+        if (!replace.exec()) {
+            qWarning() << "schema migration: receipt_sequences seed failed:"
+                       << replace.lastError().text();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The table below is keyed by schema version, and runSchemaMigrations() walks it
 // so a database that has already run it never runs it twice. Every entry is
 // idempotent anyway (each one looks before it creates), because a database
@@ -681,6 +858,13 @@ const std::pair<int, std::function<void(const QSqlDatabase&)>> kMigrations[] = {
     // described. The old one is copied across only where the new one still holds
     // its default, so a row a shop has since set by hand is not overwritten.
     {14, migrateBackfillPiecesPerPackage},
+    // Receipt numbering. One counter per calendar year, shared by cash and credit
+    // sales, and a nullable receipt_number on both ledgers. The backfill numbers
+    // every historical row A-prefixed in the order it was written, so a shop that
+    // upgrades gets a contiguous sequence rather than a gap before its first new
+    // sale; the counter is seeded from the highest number issued so the next sale
+    // continues rather than restarts.
+    {15, migrateReceiptNumbering},
 };
 
 } // namespace

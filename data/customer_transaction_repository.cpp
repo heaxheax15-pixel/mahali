@@ -23,14 +23,15 @@ core::CustomerTransaction txFromQuery(const QSqlQuery& query)
     tx.adjustmentCents = query.value(5).toLongLong();
     tx.createdAt = fromIso(query.value(3).toString()).value_or(QDateTime());
     tx.reversedTransactionId = query.value(4).toInt();
+    tx.receiptNumber = query.value(6).toString();
     return tx;
 }
 
 // adjustment_cents comes last so the indices above keep their meaning: the column
 // was added to the table after the rest of it, and every query in this file reads
-// by position.
+// by position. receipt_number follows it for the same reason.
 const char* kTxColumns =
-    "id, customer_id, amount_cents, created_at, reversed_transaction_id, adjustment_cents";
+    "id, customer_id, amount_cents, created_at, reversed_transaction_id, adjustment_cents, receipt_number";
 
 } // namespace
 
@@ -87,13 +88,22 @@ int CustomerTransactionRepository::insert(const core::CustomerTransaction& trans
 {
     QSqlQuery query(m_db.handle());
     query.prepare(
-        QStringLiteral("INSERT INTO customer_transactions (customer_id, amount_cents, created_at, reversed_transaction_id, adjustment_cents) "
-                       "VALUES (?, ?, ?, ?, ?)"));
+        QStringLiteral("INSERT INTO customer_transactions (customer_id, amount_cents, created_at, reversed_transaction_id, adjustment_cents, receipt_number) "
+                       "VALUES (?, ?, ?, ?, ?, ?)"));
     query.addBindValue(transaction.customerId);
     query.addBindValue(transaction.amountCents);
     query.addBindValue(toIso(transaction.createdAt.isValid() ? transaction.createdAt : QDateTime::currentDateTime()));
     query.addBindValue(transaction.reversedTransactionId);
     query.addBindValue(transaction.adjustmentCents);
+    // An empty number binds a real NULL rather than "". A transaction that has
+    // not been through the numbering service holds no number at all, and the
+    // distinction has to survive storage: `WHERE receipt_number IS NULL` is what
+    // finds the unreceipted rows, a query that can never be written against "".
+    if (transaction.receiptNumber.isEmpty()) {
+        query.addBindValue(QVariant());
+    } else {
+        query.addBindValue(transaction.receiptNumber);
+    }
     if (!query.exec()) {
         m_db.recordError(query.lastError(), QStringLiteral("CustomerTransactionRepository::insert"));
         return 0;
