@@ -65,6 +65,8 @@ private:
     QLineEdit* m_syncKey;
     QComboBox* m_theme;
     QComboBox* m_language;
+    QComboBox* m_receiptPaperSize;
+    QLineEdit* m_receiptFooter;
     QPushButton* m_save;
     QPushButton* m_checkUpdates = nullptr;
     QLabel* m_preview;

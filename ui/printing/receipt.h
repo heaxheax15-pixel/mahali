@@ -54,4 +54,13 @@ ReceiptData buildReceiptForCustomerTransaction(app::data::Database& db,
 // what they scanned.
 QTextDocument* renderReceipt(const ReceiptData& data, ReceiptPaper paper);
 
+// Reads settings.receipt_paper_size (values "58", "80", "a5", "a4") and
+// returns the enum. Falls back to Thermal80 when the key is absent or
+// holds anything else, because that is the shape the printer the shop
+// already owns emits.
+ReceiptPaper currentReceiptPaper(app::data::Database& db);
+
+// The inverse: turns the enum into the string the settings page stores.
+QString paperSettingValue(ReceiptPaper paper);
+
 } // namespace app::ui

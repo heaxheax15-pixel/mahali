@@ -124,6 +124,8 @@ private slots:
     void receipt_shows_customer_name_on_a_credit_sale();
     void receipt_58mm_drops_the_unit_column();
     void receipt_shows_the_adjustment_and_the_payable_matches_the_row();
+    void settings_page_saves_and_restores_receipt_printing();
+    void receipt_uses_the_paper_from_settings();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
     void quick_items_bar_lists_products();
@@ -3142,6 +3144,71 @@ void UiTest::receipt_shows_the_adjustment_and_the_payable_matches_the_row()
     QVERIFY(row.exec());
     QVERIFY(row.next());
     QCOMPARE(row.value(0).toLongLong(), 11000LL);
+}
+
+// The printing choices live in settings like the other fields: the page writes
+// them on save and reads them back the next time it is opened, with no preview
+// or test print in between (that arrives with QtPrintSupport).
+void UiTest::settings_page_saves_and_restores_receipt_printing()
+{
+    const QString path = m_dir.filePath(QStringLiteral("settings-printing.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    {
+        ui::SettingsPage page(db);
+        auto* paper = page.findChild<QComboBox*>(QStringLiteral("receiptPaperSize"));
+        auto* footer = page.findChild<QLineEdit*>(QStringLiteral("receiptFooterText"));
+        QVERIFY(paper);
+        QVERIFY(footer);
+
+        const int a5 = paper->findData(QStringLiteral("a5"));
+        QVERIFY(a5 >= 0);
+        paper->setCurrentIndex(a5);
+        footer->setText(QStringLiteral("Merci de votre visite"));
+        page.save();
+    }
+
+    data::SettingRepository settings(db);
+    QCOMPARE(settings.value(QStringLiteral("receipt_paper_size")).value_or(QString()),
+             QStringLiteral("a5"));
+    QCOMPARE(settings.value(QStringLiteral("receipt_footer_text")).value_or(QString()),
+             QStringLiteral("Merci de votre visite"));
+
+    ui::SettingsPage reopened(db);
+    auto* paper = reopened.findChild<QComboBox*>(QStringLiteral("receiptPaperSize"));
+    auto* footer = reopened.findChild<QLineEdit*>(QStringLiteral("receiptFooterText"));
+    QVERIFY(paper);
+    QVERIFY(footer);
+    QCOMPARE(paper->currentData().toString(), QStringLiteral("a5"));
+    QCOMPARE(footer->text(), QStringLiteral("Merci de votre visite"));
+}
+
+// The paper is a setting, not an argument: the receipt helper reads which roll
+// the shop prints on, and the same helper maps it back for the settings page.
+void UiTest::receipt_uses_the_paper_from_settings()
+{
+    const QString path = m_dir.filePath(QStringLiteral("receipt-paper.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::SettingRepository(db).set(QStringLiteral("receipt_paper_size"), QStringLiteral("58"));
+
+    QCOMPARE(static_cast<int>(ui::currentReceiptPaper(db)),
+             static_cast<int>(ui::ReceiptPaper::Thermal58));
+    QCOMPARE(ui::paperSettingValue(ui::ReceiptPaper::A4), QStringLiteral("a4"));
+    QCOMPARE(ui::paperSettingValue(ui::ReceiptPaper::Thermal80), QStringLiteral("80"));
+
+    // currentReceiptPaper() reads only the DB, so a minimal, line-less document
+    // is enough to show the choice does not depend on the sale's contents.
+    ui::ReceiptData data;
+    data.shopName = QStringLiteral("Boutique Test");
+    Q_UNUSED(data);
+
+    const QString emptyPath = m_dir.filePath(QStringLiteral("receipt-paper-empty.sqlite"));
+    QFile::remove(emptyPath);
+    data::Database emptyDb(emptyPath);
+    QCOMPARE(static_cast<int>(ui::currentReceiptPaper(emptyDb)),
+             static_cast<int>(ui::ReceiptPaper::Thermal80));
 }
 
 QTEST_MAIN(UiTest)

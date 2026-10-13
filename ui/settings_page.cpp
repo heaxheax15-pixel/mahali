@@ -72,11 +72,21 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     m_language->addItem(tr("Français"), QStringLiteral("fr"));
     m_language->addItem(tr("English"), QStringLiteral("en"));
 
+    m_receiptPaperSize = new QComboBox;
+    m_receiptPaperSize->setObjectName(QStringLiteral("receiptPaperSize"));
+    m_receiptPaperSize->addItem(QStringLiteral("58 mm"), QStringLiteral("58"));
+    m_receiptPaperSize->addItem(QStringLiteral("80 mm"), QStringLiteral("80"));
+    m_receiptPaperSize->addItem(QStringLiteral("A5"), QStringLiteral("a5"));
+    m_receiptPaperSize->addItem(QStringLiteral("A4"), QStringLiteral("a4"));
+
+    m_receiptFooter = new QLineEdit;
+    m_receiptFooter->setObjectName(QStringLiteral("receiptFooterText"));
+
     // A combo box asks for Preferred, so under an expanding field policy it kept
     // its size hint — 129px next to 466px line edits, which is the ragged column
     // this form is meant to replace. Both are marked Expanding so the two
     // dropdowns measure the same as every other field.
-    for (QComboBox* combo : {m_theme, m_language}) {
+    for (QComboBox* combo : {m_theme, m_language, m_receiptPaperSize}) {
         combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     }
 
@@ -125,6 +135,13 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     form->addRow(caption(tr("السمة:")), m_theme);
     form->addRow(caption(tr("اللغة:")), m_language);
     form->addRow(caption(tr("مفتاح المزامنة (يتطلب إعادة تشغيل):")), m_syncKey);
+
+    // The printer is what decides these, not the till: the same sale printed
+    // on a 58mm roll and on an A4 sheet carries the same figures. Storing the
+    // choice in settings keeps it out of the receipt builder and lets the
+    // paper change without rebuilding anything.
+    form->addRow(caption(tr("حجم الورق:")), m_receiptPaperSize);
+    form->addRow(caption(tr("نص أسفل الفاتورة:")), m_receiptFooter);
 
     // The fields are bounded by the card; the wrapper is the cap on the form
     // itself, so the fields cannot outgrow the column if the card is ever
@@ -280,6 +297,13 @@ void SettingsPage::refresh()
     m_zakat->setChecked(!enabledRow.has_value() || *enabledRow == QLatin1String("1"));
     m_zakatDate->setText(settings.value(QStringLiteral("zakat_date")).value_or(QString()));
 
+    const QString receiptPaper =
+        settings.value(QStringLiteral("receipt_paper_size")).value_or(QStringLiteral("80"));
+    const int paperIdx = m_receiptPaperSize->findData(receiptPaper);
+    m_receiptPaperSize->setCurrentIndex(
+        paperIdx >= 0 ? paperIdx : m_receiptPaperSize->findData(QStringLiteral("80")));
+    m_receiptFooter->setText(settings.value(QStringLiteral("receipt_footer_text")).value_or(QString()));
+
     m_notice->clear();
     m_notice->setVisible(false);
     m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));
@@ -351,6 +375,8 @@ void SettingsPage::save()
         settings.set(QStringLiteral("sync_hmac_key"), syncKey());
     }
     settings.set(QStringLiteral("enabled"), zakatEnabled() ? QStringLiteral("1") : QStringLiteral("0"));
+    settings.set(QStringLiteral("receipt_paper_size"), m_receiptPaperSize->currentData().toString());
+    settings.set(QStringLiteral("receipt_footer_text"), m_receiptFooter->text().trimmed());
 
     app::ui::setCurrencySymbol(currencySymbol());
     m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));

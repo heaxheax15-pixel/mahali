@@ -273,4 +273,38 @@ QTextDocument* renderReceipt(const ReceiptData& data, ReceiptPaper paper)
     return doc;
 }
 
+ReceiptPaper currentReceiptPaper(app::data::Database& db)
+{
+    data::SettingRepository settings(db);
+    const QString value = settings.value(QStringLiteral("receipt_paper_size")).value_or(QString());
+    if (value == QStringLiteral("58")) {
+        return ReceiptPaper::Thermal58;
+    }
+    if (value == QStringLiteral("80")) {
+        return ReceiptPaper::Thermal80;
+    }
+    if (value == QStringLiteral("a5")) {
+        return ReceiptPaper::A5;
+    }
+    if (value == QStringLiteral("a4")) {
+        return ReceiptPaper::A4;
+    }
+    return ReceiptPaper::Thermal80;
+}
+
+QString paperSettingValue(ReceiptPaper paper)
+{
+    switch (paper) {
+    case ReceiptPaper::Thermal58:
+        return QStringLiteral("58");
+    case ReceiptPaper::Thermal80:
+        return QStringLiteral("80");
+    case ReceiptPaper::A5:
+        return QStringLiteral("a5");
+    case ReceiptPaper::A4:
+        return QStringLiteral("a4");
+    }
+    return QStringLiteral("80");
+}
+
 } // namespace app::ui
