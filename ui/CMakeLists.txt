@@ -24,6 +24,8 @@ target_sources(mahali-ui PRIVATE
     server_controller.h
     pos_page.cpp
     pos_page.h
+    printing/receipt.cpp
+    printing/receipt.h
     dialogs/product_dialog.cpp
     dialogs/product_dialog.h
     dialogs/customer_dialog.cpp

@@ -21,7 +21,11 @@ inline void setCurrencySymbol(const QString& symbol)
     liveCurrencySymbol() = symbol.trimmed();
 }
 
-inline QString formatMoney(long long cents)
+// Same as formatMoney(cents), but with an explicit symbol instead of the
+// cached one. The receipt carries its own copy of the symbol so it renders
+// identically whether it is built by the till, by the reports page, or by
+// a test that never called setCurrencySymbol.
+inline QString formatMoney(long long cents, const QString& symbol)
 {
     const bool negative = cents < 0;
     const long long magnitude = qAbs<long long>(cents);
@@ -29,10 +33,15 @@ inline QString formatMoney(long long cents)
     const QString minor = QString::number(magnitude % 100).rightJustified(2, QLatin1Char('0'));
     const QString body = QStringLiteral("%1.%2").arg(major).arg(minor);
     const QString sign = negative ? QStringLiteral("-") : QString();
-    if (liveCurrencySymbol().isEmpty()) {
+    if (symbol.isEmpty()) {
         return sign + body;
     }
-    return sign + body + QLatin1Char(' ') + liveCurrencySymbol();
+    return sign + body + QLatin1Char(' ') + symbol;
+}
+
+inline QString formatMoney(long long cents)
+{
+    return formatMoney(cents, liveCurrencySymbol());
 }
 
 // Parses money typed in any shape into cents: "12", "12.5", "12,50",

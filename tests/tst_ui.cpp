@@ -10,6 +10,10 @@
 #include <QComboBox>
 #include <QTableView>
 #include <QTableWidget>
+#include <QFont>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QUrl>
 #include <QFormLayout>
 #include <QLineEdit>
@@ -63,6 +67,7 @@
 #include "ui/expenses_page.h"
 #include "core/format_utils.h"
 #include "ui/pos_page.h"
+#include "ui/printing/receipt.h"
 #include "ui/products_page.h"
 #include "ui/quick_items_bar.h"
 #include "ui/refunds_page.h"
@@ -115,6 +120,10 @@ private slots:
     void cash_session_rejects_invalid_amount();
     void salesPageShowsToday();
     void profit_cents_survives_translation();
+    void receipt_renders_a_cash_sale();
+    void receipt_shows_customer_name_on_a_credit_sale();
+    void receipt_58mm_drops_the_unit_column();
+    void receipt_shows_the_adjustment_and_the_payable_matches_the_row();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
     void quick_items_bar_lists_products();
@@ -2893,6 +2902,246 @@ void UiTest::language_dialog_returns_empty_on_dismiss()
     ui::LanguageDialog dialog;
     dialog.reject();
     QVERIFY(dialog.chosenCode().isEmpty());
+}
+
+// A cash sale renders on the receipt: the shop name it was configured with, the
+// product, the quantity, the number minted for it and the payable, all read back
+// from the sale row rather than from anything the till had cached.
+void UiTest::receipt_renders_a_cash_sale()
+{
+    const QString path = m_dir.filePath(QStringLiteral("receipt-cash.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000011");
+    product.name = QStringLiteral("Biscuit");
+    product.costPriceCents = 5000;
+    product.salePriceCents = 6000;
+    product.piecesPerPackage = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitPriceCents = 6000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold =
+        service.recordSale({ item }, sessionId, QStringLiteral("desktop"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
+    QCOMPARE(data.receiptNumber,
+             QStringLiteral("A-%1-0001").arg(QDate::currentDate().year()));
+    QCOMPARE(data.totalCents, 12000LL);
+
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+    const QString text = doc->toPlainText();
+    QVERIFY2(text.contains(QStringLiteral("Boutique Test")), qPrintable(text));
+    QVERIFY2(text.contains(QStringLiteral("Biscuit")), qPrintable(text));
+    QVERIFY2(text.contains(QStringLiteral("2")), qPrintable(text));
+    QVERIFY2(text.contains(data.receiptNumber), qPrintable(text));
+    QVERIFY2(text.contains(QStringLiteral("120")), qPrintable(text));
+    // The payable, spelled with the symbol the receipt carries, so the assertion
+    // does not lean on whatever setCurrencySymbol() last put in the UI cache.
+    QVERIFY2(text.contains(app::ui::formatMoney(12000LL, QStringLiteral("DA"))), qPrintable(text));
+    // The payable is bold. Qt serialises bold as a <span style="font-weight:700">,
+    // never a <b> tag, so the check reads the character format of the payable line
+    // rather than a substring of toHtml().
+    bool payableBold = false;
+    for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
+        if (!block.text().contains(QStringLiteral("120.00"))) {
+            continue;
+        }
+        QTextCursor cursor(block);
+        cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+        if (cursor.charFormat().fontWeight() >= QFont::Bold) {
+            payableBold = true;
+        }
+    }
+    QVERIFY2(payableBold, qPrintable(doc->toHtml()));
+    delete doc;
+}
+
+// A credit sale is a receipt too: the customer's name rides on the paper, and the
+// data says the document came from the credit ledger.
+void UiTest::receipt_shows_customer_name_on_a_credit_sale()
+{
+    const QString path = m_dir.filePath(QStringLiteral("receipt-credit.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000012");
+    product.name = QStringLiteral("Biscuit");
+    product.costPriceCents = 5000;
+    product.salePriceCents = 6000;
+    product.piecesPerPackage = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    data::CustomerRepository customers(db);
+    core::Customer customer;
+    customer.name = QStringLiteral("Mohamed");
+    const int customerId = customers.save(customer);
+    QVERIFY(customerId > 0);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitPriceCents = 6000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold =
+        service.recordCustomerDebt(customerId, { item }, QStringLiteral("desktop"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForCustomerTransaction(db, sold.saleId);
+    QVERIFY(data.isCredit);
+
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+    const QString text = doc->toPlainText();
+    QVERIFY2(text.contains(QStringLiteral("Mohamed")), qPrintable(text));
+    delete doc;
+}
+
+// Five columns do not fit on a 58mm roll, so the paper drops the unit column: the
+// unit header is absent while the product and the payable are still there.
+void UiTest::receipt_58mm_drops_the_unit_column()
+{
+    const QString path = m_dir.filePath(QStringLiteral("receipt-58.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000013");
+    product.name = QStringLiteral("Biscuit");
+    product.costPriceCents = 5000;
+    product.salePriceCents = 6000;
+    product.piecesPerPackage = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitPriceCents = 6000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold =
+        service.recordSale({ item }, sessionId, QStringLiteral("desktop"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal58);
+    const QString text = doc->toPlainText();
+    // Look the header up the same way the renderer does, so the assertion holds in
+    // any language.
+    const QString unitHeader =
+        QCoreApplication::translate("app::ui::Receipt", "Unité");
+    QVERIFY2(!text.contains(unitHeader), qPrintable(text));
+    QVERIFY2(text.contains(QStringLiteral("Biscuit")), qPrintable(text));
+    QVERIFY2(text.contains(QStringLiteral("120")), qPrintable(text));
+    delete doc;
+}
+
+// The other receipts all carry a zero adjustment, so only this one can catch a
+// double count: the paper shows the line sum, then the discount, then a payable
+// that has to equal the sale row's total — not the sum plus the discount again.
+void UiTest::receipt_shows_the_adjustment_and_the_payable_matches_the_row()
+{
+    const QString path = m_dir.filePath(QStringLiteral("receipt-adjustment.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000014");
+    product.name = QStringLiteral("Biscuit");
+    product.costPriceCents = 5000;
+    product.salePriceCents = 6000;
+    product.piecesPerPackage = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitPriceCents = 6000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold =
+        service.recordSale({ item }, sessionId, QStringLiteral("desktop"), false, nullptr, -1000);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
+    // The line sum, with nothing of the adjustment folded in.
+    QCOMPARE(data.totalCents, 12000LL);
+    QCOMPARE(data.adjustmentCents, -1000LL);
+
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+    const QString text = doc->toPlainText();
+    const int totalIndex = text.indexOf(QStringLiteral("120"));
+    QVERIFY2(totalIndex >= 0, qPrintable(text));
+    const int minusIndex = text.indexOf(QStringLiteral("-"), totalIndex);
+    QVERIFY2(minusIndex >= 0, qPrintable(text));
+    const QString payable = app::ui::formatMoney(11000LL, QStringLiteral("DA"));
+    const int payableIndex = text.indexOf(payable);
+    QVERIFY2(payableIndex >= 0, qPrintable(text));
+    // Order on the paper: the sum, then the discount, then the payable.
+    QVERIFY(totalIndex < minusIndex);
+    QVERIFY(minusIndex < payableIndex);
+    delete doc;
+
+    // The invariant the paper has to mirror: the payable equals the row's
+    // total_cents, which the service stores as sum + adjustment, once.
+    QSqlQuery row(db.handle());
+    row.prepare(QStringLiteral("SELECT total_cents FROM sales WHERE id = ?"));
+    row.addBindValue(sold.saleId);
+    QVERIFY(row.exec());
+    QVERIFY(row.next());
+    QCOMPARE(row.value(0).toLongLong(), 11000LL);
 }
 
 QTEST_MAIN(UiTest)
