@@ -10,6 +10,7 @@
 - [ ] `sync_hmac_key` الافتراضي يُغيَّر عند أول تشغيل.
 - [ ] `13cba43` "WIP: audit fixes (unverified)" — يستحق مراجعة.
 - [ ] `.vscode/launch.json` يشغّل Chrome — مخلّف.
+- [ ] `device_ledger_service.cpp` يستدعي `m_sales.insert` المشترك، فيكتب `receipt_number = NULL`. يحتاج استدعاء `mintReceiptNumber` داخل transaction الخاص به. **يُنفَّذ عند أول زبون بحاسوبين فعليين.**
 
 ## 🟡 مقبولة (لن تُصلَح، موثَّقة)
 - [x] `Q_OBJECT` تحذيرات `lupdate` في ثلاثة ملفات:
