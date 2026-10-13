@@ -1,15 +1,15 @@
 #include "receipt_printer.h"
 
-#include <QFileDialog>
+#include <QCoreApplication>
+#include <QDir>
 #include <QPageSize>
-#include <QPrintDialog>
 #include <QPrinter>
 #include <QPrinterInfo>
+#include <QStandardPaths>
 #include <QSizeF>
 #include <QTextDocument>
-#include <QWidget>
 
-#include <QCoreApplication>
+#include "data/setting_repository.h"
 
 namespace app::ui {
 
@@ -61,55 +61,58 @@ void printReceiptToPrinter(QTextDocument* doc, QPrinter& printer)
     }
 }
 
-bool printReceiptInteractive(QTextDocument* doc, ReceiptPaper paper, QWidget* parent)
+QString printAndSaveReceipt(QTextDocument* doc, ReceiptPaper paper,
+                            app::data::Database& db, QString* error)
 {
-    const QList<QPrinterInfo> printers = QPrinterInfo::availablePrinters();
-    if (printers.isEmpty()) {
-        QString path = QFileDialog::getSaveFileName(
-            parent, QCoreApplication::translate("app::ui::Receipt",
-                                                "Enregistrer le reçu en PDF"),
-            QString(),
-            QStringLiteral("*.pdf"));
-        if (path.isEmpty()) {
-            return false;
-        }
-        if (!path.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)) {
-            path += QStringLiteral(".pdf");
-        }
-        QPrinter printer(QPrinter::HighResolution);
-        printer.setOutputFormat(QPrinter::PdfFormat);
-        printer.setOutputFileName(path);
-        configurePrinterForPaper(printer, paper);
-        if (doc) {
-            const QString title = doc->metaInformation(QTextDocument::DocumentTitle);
-            if (!title.isEmpty()) {
-                printer.setDocName(title);
-            }
-        }
-        printReceiptToPrinter(doc, printer);
-        return true;
+    if (error) {
+        error->clear();
     }
 
+    app::data::SettingRepository settings(db);
+    QString folder = settings.value(QStringLiteral("receipt_save_folder")).value_or(QString());
+    if (folder.isEmpty()) {
+        // First run: fall back to a default that is easy to find, and store it
+        // so the next call is one query instead of a guess -- and so the field
+        // in Settings shows it and the shopkeeper can move the folder.
+        folder = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                 + QStringLiteral("/Mahali");
+        settings.set(QStringLiteral("receipt_save_folder"), folder);
+    }
+
+    if (!QDir().mkpath(folder)) {
+        if (error) {
+            *error = QCoreApplication::translate("app::ui::Receipt",
+                                                 "تعذّر إنشاء مجلد الإيصالات");
+        }
+        return QString();
+    }
+
+    QString base;
+    if (doc) {
+        base = doc->metaInformation(QTextDocument::DocumentTitle);
+    }
+    if (base.isEmpty()) {
+        base = QStringLiteral("receipt");
+    }
+    const QString path = folder + QLatin1Char('/') + base + QStringLiteral(".pdf");
+
     QPrinter printer(QPrinter::HighResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(path);
     configurePrinterForPaper(printer, paper);
-    if (doc) {
-        const QString title = doc->metaInformation(QTextDocument::DocumentTitle);
-        if (!title.isEmpty()) {
-            printer.setDocName(title);
-        }
-    }
-    QPrintDialog dialog(&printer, parent);
-    if (dialog.exec() != QDialog::Accepted) {
-        return false;
-    }
-    if (doc) {
-        const QString title = doc->metaInformation(QTextDocument::DocumentTitle);
-        if (!title.isEmpty()) {
-            printer.setDocName(title);
-        }
-    }
     printReceiptToPrinter(doc, printer);
-    return true;
+
+    if (!QPrinterInfo::defaultPrinter().isNull()) {
+        QPrinter paperPrinter(QPrinter::HighResolution);
+        configurePrinterForPaper(paperPrinter, paper);
+        // Full-page for thermal rolls means the content uses the whole
+        // 58mm/80mm width, which is the point of a receipt roll; a printer
+        // that demands A4 will refuse the custom page size and Qt falls
+        // back to its own — the receipt renders, only smaller.
+        printReceiptToPrinter(doc, paperPrinter);
+    }
+
+    return path;
 }
 
 } // namespace app::ui

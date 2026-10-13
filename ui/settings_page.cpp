@@ -82,6 +82,11 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     m_receiptFooter = new QLineEdit;
     m_receiptFooter->setObjectName(QStringLiteral("receiptFooterText"));
 
+    // A plain path for the folder where PDF receipts land. A browse button
+    // can arrive later; the shopkeeper sets it once.
+    m_receiptFolder = new QLineEdit;
+    m_receiptFolder->setObjectName(QStringLiteral("receiptSaveFolder"));
+
     // A combo box asks for Preferred, so under an expanding field policy it kept
     // its size hint — 129px next to 466px line edits, which is the ragged column
     // this form is meant to replace. Both are marked Expanding so the two
@@ -142,6 +147,7 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     // paper change without rebuilding anything.
     form->addRow(caption(tr("حجم الورق:")), m_receiptPaperSize);
     form->addRow(caption(tr("نص أسفل الفاتورة:")), m_receiptFooter);
+    form->addRow(caption(tr("مجلد حفظ الإيصالات:")), m_receiptFolder);
 
     m_receiptAutoPrint = new QCheckBox(tr("طبع الإيصال تلقائياً بعد كل عملية بيع"));
     m_receiptAutoPrint->setObjectName(QStringLiteral("receiptAutoPrint"));
@@ -307,6 +313,7 @@ void SettingsPage::refresh()
     m_receiptPaperSize->setCurrentIndex(
         paperIdx >= 0 ? paperIdx : m_receiptPaperSize->findData(QStringLiteral("80")));
     m_receiptFooter->setText(settings.value(QStringLiteral("receipt_footer_text")).value_or(QString()));
+    m_receiptFolder->setText(settings.value(QStringLiteral("receipt_save_folder")).value_or(QString()));
     const auto autoPrintRow = settings.value(QStringLiteral("receipt_auto_print"));
     m_receiptAutoPrint->setChecked(autoPrintRow.has_value() && *autoPrintRow == QLatin1String("1"));
 
@@ -383,6 +390,7 @@ void SettingsPage::save()
     settings.set(QStringLiteral("enabled"), zakatEnabled() ? QStringLiteral("1") : QStringLiteral("0"));
     settings.set(QStringLiteral("receipt_paper_size"), m_receiptPaperSize->currentData().toString());
     settings.set(QStringLiteral("receipt_footer_text"), m_receiptFooter->text().trimmed());
+    settings.set(QStringLiteral("receipt_save_folder"), m_receiptFolder->text().trimmed());
     settings.set(QStringLiteral("receipt_auto_print"), m_receiptAutoPrint->isChecked() ? QStringLiteral("1") : QStringLiteral("0"));
 
     app::ui::setCurrencySymbol(currencySymbol());

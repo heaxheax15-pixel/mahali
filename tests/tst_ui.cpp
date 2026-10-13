@@ -1,6 +1,7 @@
  #include <QtTest/QtTest>
 
 #include <QDate>
+#include <QDir>
 #include <QSignalSpy>
 #include <QSpinBox>
 #include <QSqlError>
@@ -126,6 +127,7 @@ private slots:
     void sales_page_print_button_enables_on_selection();
     void sales_page_details_shows_the_receipt_number();
     void sales_page_prints_the_selected_sale_as_pdf();
+    void receipt_print_and_save_writes_pdf_and_returns_path();
     void receipt_renders_a_cash_sale();
     void receipt_shows_customer_name_on_a_credit_sale();
     void receipt_58mm_drops_the_unit_column();
@@ -1682,7 +1684,67 @@ void UiTest::sales_page_prints_the_selected_sale_as_pdf()
     delete doc;
 }
 
-// A barcode scanner terminates every scan with Enter. In a QDialog that Enter used
+// The printer half is not exercised: CI has no printer, and
+// QPrinterInfo::defaultPrinter() on a headless machine is invalid, which the
+// code already skips.
+void UiTest::receipt_print_and_save_writes_pdf_and_returns_path()
+{
+    const QString folder = m_dir.filePath(QStringLiteral("receipts"));
+    QVERIFY(!QDir(folder).exists());
+
+    const QString path = m_dir.filePath(QStringLiteral("receipt-save.sqlite"));
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+    settings.set(QStringLiteral("receipt_save_folder"), folder);
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000011");
+    product.name = QStringLiteral("Biscuit");
+    product.costPriceCents = 5000;
+    product.salePriceCents = 6000;
+    product.piecesPerPackage = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitPriceCents = 6000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold =
+        service.recordSale({ item }, sessionId, QStringLiteral("desktop"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+    doc->setMetaInformation(QTextDocument::DocumentTitle, data.receiptNumber);
+
+    QString error;
+    const QString out = ui::printAndSaveReceipt(doc, ui::ReceiptPaper::Thermal80, db, &error);
+    delete doc;
+
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.endsWith(QStringLiteral(".pdf")));
+    QVERIFY2(QFileInfo(out).exists(), qPrintable(out));
+    QVERIFY(QFileInfo(out).size() > 1000);
+    QFile f(out);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QByteArray first = f.read(4);
+    QVERIFY(first == "%PDF");
+    f.close();
+    QVERIFY(QDir(folder).exists());
+    QVERIFY(error.isEmpty());
+}
 // to hit the default (OK) button, saving and closing the form mid-entry.
 void UiTest::barcode_dialog_does_not_close()
 {

@@ -1328,8 +1328,18 @@ void PosPage::onPrintLastSale()
     const ReceiptPaper paper = ui::currentReceiptPaper(m_db);
     QTextDocument* doc = ui::renderReceipt(data, paper);
     doc->setMetaInformation(QTextDocument::DocumentTitle, data.receiptNumber);
-    ui::printReceiptInteractive(doc, paper, this);
+    QString error;
+    const QString saved = ui::printAndSaveReceipt(doc, paper, m_db, &error);
     delete doc;
+
+    if (saved.isEmpty()) {
+        setNotice(error.isEmpty()
+                      ? tr("تعذّر حفظ الإيصال")
+                      : tr("تعذّر حفظ الإيصال: %1").arg(error),
+                  false);
+        return;
+    }
+    setNotice(tr("تم حفظ الإيصال في %1").arg(saved), true);
 }
 
 } // namespace app::ui

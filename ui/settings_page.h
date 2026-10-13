@@ -68,6 +68,7 @@ private:
     QComboBox* m_receiptPaperSize;
     QCheckBox* m_receiptAutoPrint = nullptr;
     QLineEdit* m_receiptFooter;
+    QLineEdit* m_receiptFolder = nullptr;
     QPushButton* m_save;
     QPushButton* m_checkUpdates = nullptr;
     QLabel* m_preview;

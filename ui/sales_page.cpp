@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTextDocument>
+#include <QTimer>
 #include <QTime>
 #include <QVBoxLayout>
 
@@ -234,8 +235,26 @@ void SalesPage::onPrintSelected()
     const ReceiptPaper paper = ui::currentReceiptPaper(m_db);
     QTextDocument* doc = ui::renderReceipt(data, paper);
     doc->setMetaInformation(QTextDocument::DocumentTitle, data.receiptNumber);
-    ui::printReceiptInteractive(doc, paper, this);
+    QString error;
+    const QString saved = ui::printAndSaveReceipt(doc, paper, m_db, &error);
     delete doc;
+
+    if (saved.isEmpty()) {
+        QMessageBox box(QMessageBox::Warning, tr("طبع الإيصال"),
+                        error.isEmpty()
+                            ? tr("تعذّر حفظ الإيصال")
+                            : tr("تعذّر حفظ الإيصال: %1").arg(error),
+                        QMessageBox::Ok, this);
+        box.exec();
+        return;
+    }
+
+    QMessageBox box(QMessageBox::Information, tr("طبع الإيصال"),
+                    tr("تم حفظ الإيصال في %1").arg(saved), QMessageBox::Ok, this);
+    // The good case closes itself; a box that waited for a click would make
+    // the cashier grab the mouse after every single print.
+    QTimer::singleShot(1000, &box, &QMessageBox::accept);
+    box.exec();
 }
 
 void SalesPage::showDetails()
