@@ -16,6 +16,7 @@
 - [x] `Q_OBJECT` تحذيرات `lupdate` في ثلاثة ملفات:
   - `purchase_dialog.cpp:104` و`select_customer_dialog.cpp:58` — **تحذيران كاذبان**: هما namespace + دالة حرّة، لا صنف.
   - `mini_bar_chart.cpp:19` — صنف حقيقي بلا `Q_OBJECT`، لكنه لا يستخدم signals/slots/qobject_cast. الإصلاح يُغيِّر سياق الترجمة بلا فائدة.
+  - [x] تحذيرات `lupdate` الإضافية: `supplier_dialog.cpp:127` و`supplier_return_dialog.cpp:80`.
 
 ## 🟢 مؤجلة
 - [ ] FIFO للدفعات.
