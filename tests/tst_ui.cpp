@@ -106,6 +106,7 @@ private slots:
     void pos_count_label_groups_packages_by_their_own_name();
     void pos_unite_shows_translated_default_package_name();
     void pos_unite_shows_custom_package_name_untouched();
+    void pos_unite_column_shows_the_whole_package_name();
     void app_icon_paints_inside_the_requested_box();
     void pos_new_product_from_scan_records_opening_stock();
     void products_page_new_product_records_opening_stock();
@@ -954,6 +955,50 @@ void UiTest::pos_unite_shows_custom_package_name_untouched()
     const int packageIndex = unitBox->findData(QStringLiteral("package"));
     QVERIFY(packageIndex >= 0);
     QCOMPARE(unitBox->itemText(packageIndex), QStringLiteral("بالة"));
+}
+
+// The Unité cell holds a QComboBox, and the unit column is a fixed 80px, which
+// is narrower than the package label plus the drop-down arrow: the combo was
+// squeezed into the cell and its last letter elided ("Cartor"). The combo now
+// sets its own floor from the widest label it can show. The name is the literal
+// "Carton" here rather than a translation, because the test is about width, not
+// about the catalogue.
+void UiTest::pos_unite_column_shows_the_whole_package_name()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-unite-column-width.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("40003");
+    product.name = QStringLiteral("شاي");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    product.packageName = QStringLiteral("Carton");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.show();
+    QCoreApplication::processEvents();
+    page.setEntryText(QStringLiteral("40003"));
+    page.addEntry();
+
+    auto* unitBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    unitBox->setCurrentIndex(unitBox->findData(QStringLiteral("package")));
+    QCOMPARE(unitBox->currentText(), QStringLiteral("Carton"));
+
+    // 40 is the arrow plus the theme's padding with room for the label to sit
+    // clear of the indicator; the combo's own minimum is built with 48.
+    const int needed = unitBox->fontMetrics().horizontalAdvance(QStringLiteral("Carton")) + 40;
+    QVERIFY2(unitBox->width() >= needed,
+             qPrintable(QStringLiteral("combo width %1 below needed %2")
+                            .arg(unitBox->width())
+                            .arg(needed)));
 }
 
 // appIcon() renders into a pixmap that is `size` logical pixels at a device

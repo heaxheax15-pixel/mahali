@@ -1056,6 +1056,16 @@ void PosPage::rebuildTable()
         });
         m_table->setCellWidget(row, UnitColumn, unitCombo);
 
+        // The unit column is a fixed 80px and a QComboBox asks for Preferred, so
+        // the combo was squeezed into the cell and its own size hint — which the
+        // package name drives — went unread: "Carton" elided its last letter. The
+        // widest label it can be asked to show is the package one, so that one
+        // sets the floor: its advance plus 48 for the drop-down arrow and the
+        // theme's horizontal padding. Measured after setCellWidget, because the
+        // cell widget only inherits the grid's 14pt font once it is parented.
+        unitCombo->setMinimumWidth(
+            unitCombo->fontMetrics().horizontalAdvance(unitCombo->itemText(1)) + 48);
+
         auto* qtyItem = new QTableWidgetItem(QString::number(line.quantity));
         qtyItem->setTextAlignment(Qt::AlignCenter);
         qtyItem->setFlags(qtyItem->flags() | Qt::ItemIsEditable);
