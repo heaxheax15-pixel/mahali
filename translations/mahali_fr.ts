@@ -2191,7 +2191,22 @@ Stock : %4</translation>
         <translation>Reçu introuvable</translation>
     </message>
     <message>
-        <location line="-316"/>
+        <location line="+13"/>
+        <source>تعذّر حفظ الإيصال</source>
+        <translation>Impossible d'enregistrer le reçu</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>تعذّر حفظ الإيصال: %1</source>
+        <translation>Impossible d'enregistrer le reçu : %1</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>تم حفظ الإيصال في %1</source>
+        <translation>Reçu enregistré dans %1</translation>
+    </message>
+    <message>
+        <location line="-334"/>
         <location line="+52"/>
         <location filename="../ui/printing/receipt.cpp" line="+42"/>
         <source>قطعة</source>
@@ -2435,9 +2450,9 @@ Stock : %4</translation>
         <translation>Merci de votre visite</translation>
     </message>
     <message>
-        <location filename="../ui/printing/receipt_printer.cpp" line="+69"/>
-        <source>Enregistrer le reçu en PDF</source>
-        <translation>Enregistrer le reçu en PDF</translation>
+        <location filename="../ui/printing/receipt_printer.cpp" line="+84"/>
+        <source>تعذّر إنشاء مجلد الإيصالات</source>
+        <translation>Impossible de créer le dossier des reçus</translation>
     </message>
 </context>
 <context>
@@ -2797,7 +2812,7 @@ Stock : %4</translation>
 <context>
     <name>app::ui::SalesPage</name>
     <message>
-        <location filename="../ui/sales_page.cpp" line="+35"/>
+        <location filename="../ui/sales_page.cpp" line="+40"/>
         <source>الحاسوب</source>
         <translation>Poste</translation>
     </message>
@@ -2848,12 +2863,12 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+118"/>
+        <location line="+195"/>
         <source>الإجمالي</source>
         <translation>Total</translation>
     </message>
     <message>
-        <location line="-118"/>
+        <location line="-195"/>
         <source>الحالة</source>
         <translation>État</translation>
     </message>
@@ -2863,7 +2878,15 @@ Stock : %4</translation>
         <translation>Journal des factures du jour</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location line="+8"/>
+        <location line="+113"/>
+        <location line="+13"/>
+        <location line="+9"/>
+        <source>طبع الإيصال</source>
+        <translation>Imprimer le reçu</translation>
+    </message>
+    <message>
+        <location line="-89"/>
         <source>مسترد</source>
         <translation>Remboursé</translation>
     </message>
@@ -2878,12 +2901,42 @@ Stock : %4</translation>
         <translation>Ventes du jour : %1  |  Total (net) : %2  |  Bénéfice estimé : %3</translation>
     </message>
     <message>
-        <location line="+36"/>
+        <location line="+49"/>
+        <source>تعذّر العثور على الإيصال</source>
+        <translation>Reçu introuvable</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>تعذّر حفظ الإيصال</source>
+        <translation>Impossible d'enregistrer le reçu</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>تعذّر حفظ الإيصال: %1</source>
+        <translation>Impossible d'enregistrer le reçu : %1</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>تم حفظ الإيصال في %1</source>
+        <translation>Reçu enregistré dans %1</translation>
+    </message>
+    <message>
+        <location line="+21"/>
         <source>تفاصيل البيع #%1 (%2)</source>
         <translation>Détails de la vente n° %1 (%2)</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+4"/>
+        <source>الإيصال رقم : (غير مُرقّم)</source>
+        <translation>Reçu N° : (non numéroté)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>الإيصال رقم : %1</source>
+        <translation>Reçu N° : %1</translation>
+    </message>
+    <message>
+        <location line="+7"/>
         <source>المنتج</source>
         <translation>Produit</translation>
     </message>
@@ -2964,7 +3017,7 @@ Stock : %4</translation>
         <translation>English</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+29"/>
         <source>حفظ الإعدادات</source>
         <translation>Enregistrer les paramètres</translation>
     </message>
@@ -3014,6 +3067,11 @@ Stock : %4</translation>
         <translation>Texte de pied de page</translation>
     </message>
     <message>
+        <location line="+1"/>
+        <source>مجلد حفظ الإيصالات:</source>
+        <translation>Dossier d'enregistrement des reçus :</translation>
+    </message>
+    <message>
         <location line="+2"/>
         <source>طبع الإيصال تلقائياً بعد كل عملية بيع</source>
         <translation>Imprimer le reçu automatiquement après chaque vente</translation>
@@ -3036,13 +3094,13 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+27"/>
-        <location line="+108"/>
-        <location line="+74"/>
+        <location line="+109"/>
+        <location line="+75"/>
         <source>معاينة: %1</source>
         <translation>Aperçu : %1</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-175"/>
         <source>طُبّقت السمة الجديدة — احفظ للإبقاء عليها</source>
         <translation>Nouveau thème appliqué — enregistrez pour le conserver</translation>
     </message>
@@ -3088,7 +3146,7 @@ Stock : %4</translation>
         <translation>Connexion impossible. Vérifiez votre connexion Internet.</translation>
     </message>
     <message>
-        <location line="+127"/>
+        <location line="+129"/>
         <source>حُفظت الإعدادات</source>
         <translation>Paramètres enregistrés</translation>
     </message>

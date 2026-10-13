@@ -2191,7 +2191,22 @@ Stock : %4</translation>
         <translation>تعذّر العثور على الإيصال</translation>
     </message>
     <message>
-        <location line="-316"/>
+        <location line="+13"/>
+        <source>تعذّر حفظ الإيصال</source>
+        <translation>تعذّر حفظ الإيصال</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>تعذّر حفظ الإيصال: %1</source>
+        <translation>تعذّر حفظ الإيصال: %1</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>تم حفظ الإيصال في %1</source>
+        <translation>تم حفظ الإيصال في %1</translation>
+    </message>
+    <message>
+        <location line="-334"/>
         <location line="+52"/>
         <location filename="../ui/printing/receipt.cpp" line="+42"/>
         <source>قطعة</source>
@@ -2435,9 +2450,9 @@ Stock : %4</translation>
         <translation>شكراً لتعاملكم معنا</translation>
     </message>
     <message>
-        <location filename="../ui/printing/receipt_printer.cpp" line="+69"/>
-        <source>Enregistrer le reçu en PDF</source>
-        <translation>حفظ الإيصال بصيغة PDF</translation>
+        <location filename="../ui/printing/receipt_printer.cpp" line="+84"/>
+        <source>تعذّر إنشاء مجلد الإيصالات</source>
+        <translation>تعذّر إنشاء مجلد الإيصالات</translation>
     </message>
 </context>
 <context>
@@ -2797,7 +2812,7 @@ Stock : %4</translation>
 <context>
     <name>app::ui::SalesPage</name>
     <message>
-        <location filename="../ui/sales_page.cpp" line="+35"/>
+        <location filename="../ui/sales_page.cpp" line="+40"/>
         <source>الحاسوب</source>
         <translation>الحاسوب</translation>
     </message>
@@ -2848,12 +2863,12 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+0"/>
-        <location line="+118"/>
+        <location line="+195"/>
         <source>الإجمالي</source>
         <translation>الإجمالي</translation>
     </message>
     <message>
-        <location line="-118"/>
+        <location line="-195"/>
         <source>الحالة</source>
         <translation>الحالة</translation>
     </message>
@@ -2863,7 +2878,15 @@ Stock : %4</translation>
         <translation>سجل فواتير اليوم</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location line="+8"/>
+        <location line="+113"/>
+        <location line="+13"/>
+        <location line="+9"/>
+        <source>طبع الإيصال</source>
+        <translation>طبع الإيصال</translation>
+    </message>
+    <message>
+        <location line="-89"/>
         <source>مسترد</source>
         <translation>مسترد</translation>
     </message>
@@ -2878,12 +2901,42 @@ Stock : %4</translation>
         <translation>مبيعات اليوم: %1  |  الإجمالي (الصافي): %2  |  الربح التقريبي: %3</translation>
     </message>
     <message>
-        <location line="+36"/>
+        <location line="+49"/>
+        <source>تعذّر العثور على الإيصال</source>
+        <translation>تعذّر العثور على الإيصال</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>تعذّر حفظ الإيصال</source>
+        <translation>تعذّر حفظ الإيصال</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>تعذّر حفظ الإيصال: %1</source>
+        <translation>تعذّر حفظ الإيصال: %1</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>تم حفظ الإيصال في %1</source>
+        <translation>تم حفظ الإيصال في %1</translation>
+    </message>
+    <message>
+        <location line="+21"/>
         <source>تفاصيل البيع #%1 (%2)</source>
         <translation>تفاصيل البيع #%1 (%2)</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+4"/>
+        <source>الإيصال رقم : (غير مُرقّم)</source>
+        <translation>الإيصال رقم : (غير مُرقّم)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>الإيصال رقم : %1</source>
+        <translation>الإيصال رقم : %1</translation>
+    </message>
+    <message>
+        <location line="+7"/>
         <source>المنتج</source>
         <translation>المنتج</translation>
     </message>
@@ -2964,7 +3017,7 @@ Stock : %4</translation>
         <translation>English</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+29"/>
         <source>حفظ الإعدادات</source>
         <translation>حفظ الإعدادات</translation>
     </message>
@@ -3014,6 +3067,11 @@ Stock : %4</translation>
         <translation>نص أسفل الفاتورة:</translation>
     </message>
     <message>
+        <location line="+1"/>
+        <source>مجلد حفظ الإيصالات:</source>
+        <translation>مجلد حفظ الإيصالات:</translation>
+    </message>
+    <message>
         <location line="+2"/>
         <source>طبع الإيصال تلقائياً بعد كل عملية بيع</source>
         <translation>طبع الإيصال تلقائياً بعد كل عملية بيع</translation>
@@ -3036,13 +3094,13 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+27"/>
-        <location line="+108"/>
-        <location line="+74"/>
+        <location line="+109"/>
+        <location line="+75"/>
         <source>معاينة: %1</source>
         <translation>معاينة: %1</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-175"/>
         <source>طُبّقت السمة الجديدة — احفظ للإبقاء عليها</source>
         <translation>طُبّقت السمة الجديدة — احفظ للإبقاء عليها</translation>
     </message>
@@ -3088,7 +3146,7 @@ Stock : %4</translation>
         <translation>تعذّر الاتصال. تحقق من الإنترنت.</translation>
     </message>
     <message>
-        <location line="+127"/>
+        <location line="+129"/>
         <source>حُفظت الإعدادات</source>
         <translation>حُفظت الإعدادات</translation>
     </message>
