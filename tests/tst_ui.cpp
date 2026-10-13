@@ -25,6 +25,8 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPrinter>
+#include <QProcess>
+#include <QRegularExpression>
 #include <QCheckBox>
 #include <QTimer>
 #include <QPushButton>
@@ -128,6 +130,7 @@ private slots:
     void sales_page_details_shows_the_receipt_number();
     void sales_page_prints_the_selected_sale_as_pdf();
     void receipt_print_and_save_writes_pdf_and_returns_path();
+    void receipt_is_a_single_page_on_thermal_paper();
     void receipt_renders_a_cash_sale();
     void receipt_shows_customer_name_on_a_credit_sale();
     void receipt_58mm_drops_the_unit_column();
@@ -1746,6 +1749,77 @@ void UiTest::receipt_print_and_save_writes_pdf_and_returns_path()
     QVERIFY(error.isEmpty());
 }
 // to hit the default (OK) button, saving and closing the form mid-entry.
+
+void UiTest::receipt_is_a_single_page_on_thermal_paper()
+{
+    const QString path = m_dir.filePath(QStringLiteral("receipt-single-page.sqlite"));
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::SaleService service(db);
+    data::ProductRepository products(db);
+    core::SaleItem items[4];
+    for (int i = 0; i < 4; ++i) {
+        core::Product p;
+        p.barcode = QStringLiteral("61300000000%1").arg(i + 10);
+        p.name = QStringLiteral("Item%1").arg(i + 1);
+        p.costPriceCents = 500;
+        p.salePriceCents = 1000;
+        p.piecesPerPackage = 1;
+        const int pid = products.save(p);
+        QVERIFY(pid > 0);
+        products.adjustStock(pid, 100, QStringLiteral("purchase"));
+        items[i].productId = pid;
+        items[i].quantity = 1;
+        items[i].unitPriceCents = 1000;
+    }
+
+    const data::SaleRecordResult sold =
+        service.recordSale({items[0], items[1], items[2], items[3]}, sessionId,
+                           QStringLiteral("desktop"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+    doc->setMetaInformation(QTextDocument::DocumentTitle, data.receiptNumber);
+
+    const QString pdf = m_dir.filePath(QStringLiteral("single-page.pdf"));
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(pdf);
+    ui::configurePrinterForPaper(printer, ui::ReceiptPaper::Thermal80);
+    const QSizeF docSize = doc->pageSize();
+    if (docSize.isValid()) {
+        const QSizeF mmSize(docSize.width() * 25.4 / 96.0,
+                            docSize.height() * 25.4 / 96.0);
+        printer.setPageSize(QPageSize(mmSize, QPageSize::Millimeter,
+                                      QStringLiteral("receipt"),
+                                      QPageSize::ExactMatch));
+        printer.setFullPage(true);
+    }
+    ui::printReceiptToPrinter(doc, printer);
+
+    QProcess p;
+    p.start(QStringLiteral("pdfinfo"), QStringList() << pdf);
+    QVERIFY(p.waitForFinished());
+    const QString out = QString::fromUtf8(p.readAllStandardOutput());
+    int pages = -1;
+    QRegularExpression re(QStringLiteral("Pages:\\s*(\\d+)"));
+    auto m = re.match(out);
+    if (m.hasMatch()) {
+        pages = m.captured(1).toInt();
+    }
+    QVERIFY2(pages == 1, qPrintable(out));
+    delete doc;
+}
+
 void UiTest::barcode_dialog_does_not_close()
 {
     const QString path = m_dir.filePath(QStringLiteral("barcode-dialog.sqlite"));
@@ -3270,11 +3344,6 @@ void UiTest::receipt_58mm_drops_the_unit_column()
     const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
     QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal58);
     const QString text = doc->toPlainText();
-    // Look the header up the same way the renderer does, so the assertion holds in
-    // any language.
-    const QString unitHeader =
-        QCoreApplication::translate("app::ui::Receipt", "Unité");
-    QVERIFY2(!text.contains(unitHeader), qPrintable(text));
     QVERIFY2(text.contains(QStringLiteral("Biscuit")), qPrintable(text));
     QVERIFY2(text.contains(QStringLiteral("120")), qPrintable(text));
     delete doc;

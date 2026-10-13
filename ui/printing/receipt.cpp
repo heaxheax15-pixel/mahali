@@ -208,35 +208,28 @@ QTextDocument* renderReceipt(const ReceiptData& data, ReceiptPaper paper)
                     .arg(QCoreApplication::translate("app::ui::Receipt", "Client : %1")
                              .arg(data.customerName.toHtmlEscaped()));
     }
-
-    html += QStringLiteral("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"2\"><tr>");
-    html += QStringLiteral("<th align=\"left\">%1</th>")
-                .arg(QCoreApplication::translate("app::ui::Receipt", "Nom"));
-    html += QStringLiteral("<th align=\"right\">%1</th>")
-                .arg(QCoreApplication::translate("app::ui::Receipt", "Qté"));
-    if (!narrow) {
-        html += QStringLiteral("<th align=\"left\">%1</th>")
-                    .arg(QCoreApplication::translate("app::ui::Receipt", "Unité"));
-    }
-    html += QStringLiteral("<th align=\"right\">%1</th>")
-                .arg(QCoreApplication::translate("app::ui::Receipt", "Prix"));
-    html += QStringLiteral("<th align=\"right\">%1</th>")
-                .arg(QCoreApplication::translate("app::ui::Receipt", "Total"));
-    html += QStringLiteral("</tr>");
+    html += QStringLiteral("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\"></table>");
     for (const ReceiptLine& line : data.lines) {
-        html += QStringLiteral("<tr>");
-        html += QStringLiteral("<td>%1</td>").arg(line.productName.toHtmlEscaped());
-        html += QStringLiteral("<td align=\"right\">%1</td>").arg(line.quantity);
-        if (!narrow) {
-            html += QStringLiteral("<td>%1</td>").arg(line.unitLabel.toHtmlEscaped());
+        html += QStringLiteral("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin:0 0 6px 0;\">");
+        html += QStringLiteral("<tr><td colspan=\"2\"><b>%1</b></td></tr>")
+                    .arg(line.productName.toHtmlEscaped());
+        QString detail;
+        // A one-piece line reads as its price: "2388.00 DA", not
+        // "1 Pièce × 2388.00 DA", which is the same figure with noise around it.
+        const bool unitIsPiece = (line.unitLabel == QCoreApplication::translate("app::ui::PosPage", "قطعة"));
+        if (line.quantity == 1 && unitIsPiece) {
+            detail = formatMoney(line.unitPriceCents, data.currencySymbol);
+        } else {
+            detail = QStringLiteral("%1 %2 × %3")
+                         .arg(line.quantity)
+                         .arg(line.unitLabel.toHtmlEscaped())
+                         .arg(formatMoney(line.unitPriceCents, data.currencySymbol));
         }
-        html += QStringLiteral("<td align=\"right\">%1</td>")
-                    .arg(formatMoney(line.unitPriceCents, data.currencySymbol));
-        html += QStringLiteral("<td align=\"right\">%1</td>")
+        html += QStringLiteral("<tr><td>%1</td><td align=\"right\" width=\"40%\">%2</td></tr>")
+                    .arg(detail)
                     .arg(formatMoney(line.lineTotalCents, data.currencySymbol));
-        html += QStringLiteral("</tr>");
+        html += QStringLiteral("</table>");
     }
-    html += QStringLiteral("</table>");
 
     html += QStringLiteral("<hr/>");
 
@@ -270,6 +263,14 @@ QTextDocument* renderReceipt(const ReceiptData& data, ReceiptPaper paper)
     doc->setDefaultFont(font);
     doc->setTextWidth(textWidth);
     doc->setHtml(html);
+    if (paper == ReceiptPaper::Thermal58 || paper == ReceiptPaper::Thermal80) {
+        // The document is given its own page: a single page whose height is
+        // the text height. QTextDocument lays out its content into this page,
+        // and QPrinter prints one page because there is only one.
+        const qreal widthMm = (paper == ReceiptPaper::Thermal58) ? 58.0 : 80.0;
+        const qreal heightMm = qMax<qreal>(100.0, doc->size().height() * 25.4 / 96.0 + 10.0);
+        doc->setPageSize(QSizeF(widthMm * 96.0 / 25.4, heightMm * 96.0 / 25.4));
+    }
     return doc;
 }
 

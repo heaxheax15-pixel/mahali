@@ -5,8 +5,8 @@
 #include <QPageSize>
 #include <QPrinter>
 #include <QPrinterInfo>
-#include <QStandardPaths>
 #include <QSizeF>
+#include <QStandardPaths>
 #include <QTextDocument>
 
 #include "data/setting_repository.h"
@@ -100,15 +100,56 @@ QString printAndSaveReceipt(QTextDocument* doc, ReceiptPaper paper,
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setOutputFileName(path);
     configurePrinterForPaper(printer, paper);
+    // Height is set on the document; sync printer page size from document.
+    if (paper == ReceiptPaper::Thermal58 || paper == ReceiptPaper::Thermal80) {
+        const QSizeF docSize = doc->pageSize();
+        if (docSize.isValid()) {
+            const QSizeF mmSize(docSize.width() * 25.4 / 96.0,
+                                docSize.height() * 25.4 / 96.0);
+            printer.setPageSize(QPageSize(mmSize, QPageSize::Millimeter,
+                                          QStringLiteral("receipt"),
+                                          QPageSize::ExactMatch));
+            printer.setFullPage(true);
+        } else {
+            // Fallback if doc page size not set
+            const qreal widthMm = (paper == ReceiptPaper::Thermal58) ? 58.0 : 80.0;
+            const qreal contentHeightPx = doc ? doc->size().height() : 0;
+            const qreal heightMm = qMax<qreal>(100.0,
+                contentHeightPx * 25.4 / 96.0 + 10.0);
+            printer.setPageSize(QPageSize(QSizeF(widthMm, heightMm),
+                                          QPageSize::Millimeter,
+                                          QStringLiteral("receipt"),
+                                          QPageSize::ExactMatch));
+            printer.setFullPage(true);
+        }
+    }
+
     printReceiptToPrinter(doc, printer);
 
     if (!QPrinterInfo::defaultPrinter().isNull()) {
         QPrinter paperPrinter(QPrinter::HighResolution);
         configurePrinterForPaper(paperPrinter, paper);
-        // Full-page for thermal rolls means the content uses the whole
-        // 58mm/80mm width, which is the point of a receipt roll; a printer
-        // that demands A4 will refuse the custom page size and Qt falls
-        // back to its own — the receipt renders, only smaller.
+        if (paper == ReceiptPaper::Thermal58 || paper == ReceiptPaper::Thermal80) {
+            const QSizeF docSize = doc->pageSize();
+            if (docSize.isValid()) {
+                const QSizeF mmSize(docSize.width() * 25.4 / 96.0,
+                                    docSize.height() * 25.4 / 96.0);
+                paperPrinter.setPageSize(QPageSize(mmSize, QPageSize::Millimeter,
+                                                   QStringLiteral("receipt"),
+                                                   QPageSize::ExactMatch));
+                paperPrinter.setFullPage(true);
+            } else {
+                const qreal widthMm = (paper == ReceiptPaper::Thermal58) ? 58.0 : 80.0;
+                const qreal contentHeightPx = doc ? doc->size().height() : 0;
+                const qreal heightMm = qMax<qreal>(100.0,
+                    contentHeightPx * 25.4 / 96.0 + 10.0);
+                paperPrinter.setPageSize(QPageSize(QSizeF(widthMm, heightMm),
+                                                   QPageSize::Millimeter,
+                                                   QStringLiteral("receipt"),
+                                                   QPageSize::ExactMatch));
+                paperPrinter.setFullPage(true);
+            }
+        }
         printReceiptToPrinter(doc, paperPrinter);
     }
 
