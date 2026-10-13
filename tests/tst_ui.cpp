@@ -16,7 +16,9 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFrame>
+#include <QImage>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QTimer>
 #include <QPushButton>
 #include <QLabel>
@@ -25,6 +27,7 @@
 #include "ui/dialogs/language_dialog.h"
 #include "ui/login_dialog.h"
 #include "ui/users_page.h"
+#include "ui/widgets/app_icon.h"
 
 #include "core/session.h"
 #include "core/sync_operation.h"
@@ -101,6 +104,9 @@ private slots:
     void pos_count_label_shows_only_pieces_for_piece_lines();
     void pos_count_label_shows_packages_then_pieces();
     void pos_count_label_groups_packages_by_their_own_name();
+    void pos_unite_shows_translated_default_package_name();
+    void pos_unite_shows_custom_package_name_untouched();
+    void app_icon_paints_inside_the_requested_box();
     void pos_new_product_from_scan_records_opening_stock();
     void products_page_new_product_records_opening_stock();
     void posSaleRequiresOpenSession();
@@ -878,6 +884,121 @@ void UiTest::pos_count_label_groups_packages_by_their_own_name()
     QVERIFY(balaPos >= 0);
     QVERIFY(cartonPos >= 0);
     QVERIFY(balaPos < cartonPos);
+}
+
+// The database default for a carton's name is the Arabic word. In the French UI
+// that default has to come out of the catalogue as "Carton", so the Unité
+// dropdown must pass the name through the translator rather than show the stored
+// bytes. No translator is installed under test, so the expected value is the
+// message the source asks for -- what is pinned down is that the label goes
+// through the translator at all, under the context pos_page.cpp uses.
+void UiTest::pos_unite_shows_translated_default_package_name()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-unite-default.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("40001");
+    product.name = QStringLiteral("ماء");
+    product.salePriceCents = 60;
+    product.costPriceCents = 58;
+    product.piecesPerPackage = 24;
+    product.packageName = QStringLiteral("كرتونة");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("40001"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 1);
+
+    auto* unitBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    const int packageIndex = unitBox->findData(QStringLiteral("package"));
+    QVERIFY(packageIndex >= 0);
+    QCOMPARE(unitBox->itemText(packageIndex),
+             QCoreApplication::translate("app::ui::PosPage", "كرتونة"));
+}
+
+// A name the owner typed is data, not a label, so it is shown exactly as stored
+// and never folded into the default. "بالة" is a bale in its own right and the
+// Unité dropdown has to say so.
+void UiTest::pos_unite_shows_custom_package_name_untouched()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos-unite-custom.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("40002");
+    product.name = QStringLiteral("تفاح");
+    product.salePriceCents = 100;
+    product.costPriceCents = 90;
+    product.piecesPerPackage = 12;
+    product.packageName = QStringLiteral("بالة");
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 50, QStringLiteral("purchase"));
+
+    ui::PosPage page(db);
+    page.setEntryText(QStringLiteral("40002"));
+    page.addEntry();
+    QCOMPARE(page.lineCount(), 1);
+
+    auto* unitBox = qobject_cast<QComboBox*>(page.table()->cellWidget(0, 2));
+    QVERIFY(unitBox);
+    const int packageIndex = unitBox->findData(QStringLiteral("package"));
+    QVERIFY(packageIndex >= 0);
+    QCOMPARE(unitBox->itemText(packageIndex), QStringLiteral("بالة"));
+}
+
+// appIcon() renders into a pixmap that is `size` logical pixels at a device
+// pixel ratio of 2, so the painter must scale by size/24 and let the ratio map
+// logical to device pixels. Multiplying by the ratio a second time drew the
+// glyph at twice the box and pinned it to the bottom-right corner, where it was
+// clipped: at 36px the pre-fix ink spanned (8,8)-(35,35), touching the frame,
+// against (4,4)-(31,31) centred once the extra factor is gone. The bounds below
+// are the ones asked for; the last check is what actually fails on the old code.
+void UiTest::app_icon_paints_inside_the_requested_box()
+{
+    constexpr int box = 36;
+    QImage image(box, box, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    ui::appIcon(ui::Icon::Plus, Qt::white, box).paint(&painter, 0, 0, box, box);
+    painter.end();
+
+    int minX = box;
+    int minY = box;
+    int maxX = -1;
+    int maxY = -1;
+    for (int y = 0; y < box; ++y) {
+        for (int x = 0; x < box; ++x) {
+            if (qAlpha(image.pixel(x, y)) == 0) {
+                continue;
+            }
+            minX = qMin(minX, x);
+            minY = qMin(minY, y);
+            maxX = qMax(maxX, x);
+            maxY = qMax(maxY, y);
+        }
+    }
+    QVERIFY2(maxX >= 0 && maxY >= 0, "the icon painted nothing");
+
+    const int width = maxX - minX + 1;
+    const int height = maxY - minY + 1;
+    QVERIFY2(width >= 24, qPrintable(QStringLiteral("width=%1").arg(width)));
+    QVERIFY2(height >= 24, qPrintable(QStringLiteral("height=%1").arg(height)));
+    QVERIFY2(width <= box, qPrintable(QStringLiteral("width=%1").arg(width)));
+    QVERIFY2(height <= box, qPrintable(QStringLiteral("height=%1").arg(height)));
+    // A glyph drawn at twice the box is clipped at the far edges, so it touches
+    // them. A correctly drawn glyph keeps a margin on every side.
+    QVERIFY2(maxX < box - 1 && maxY < box - 1,
+             qPrintable(QStringLiteral("icon touches the box edge: %1,%2").arg(maxX).arg(maxY)));
 }
 
 // Covers the products-page add path, not the till: the same opening-count

@@ -2,6 +2,7 @@
 
 #include <QBrush>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -44,6 +45,28 @@
 #include "widgets/ui_helpers.h"
 
 namespace app::ui {
+
+namespace {
+
+// The database default for a carton's name is the Arabic word, because
+// that is what an Algerian shopkeeper reads on the box. When the UI is
+// French, the same default must come out as "Carton" — the word is a
+// label, not the owner's data. A name the owner typed (غاجو، بالة،
+// Corbeille) is data and is shown exactly as stored.
+//
+// The context is the class's own tr() context ("app::ui::PosPage"), not the
+// bare "app::ui": that is where the catalogue already carries the كرتونة →
+// Carton message, so translating under any other context would return the
+// Arabic word unchanged.
+QString displayPackageName(const QString& stored)
+{
+    if (stored.isEmpty() || stored == QStringLiteral("كرتونة")) {
+        return QCoreApplication::translate("app::ui::PosPage", "كرتونة");
+    }
+    return stored;
+}
+
+} // namespace
 
 PosPage::PosPage(app::data::Database& db, QWidget* parent)
     : QWidget(parent)
@@ -951,8 +974,7 @@ void PosPage::refreshTotals()
     long long pieceQty = 0;
     for (const PosLine& line : m_lines) {
         if (line.unitKind == QStringLiteral("package")) {
-            const QString name = line.packageName.isEmpty() ? tr("كرتونة")
-                                                            : line.packageName;
+            const QString name = displayPackageName(line.packageName);
             if (!byPackageName.contains(name)) {
                 packageOrder.append(name);
             }
@@ -1021,7 +1043,7 @@ void PosPage::rebuildTable()
         // different product to the person using it.
         auto* unitCombo = new QComboBox;
         unitCombo->addItem(tr("قطعة"), QStringLiteral("piece"));
-        unitCombo->addItem(line.packageName.isEmpty() ? tr("كرتونة") : line.packageName,
+        unitCombo->addItem(displayPackageName(line.packageName),
                            QStringLiteral("package"));
         const int unitIndex = unitCombo->findData(line.unitKind);
         // An unknown unit can only arrive from a caller that predates the field, and

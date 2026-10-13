@@ -271,7 +271,7 @@ QIcon appIcon(Icon kind, const QColor& color, int size)
 
     QPainter painter(&pm);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.scale(dpr * size / 24.0, dpr * size / 24.0);
+    painter.scale(size / 24.0, size / 24.0);
     paintIcon(kind, painter, color, 24.0f);
 
     const QIcon icon(pm);
