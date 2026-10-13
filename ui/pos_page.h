@@ -161,6 +161,8 @@ private:
 
     void setNotice(const QString& text, bool ok);
 
+    void onPrintLastSale();
+
     app::data::Database& m_db;
     QVector<PosLine> m_lines;
     QSplitter* m_workspace = nullptr;
@@ -187,6 +189,7 @@ private:
     // every keystroke.
     long long m_adjustmentCents = 0;
     QLabel* m_notice;
+    QPushButton* m_printReceipt = nullptr;
     int m_lastSaleId = 0;
     // Who the sale in progress is being put on, and 0 for the till. Zero doubles
     // as "this is a cash sale", which is why isInCreditMode() is a comparison and

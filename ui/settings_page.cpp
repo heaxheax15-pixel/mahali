@@ -143,6 +143,10 @@ SettingsPage::SettingsPage(app::data::Database& db, QWidget* parent)
     form->addRow(caption(tr("حجم الورق:")), m_receiptPaperSize);
     form->addRow(caption(tr("نص أسفل الفاتورة:")), m_receiptFooter);
 
+    m_receiptAutoPrint = new QCheckBox(tr("طبع الإيصال تلقائياً بعد كل عملية بيع"));
+    m_receiptAutoPrint->setObjectName(QStringLiteral("receiptAutoPrint"));
+    form->addRow(m_receiptAutoPrint);
+
     // The fields are bounded by the card; the wrapper is the cap on the form
     // itself, so the fields cannot outgrow the column if the card is ever
     // resized to something wider.
@@ -303,6 +307,8 @@ void SettingsPage::refresh()
     m_receiptPaperSize->setCurrentIndex(
         paperIdx >= 0 ? paperIdx : m_receiptPaperSize->findData(QStringLiteral("80")));
     m_receiptFooter->setText(settings.value(QStringLiteral("receipt_footer_text")).value_or(QString()));
+    const auto autoPrintRow = settings.value(QStringLiteral("receipt_auto_print"));
+    m_receiptAutoPrint->setChecked(autoPrintRow.has_value() && *autoPrintRow == QLatin1String("1"));
 
     m_notice->clear();
     m_notice->setVisible(false);
@@ -377,6 +383,7 @@ void SettingsPage::save()
     settings.set(QStringLiteral("enabled"), zakatEnabled() ? QStringLiteral("1") : QStringLiteral("0"));
     settings.set(QStringLiteral("receipt_paper_size"), m_receiptPaperSize->currentData().toString());
     settings.set(QStringLiteral("receipt_footer_text"), m_receiptFooter->text().trimmed());
+    settings.set(QStringLiteral("receipt_auto_print"), m_receiptAutoPrint->isChecked() ? QStringLiteral("1") : QStringLiteral("0"));
 
     app::ui::setCurrencySymbol(currencySymbol());
     m_preview->setText(tr("معاينة: %1").arg(formatMoney(12345)));

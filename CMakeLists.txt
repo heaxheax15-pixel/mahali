@@ -18,7 +18,7 @@ set(CMAKE_AUTOUIC OFF)
 option(MAHALI_ANDROID "Build the Android POS target (requires Qt for Android toolchain)" OFF)
 
 find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test PrintSupport)
 
 # Translation catalogues. Consumed by apps/desktop/CMakeLists.txt, which
 # compiles them with lrelease and embeds the resulting .qm under /i18n.

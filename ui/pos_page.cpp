@@ -32,6 +32,9 @@
 #include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
+#include "data/setting_repository.h"
+#include "printing/receipt.h"
+#include "printing/receipt_printer.h"
 #include "data/product_repository.h"
 #include "data/sale_rules.h"
 #include "data/sale_service.h"
@@ -329,7 +332,19 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_notice->setObjectName(QStringLiteral("noticeOk"));
     // Nothing to report yet, so it starts hidden; setNotice reveals it.
     m_notice->setVisible(false);
-    root->addWidget(m_notice);
+
+    m_printReceipt = new QPushButton(tr("طبع الإيصال"));
+    m_printReceipt->setObjectName(QStringLiteral("printReceipt"));
+    m_printReceipt->setEnabled(false);
+    connect(m_printReceipt, &QPushButton::clicked, this, &PosPage::onPrintLastSale);
+
+    auto* noticeRow = new QHBoxLayout;
+    noticeRow->setContentsMargins(0, 0, 0, 0);
+    noticeRow->setSpacing(themeTokens::space4);
+    noticeRow->addWidget(m_notice, 1);
+    noticeRow->addWidget(m_printReceipt);
+
+    root->addLayout(noticeRow);
 
     connect(m_entry, &QLineEdit::returnPressed, this, &PosPage::addEntry);
     connect(m_entry, &QLineEdit::textChanged, this, &PosPage::onBarcodeTextChanged);
@@ -1287,6 +1302,34 @@ void PosPage::completeSale()
     rebuildTable();
     refreshQuickItems();
     m_entry->setFocus();
+
+    m_printReceipt->setEnabled(true);
+    {
+        data::SettingRepository settings(m_db);
+        const QString autoPrint = settings.value(QStringLiteral("receipt_auto_print")).value_or(QString());
+        if (autoPrint == QStringLiteral("1")) {
+            onPrintLastSale();
+        }
+    }
+}
+
+void PosPage::onPrintLastSale()
+{
+    if (m_lastSaleId == 0) {
+        return;
+    }
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(m_db, m_lastSaleId);
+    if (data.receiptNumber.isEmpty() && data.lines.empty()) {
+        setNotice(tr("تعذّر العثور على الإيصال"), false);
+        return;
+    }
+
+    const ReceiptPaper paper = ui::currentReceiptPaper(m_db);
+    QTextDocument* doc = ui::renderReceipt(data, paper);
+    doc->setMetaInformation(QTextDocument::DocumentTitle, data.receiptNumber);
+    ui::printReceiptInteractive(doc, paper, this);
+    delete doc;
 }
 
 } // namespace app::ui

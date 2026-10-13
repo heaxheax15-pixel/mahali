@@ -23,6 +23,8 @@
 #include <QImage>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPrinter>
+#include <QCheckBox>
 #include <QTimer>
 #include <QPushButton>
 #include <QLabel>
@@ -77,6 +79,7 @@
 #include "ui/settings_page.h"
 #include "ui/suppliers_page.h"
 #include "ui/main_window.h"
+#include "ui/printing/receipt_printer.h"
 
 #include <algorithm>
 
@@ -125,6 +128,8 @@ private slots:
     void receipt_58mm_drops_the_unit_column();
     void receipt_shows_the_adjustment_and_the_payable_matches_the_row();
     void settings_page_saves_and_restores_receipt_printing();
+    void settings_page_saves_auto_print();
+    void receipt_printer_writes_a_pdf();
     void receipt_uses_the_paper_from_settings();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
@@ -3209,6 +3214,89 @@ void UiTest::receipt_uses_the_paper_from_settings()
     data::Database emptyDb(emptyPath);
     QCOMPARE(static_cast<int>(ui::currentReceiptPaper(emptyDb)),
              static_cast<int>(ui::ReceiptPaper::Thermal80));
+}
+
+// Auto-print lives in settings: the checkbox stores "1" or "0", defaults to
+// unchecked, and is restored when the page re-opens.
+void UiTest::settings_page_saves_auto_print()
+{
+    const QString path = m_dir.filePath(QStringLiteral("settings-auto.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    {
+        ui::SettingsPage page(db);
+        auto* autoBox = page.findChild<QCheckBox*>(QStringLiteral("receiptAutoPrint"));
+        QVERIFY(autoBox);
+        QVERIFY(!autoBox->isChecked());
+        autoBox->setChecked(true);
+        page.save();
+    }
+
+    data::SettingRepository settings(db);
+    QCOMPARE(settings.value(QStringLiteral("receipt_auto_print")).value_or(QString()),
+             QStringLiteral("1"));
+
+    ui::SettingsPage reopened(db);
+    auto* autoBox = reopened.findChild<QCheckBox*>(QStringLiteral("receiptAutoPrint"));
+    QVERIFY(autoBox);
+    QVERIFY(autoBox->isChecked());
+}
+
+void UiTest::receipt_printer_writes_a_pdf()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pdf.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("6130000000099");
+    product.name = QStringLiteral("Biscuit");
+    product.costPriceCents = 5000;
+    product.salePriceCents = 6000;
+    product.piecesPerPackage = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitPriceCents = 6000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold =
+        service.recordSale({ item }, sessionId, QStringLiteral("desktop"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+    doc->setMetaInformation(QTextDocument::DocumentTitle, data.receiptNumber);
+
+    const QString file = m_dir.filePath(QStringLiteral("receipt.pdf"));
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(file);
+    ui::configurePrinterForPaper(printer, ui::ReceiptPaper::Thermal80);
+    ui::printReceiptToPrinter(doc, printer);
+
+    QVERIFY(QFileInfo(file).exists());
+    QVERIFY(QFileInfo(file).size() > 1000);
+    QFile f(file);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QByteArray first = f.read(4);
+    QVERIFY(first == "%PDF");
+    f.close();
+    delete doc;
 }
 
 QTEST_MAIN(UiTest)

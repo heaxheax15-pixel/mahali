@@ -12,7 +12,8 @@ target_link_libraries(mahali-ui
         mahali-core
         mahali-data
         mahali-network
-        Qt${QT_VERSION_MAJOR}::Widgets)
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::PrintSupport)
 
 target_sources(mahali-ui PRIVATE
     theme.cpp
@@ -26,6 +27,8 @@ target_sources(mahali-ui PRIVATE
     pos_page.h
     printing/receipt.cpp
     printing/receipt.h
+    printing/receipt_printer.cpp
+    printing/receipt_printer.h
     dialogs/product_dialog.cpp
     dialogs/product_dialog.h
     dialogs/customer_dialog.cpp
