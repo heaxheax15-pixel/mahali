@@ -13,15 +13,6 @@
 
 namespace app::ui {
 
-namespace {
-const char* const kReceiptContext = "app::ui::Receipt";
-
-QString receiptText(const char* source)
-{
-    return QCoreApplication::translate(kReceiptContext, source);
-}
-} // namespace
-
 void configurePrinterForPaper(QPrinter& printer, ReceiptPaper paper)
 {
     switch (paper) {
@@ -75,7 +66,9 @@ bool printReceiptInteractive(QTextDocument* doc, ReceiptPaper paper, QWidget* pa
     const QList<QPrinterInfo> printers = QPrinterInfo::availablePrinters();
     if (printers.isEmpty()) {
         QString path = QFileDialog::getSaveFileName(
-            parent, receiptText("Enregistrer le reçu en PDF"), QString(),
+            parent, QCoreApplication::translate("app::ui::Receipt",
+                                                "Enregistrer le reçu en PDF"),
+            QString(),
             QStringLiteral("*.pdf"));
         if (path.isEmpty()) {
             return false;

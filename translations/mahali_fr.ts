@@ -440,7 +440,7 @@ La vente reste visible avec un montant négatif et les produits retournent en st
     <message>
         <location line="+1"/>
         <source>الكمية الافتتاحية</source>
-        <translation>Quantité d'ouverture</translation>
+        <translation>Quantité d&apos;ouverture</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -484,12 +484,12 @@ Stock : %4</translation>
     <message>
         <location line="+1"/>
         <source>اسم العلبة</source>
-        <translation>Nom de l'emballage</translation>
+        <translation>Nom de l&apos;emballage</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>الكمية الافتتاحية تُسجَّل مرة واحدة عند إنشاء المنتج. لتعديل المخزون لاحقاً، استخدم صفحة المخزون.</source>
-        <translation>La quantité d'ouverture est saisie une seule fois, à la création du produit. Pour modifier le stock ensuite, utilisez la page Stock.</translation>
+        <translation>La quantité d&apos;ouverture est saisie une seule fois, à la création du produit. Pour modifier le stock ensuite, utilisez la page Stock.</translation>
     </message>
     <message>
         <location line="+129"/>
@@ -2023,7 +2023,7 @@ Stock : %4</translation>
 <context>
     <name>app::ui::PosPage</name>
     <message>
-        <location filename="../ui/pos_page.cpp" line="+57"/>
+        <location filename="../ui/pos_page.cpp" line="+83"/>
         <source>Code-barres ou nom du produit</source>
         <translation>Code-barres ou nom du produit</translation>
     </message>
@@ -2057,12 +2057,12 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+36"/>
-        <location line="+798"/>
+        <location line="+846"/>
         <source>Scannez un produit ou choisissez-en un dans la liste</source>
         <translation>Scannez un produit ou choisissez-en un dans la liste</translation>
     </message>
     <message>
-        <location line="-772"/>
+        <location line="-820"/>
         <location line="+29"/>
         <source>Total</source>
         <translation>Total</translation>
@@ -2091,12 +2091,12 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+37"/>
-        <location line="+805"/>
+        <location line="+863"/>
         <source>Ajustement</source>
         <translation>Ajustement</translation>
     </message>
     <message>
-        <location line="-800"/>
+        <location line="-858"/>
         <source>Somme à ajouter (+) ou à retirer (-) sur la facture entière</source>
         <translation>Somme à ajouter (+) ou à retirer (-) sur la facture entière</translation>
     </message>
@@ -2108,13 +2108,18 @@ Stock : %4</translation>
     <message>
         <location line="+4"/>
         <location line="+1"/>
-        <location line="+687"/>
-        <location line="+156"/>
+        <location line="+735"/>
+        <location line="+166"/>
         <source>Valider la vente (Entrée)</source>
         <translation>Valider la vente (Entrée)</translation>
     </message>
     <message>
-        <location line="-515"/>
+        <location line="-852"/>
+        <source>طبع الإيصال</source>
+        <translation>Imprimer le reçu</translation>
+    </message>
+    <message>
+        <location line="+296"/>
         <location line="+45"/>
         <source>Impossible de chiffrer « %1 »</source>
         <translation>Impossible de chiffrer « %1 »</translation>
@@ -2166,7 +2171,12 @@ Stock : %4</translation>
         <translation>Prix unitaire</translation>
     </message>
     <message>
-        <location line="+131"/>
+        <location line="+156"/>
+        <source>Articles: %1</source>
+        <translation>Articles: %1</translation>
+    </message>
+    <message>
+        <location line="+6"/>
         <source>Payé : %1</source>
         <translation>Payé : %1</translation>
     </message>
@@ -2176,17 +2186,25 @@ Stock : %4</translation>
         <translation>Reste : %1</translation>
     </message>
     <message>
-        <location line="+42"/>
+        <location line="+306"/>
+        <source>تعذّر العثور على الإيصال</source>
+        <translation>Reçu introuvable</translation>
+    </message>
+    <message>
+        <location line="-316"/>
+        <location line="+52"/>
+        <location filename="../ui/printing/receipt.cpp" line="+42"/>
         <source>قطعة</source>
         <translation>Pièce</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-993"/>
+        <location filename="../ui/printing/receipt.cpp" line="-10"/>
         <source>كرتونة</source>
         <translation>Carton</translation>
     </message>
     <message>
-        <location line="+103"/>
+        <location line="+1107"/>
         <source>À CRÉDIT : %1 · Solde : %2</source>
         <translation>À CRÉDIT : %1 · Solde : %2</translation>
     </message>
@@ -2196,12 +2214,7 @@ Stock : %4</translation>
         <translation>Enregistrer à crédit (Entrée)</translation>
     </message>
     <message>
-        <location line="-152"/>
-        <source>Articles: %1 | Unités: %2</source>
-        <translation>Articles: %1 | Unités: %2</translation>
-    </message>
-    <message>
-        <location line="+175"/>
+        <location line="+23"/>
         <source>الكمية أو السعر غير صالح في أحد الأسطر</source>
         <translation>Quantité ou prix invalide dans l&apos;une des lignes</translation>
     </message>
@@ -2362,6 +2375,69 @@ Stock : %4</translation>
         <location line="+58"/>
         <source>بحث سريع</source>
         <translation>Recherche rapide</translation>
+    </message>
+</context>
+<context>
+    <name>app::ui::Receipt</name>
+    <message>
+        <location filename="../ui/printing/receipt.cpp" line="+170"/>
+        <source>Reçu N° : %1</source>
+        <translation>Reçu N° : %1</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Client : %1</source>
+        <translation>Client : %1</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Nom</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Qté</source>
+        <translation>Qté</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Unité</source>
+        <translation>Unité</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Prix</source>
+        <translation>Prix</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Total</source>
+        <translation>Total</translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>Total : %1</source>
+        <translation>Total : %1</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Ajustement : %1</source>
+        <translation>Ajustement : %1</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Payable : %1</source>
+        <translation>Payable : %1</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>شكراً لتعاملكم معنا</source>
+        <translation>Merci de votre visite</translation>
+    </message>
+    <message>
+        <location filename="../ui/printing/receipt_printer.cpp" line="+69"/>
+        <source>Enregistrer le reçu en PDF</source>
+        <translation>Enregistrer le reçu en PDF</translation>
     </message>
 </context>
 <context>
@@ -2538,7 +2614,7 @@ Stock : %4</translation>
         <translation>Tout</translation>
     </message>
     <message>
-        <location line="+70"/>
+        <location line="+80"/>
         <source>Zakat (état actuel, indépendant de la période)</source>
         <translation>Zakat (état actuel, indépendant de la période)</translation>
     </message>
@@ -2618,7 +2694,12 @@ Stock : %4</translation>
         <translation>Somme</translation>
     </message>
     <message>
-        <location line="+196"/>
+        <location line="+130"/>
+        <source>تحذير: تعذّر حساب تكلفة بعض الصفوف. الأرقام المعروضة قد تكون ناقصة.</source>
+        <translation>Attention : le coût de certaines lignes n&apos;a pas pu être calculé. Les chiffres affichés peuvent être incomplets.</translation>
+    </message>
+    <message>
+        <location line="+74"/>
         <source>Payée le %1</source>
         <translation>Payée le %1</translation>
     </message>
@@ -2628,12 +2709,12 @@ Stock : %4</translation>
         <translation>Non payée</translation>
     </message>
     <message>
-        <location line="-181"/>
+        <location line="-189"/>
         <source>تفاصيل العمليات</source>
         <translation>Détail des opérations</translation>
     </message>
     <message>
-        <location line="-141"/>
+        <location line="-151"/>
         <source>From:</source>
         <translation>Du :</translation>
     </message>
@@ -2643,7 +2724,7 @@ Stock : %4</translation>
         <translation>Au :</translation>
     </message>
     <message>
-        <location line="+32"/>
+        <location line="+42"/>
         <source>Période sélectionnée</source>
         <translation>Période sélectionnée</translation>
     </message>
@@ -2708,7 +2789,7 @@ Stock : %4</translation>
         <translation>Aucune opération sur cette période</translation>
     </message>
     <message>
-        <location line="+136"/>
+        <location line="+144"/>
         <source>Total</source>
         <translation>Total</translation>
     </message>
@@ -2883,7 +2964,7 @@ Stock : %4</translation>
         <translation>English</translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+24"/>
         <source>حفظ الإعدادات</source>
         <translation>Enregistrer les paramètres</translation>
     </message>
@@ -2923,7 +3004,22 @@ Stock : %4</translation>
         <translation>Clé de synchronisation (nécessite un redémarrage) :</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+6"/>
+        <source>حجم الورق:</source>
+        <translation>Taille du papier</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>نص أسفل الفاتورة:</source>
+        <translation>Texte de pied de page</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>طبع الإيصال تلقائياً بعد كل عملية بيع</source>
+        <translation>Imprimer le reçu automatiquement après chaque vente</translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <location line="+114"/>
         <source>Vérifier les mises à jour</source>
         <translation>Vérifier les mises à jour</translation>
@@ -2940,13 +3036,13 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+27"/>
-        <location line="+99"/>
-        <location line="+71"/>
+        <location line="+108"/>
+        <location line="+74"/>
         <source>معاينة: %1</source>
         <translation>Aperçu : %1</translation>
     </message>
     <message>
-        <location line="-161"/>
+        <location line="-173"/>
         <source>طُبّقت السمة الجديدة — احفظ للإبقاء عليها</source>
         <translation>Nouveau thème appliqué — enregistrez pour le conserver</translation>
     </message>
@@ -2992,7 +3088,7 @@ Stock : %4</translation>
         <translation>Connexion impossible. Vérifiez votre connexion Internet.</translation>
     </message>
     <message>
-        <location line="+115"/>
+        <location line="+127"/>
         <source>حُفظت الإعدادات</source>
         <translation>Paramètres enregistrés</translation>
     </message>
@@ -3159,12 +3255,12 @@ Stock : %4</translation>
     <message>
         <location line="+6"/>
         <location line="+26"/>
-        <location line="+74"/>
+        <location line="+77"/>
         <source>الاسم</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location line="-98"/>
+        <location line="-101"/>
         <source>PIN (حرفان)</source>
         <translation>PIN (2 lettres)</translation>
     </message>
@@ -3176,24 +3272,23 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="-1"/>
-        <location line="+73"/>
         <source>PIN</source>
         <translation>PIN</translation>
     </message>
     <message>
-        <location line="-71"/>
-        <location line="+71"/>
+        <location line="+2"/>
+        <location line="+74"/>
         <source>الدور</source>
         <translation>Rôle</translation>
     </message>
     <message>
-        <location line="-70"/>
-        <location line="+70"/>
+        <location line="-73"/>
+        <location line="+73"/>
         <source>نشط</source>
         <translation>Actif</translation>
     </message>
     <message>
-        <location line="-19"/>
+        <location line="-22"/>
         <source>إدارة المستخدمين</source>
         <translation>Gestion des utilisateurs</translation>
     </message>
@@ -3203,12 +3298,12 @@ Stock : %4</translation>
         <translation>Gérer les comptes des caissiers et leurs permissions</translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+21"/>
         <source>إجراءات</source>
         <translation>Actions</translation>
     </message>
     <message>
-        <location line="+82"/>
+        <location line="+95"/>
         <source>تعديل</source>
         <translation>Modifier</translation>
     </message>
@@ -3218,7 +3313,7 @@ Stock : %4</translation>
         <translation>Supprimer</translation>
     </message>
     <message>
-        <location line="+81"/>
+        <location line="+88"/>
         <location line="+4"/>
         <location line="+35"/>
         <location line="+5"/>
@@ -3271,7 +3366,7 @@ Stock : %4</translation>
 <context>
     <name>main</name>
     <message>
-        <location filename="../apps/desktop/main.cpp" line="+29"/>
+        <location filename="../apps/desktop/main.cpp" line="+30"/>
         <location filename="../apps/screenshot/main.cpp" line="+156"/>
         <source>محلي</source>
         <translation>Mahali</translation>

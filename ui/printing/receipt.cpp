@@ -23,16 +23,6 @@ namespace app::ui {
 
 namespace {
 
-// The context the receipt's own labels are translated under. The renderer is a
-// set of free functions, so tr() has no class to hang off; the tests look the
-// strings up with this same context.
-const char* const kReceiptContext = "app::ui::Receipt";
-
-QString receiptText(const char* source)
-{
-    return QCoreApplication::translate(kReceiptContext, source);
-}
-
 QString translatedPackageName(const QString& stored)
 {
     // Same call pos_page.cpp makes when it labels the Unité column: the context
@@ -209,22 +199,29 @@ QTextDocument* renderReceipt(const ReceiptData& data, ReceiptPaper paper)
     }
     html += QStringLiteral("<hr/>");
     html += QStringLiteral("<p>%1</p>")
-                .arg(receiptText("Reçu N° : %1").arg(data.receiptNumber.toHtmlEscaped()));
+                .arg(QCoreApplication::translate("app::ui::Receipt", "Reçu N° : %1")
+                         .arg(data.receiptNumber.toHtmlEscaped()));
     html += QStringLiteral("<p>%1</p>")
                 .arg(QLocale().toString(data.dateTime, QLocale::ShortFormat).toHtmlEscaped());
     if (!data.customerName.isEmpty()) {
         html += QStringLiteral("<p>%1</p>")
-                    .arg(receiptText("Client : %1").arg(data.customerName.toHtmlEscaped()));
+                    .arg(QCoreApplication::translate("app::ui::Receipt", "Client : %1")
+                             .arg(data.customerName.toHtmlEscaped()));
     }
 
     html += QStringLiteral("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"2\"><tr>");
-    html += QStringLiteral("<th align=\"left\">%1</th>").arg(receiptText("Nom"));
-    html += QStringLiteral("<th align=\"right\">%1</th>").arg(receiptText("Qté"));
+    html += QStringLiteral("<th align=\"left\">%1</th>")
+                .arg(QCoreApplication::translate("app::ui::Receipt", "Nom"));
+    html += QStringLiteral("<th align=\"right\">%1</th>")
+                .arg(QCoreApplication::translate("app::ui::Receipt", "Qté"));
     if (!narrow) {
-        html += QStringLiteral("<th align=\"left\">%1</th>").arg(receiptText("Unité"));
+        html += QStringLiteral("<th align=\"left\">%1</th>")
+                    .arg(QCoreApplication::translate("app::ui::Receipt", "Unité"));
     }
-    html += QStringLiteral("<th align=\"right\">%1</th>").arg(receiptText("Prix"));
-    html += QStringLiteral("<th align=\"right\">%1</th>").arg(receiptText("Total"));
+    html += QStringLiteral("<th align=\"right\">%1</th>")
+                .arg(QCoreApplication::translate("app::ui::Receipt", "Prix"));
+    html += QStringLiteral("<th align=\"right\">%1</th>")
+                .arg(QCoreApplication::translate("app::ui::Receipt", "Total"));
     html += QStringLiteral("</tr>");
     for (const ReceiptLine& line : data.lines) {
         html += QStringLiteral("<tr>");
@@ -244,19 +241,22 @@ QTextDocument* renderReceipt(const ReceiptData& data, ReceiptPaper paper)
     html += QStringLiteral("<hr/>");
 
     html += QStringLiteral("<p style=\"text-align:right;\">%1</p>")
-                .arg(receiptText("Total : %1").arg(formatMoney(data.totalCents, data.currencySymbol)));
+                .arg(QCoreApplication::translate("app::ui::Receipt", "Total : %1")
+                         .arg(formatMoney(data.totalCents, data.currencySymbol)));
     if (data.adjustmentCents != 0) {
         html += QStringLiteral("<p style=\"text-align:right;\">%1</p>")
-                    .arg(receiptText("Ajustement : %1")
+                    .arg(QCoreApplication::translate("app::ui::Receipt", "Ajustement : %1")
                              .arg(formatMoney(data.adjustmentCents, data.currencySymbol)));
     }
     const long long payable = data.totalCents + data.adjustmentCents;
     html += QStringLiteral("<p style=\"text-align:right;font-size:%1pt;\"><b>%2</b></p>")
                 .arg(fontPointSize + 2)
-                .arg(receiptText("Payable : %1").arg(formatMoney(payable, data.currencySymbol)));
+                .arg(QCoreApplication::translate("app::ui::Receipt", "Payable : %1")
+                         .arg(formatMoney(payable, data.currencySymbol)));
 
     const QString footer = data.footerText.isEmpty()
-                               ? receiptText("شكراً لتعاملكم معنا")
+                               ? QCoreApplication::translate("app::ui::Receipt",
+                                                             "شكراً لتعاملكم معنا")
                                : data.footerText;
     html += QStringLiteral("<p style=\"text-align:center;font-size:%1pt;\">%2</p>")
                 .arg(qMax(6, fontPointSize - 1))
