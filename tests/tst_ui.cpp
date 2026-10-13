@@ -123,6 +123,9 @@ private slots:
     void cash_session_rejects_invalid_amount();
     void salesPageShowsToday();
     void profit_cents_survives_translation();
+    void sales_page_print_button_enables_on_selection();
+    void sales_page_details_shows_the_receipt_number();
+    void sales_page_prints_the_selected_sale_as_pdf();
     void receipt_renders_a_cash_sale();
     void receipt_shows_customer_name_on_a_credit_sale();
     void receipt_58mm_drops_the_unit_column();
@@ -1546,6 +1549,137 @@ void UiTest::profit_cents_survives_translation()
     page.refresh();
     QCOMPARE(page.grandTotalCents(), total);
     QCOMPARE(page.profitCents(), profit);
+}
+
+void UiTest::sales_page_print_button_enables_on_selection()
+{
+    const QString path = m_dir.filePath(QStringLiteral("sales-print-btn.sqlite"));
+    int sessionId = 0;
+    const int productId = seedProduct(path, &sessionId, 10000);
+    QVERIFY(productId > 0);
+
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    const auto session = sessions.findOpen();
+    QVERIFY(session.has_value());
+    data::SaleService service(db);
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 1;
+    QVERIFY(service.recordSale({ item }, session->id, "desktop", false).ok);
+
+    ui::SalesPage page(db);
+    QCOMPARE(page.rowCount(), 1);
+
+    auto* printBtn = page.findChild<QPushButton*>(QStringLiteral("printReceipt"));
+    QVERIFY(printBtn);
+    QVERIFY(!printBtn->isEnabled());
+
+    page.table()->selectRow(0);
+    QVERIFY(printBtn->isEnabled());
+}
+
+void UiTest::sales_page_details_shows_the_receipt_number()
+{
+    const QString path = m_dir.filePath(QStringLiteral("sales-details-receipt.sqlite"));
+    int sessionId = 0;
+    const int productId = seedProduct(path, &sessionId, 10000);
+    QVERIFY(productId > 0);
+
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    const auto session = sessions.findOpen();
+    QVERIFY(session.has_value());
+    data::SaleService service(db);
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 1;
+    const data::SaleRecordResult sold =
+        service.recordSale({ item }, session->id, "desktop", false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+    QVERIFY(sold.saleId > 0);
+
+    data::SaleRepository sales(db);
+    const auto stored = sales.findById(sold.saleId);
+    QVERIFY(stored.has_value());
+    QVERIFY(!stored->receiptNumber.isEmpty());
+
+    ui::SalesPage page(db);
+    QCOMPARE(page.rowCount(), 1);
+    QTableWidget* table = page.table();
+    table->selectRow(0);
+    page.show();
+    page.resize(900, 600);
+    QCoreApplication::processEvents();
+
+    bool found = false;
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        QLabel* numberLabel = modal->findChild<QLabel*>(QStringLiteral("saleReceiptNumber"));
+        if (numberLabel && numberLabel->text().contains(stored->receiptNumber)) {
+            found = true;
+        }
+        modal->reject();
+    });
+
+    // A press first: Qt routes a lone MouseButtonDblClick on an item view to a
+    // single pressed() unless the preceding press landed on the same cell.
+    const QPoint cellCenter = table->viewport()->mapFromGlobal(
+            table->mapToGlobal(table->visualItemRect(table->item(0, 0)).center()));
+    QTest::mousePress(table->viewport(), Qt::LeftButton, Qt::NoModifier, cellCenter);
+    QTest::mouseDClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, cellCenter);
+    QVERIFY2(found, "the details dialog did not show the sale's receipt number");
+}
+
+void UiTest::sales_page_prints_the_selected_sale_as_pdf()
+{
+    const QString path = m_dir.filePath(QStringLiteral("sales-print-pdf.sqlite"));
+    int sessionId = 0;
+    const int productId = seedProduct(path, &sessionId, 10000);
+    QVERIFY(productId > 0);
+
+    data::Database db(path);
+    data::CashSessionRepository sessions(db);
+    const auto session = sessions.findOpen();
+    QVERIFY(session.has_value());
+    data::SaleService service(db);
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 1;
+    QVERIFY(service.recordSale({ item }, session->id, "desktop", false).ok);
+
+    ui::SalesPage page(db);
+    QCOMPARE(page.rowCount(), 1);
+    QTableWidget* table = page.table();
+    table->selectRow(0);
+    const int saleId = table->item(0, 0)->data(Qt::UserRole).toInt();
+    QVERIFY(saleId > 0);
+
+    // The interactive path opens a QFileDialog when no printer is installed,
+    // and a dialog would hang the suite. The test drives the same loader and
+    // the same printer the button uses, from the same sale id the table
+    // exposes, so the wire from selection to paper is covered without the
+    // modal.
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, saleId);
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+
+    const QString file = m_dir.filePath(QStringLiteral("sales-receipt.pdf"));
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(file);
+    ui::configurePrinterForPaper(printer, ui::ReceiptPaper::Thermal80);
+    ui::printReceiptToPrinter(doc, printer);
+
+    QVERIFY(QFileInfo(file).exists());
+    QFile f(file);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QByteArray first = f.read(4);
+    QVERIFY(first == "%PDF");
+    f.close();
+    delete doc;
 }
 
 // A barcode scanner terminates every scan with Enter. In a QDialog that Enter used

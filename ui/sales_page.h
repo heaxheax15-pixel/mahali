@@ -5,6 +5,7 @@
 #include "data/database.h"
 
 class QLabel;
+class QPushButton;
 class QTableWidget;
 
 namespace app::ui {
@@ -30,11 +31,15 @@ public:
 
 private slots:
     void showDetails();
+    void onPrintSelected();
+    void onSelectionChanged();
 
 private:
     app::data::Database& m_db;
     QTableWidget* m_table;
     QLabel* m_summary;
+    QPushButton* m_printReceipt = nullptr;
+    int m_selectedSaleId = 0;
     StatCard* m_countCard = nullptr;
     StatCard* m_totalCard = nullptr;
     StatCard* m_profitCard = nullptr;

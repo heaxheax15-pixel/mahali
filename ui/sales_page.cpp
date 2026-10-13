@@ -7,8 +7,10 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QTableWidget>
+#include <QTextDocument>
 #include <QTime>
 #include <QVBoxLayout>
 
@@ -19,6 +21,8 @@
 #include "data/sale_item_repository.h"
 #include "data/sale_repository.h"
 #include "format_utils.h"
+#include "printing/receipt.h"
+#include "printing/receipt_printer.h"
 #include "widgets/app_icon.h"
 #include "widgets/page_header.h"
 #include "theme_tokens.h"
@@ -105,13 +109,28 @@ SalesPage::SalesPage(app::data::Database& db, QWidget* parent)
     tableLayout->addWidget(m_table, 1);
     tableLayout->addWidget(m_summary);
 
+    // The button prints the sale under the cursor, not a fixed one: a
+    // cashier scrolling yesterday's sales picks a row and asks for the
+    // paper again, and a button that always printed the last sale would
+    // hand them the wrong slip.
+    m_printReceipt = new QPushButton(tr("طبع الإيصال"));
+    m_printReceipt->setObjectName(QStringLiteral("printReceipt"));
+    m_printReceipt->setEnabled(false);
+    auto* printRow = new QHBoxLayout;
+    printRow->setContentsMargins(0, 0, 0, 0);
+    printRow->addStretch(1);
+    printRow->addWidget(m_printReceipt);
+
     auto* root = new QVBoxLayout(this);
     padPageLayout(root);
     root->addWidget(header);
     root->addLayout(cards);
+    root->addLayout(printRow);
     root->addWidget(tableCard, 1);
 
     connect(m_table, &QTableWidget::cellDoubleClicked, this, &SalesPage::showDetails);
+    connect(m_table, &QTableWidget::itemSelectionChanged, this, &SalesPage::onSelectionChanged);
+    connect(m_printReceipt, &QPushButton::clicked, this, &SalesPage::onPrintSelected);
 
     refresh();
 }
@@ -164,6 +183,8 @@ void SalesPage::refresh()
                            .arg(formatMoney(total))
                            .arg(formatMoney(total - cogs)));
     m_summary->setVisible(!m_summary->text().isEmpty());
+
+    onSelectionChanged();
 }
 
 int SalesPage::rowCount() const
@@ -179,6 +200,42 @@ qint64 SalesPage::grandTotalCents() const
 qint64 SalesPage::profitCents() const
 {
     return m_cachedProfitCents;
+}
+
+void SalesPage::onSelectionChanged()
+{
+    const QList<QTableWidgetItem*> selected = m_table->selectedItems();
+    if (selected.isEmpty()) {
+        m_selectedSaleId = 0;
+        m_printReceipt->setEnabled(false);
+        return;
+    }
+    // Every selected item in the same row carries the same id; take the row
+    // from the first one and read its first column's UserRole.
+    const int row = selected.first()->row();
+    QTableWidgetItem* first = m_table->item(row, 0);
+    m_selectedSaleId = first ? first->data(Qt::UserRole).toInt() : 0;
+    m_printReceipt->setEnabled(m_selectedSaleId > 0);
+}
+
+void SalesPage::onPrintSelected()
+{
+    if (m_selectedSaleId == 0) {
+        return;
+    }
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(m_db, m_selectedSaleId);
+    if (data.receiptNumber.isEmpty() && data.lines.empty()) {
+        QMessageBox::warning(this, tr("طبع الإيصال"),
+                             tr("تعذّر العثور على الإيصال"));
+        return;
+    }
+
+    const ReceiptPaper paper = ui::currentReceiptPaper(m_db);
+    QTextDocument* doc = ui::renderReceipt(data, paper);
+    doc->setMetaInformation(QTextDocument::DocumentTitle, data.receiptNumber);
+    ui::printReceiptInteractive(doc, paper, this);
+    delete doc;
 }
 
 void SalesPage::showDetails()
@@ -197,6 +254,12 @@ void SalesPage::showDetails()
     ScanSafeDialog dialog(this);
     dialog.setWindowTitle(tr("تفاصيل البيع #%1 (%2)").arg(sale->id).arg(formatMoney(sale->totalCents)));
     dialog.setModal(true);
+
+    const QString number = sale->receiptNumber.isEmpty()
+                               ? tr("الإيصال رقم : (غير مُرقّم)")
+                               : tr("الإيصال رقم : %1").arg(sale->receiptNumber);
+    auto* numberLabel = new QLabel(number);
+    numberLabel->setObjectName(QStringLiteral("saleReceiptNumber"));
 
     auto* items = new QTableWidget;
     items->setColumnCount(4);
@@ -229,6 +292,7 @@ void SalesPage::showDetails()
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    layout->addWidget(numberLabel);
     layout->addWidget(items);
     layout->addWidget(buttons);
     dialog.exec();
