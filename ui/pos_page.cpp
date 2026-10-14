@@ -352,7 +352,6 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     connect(m_adjustment, &QLineEdit::textChanged, this, &PosPage::onAdjustmentChanged);
     m_weightInput = new QLineEdit;
     m_weightInput->setObjectName(QStringLiteral("posWeightField"));
-    m_weightInput->setPlaceholderText(tr("أدخل الوزن بالغرام"));
     m_weightInput->setValidator(new QIntValidator(1, 100000, m_weightInput));
     connect(m_weightInput, &QLineEdit::textChanged,
             this, &PosPage::onWeightChanged);
@@ -1375,7 +1374,6 @@ void PosPage::startWeightEntry(const core::Product& product)
 
     auto* gramsField = new QLineEdit;
     gramsField->setObjectName(QStringLiteral("posWeightField"));
-    gramsField->setPlaceholderText(tr("أدخل الوزن بالغرام"));
     gramsField->setValidator(new QIntValidator(1, 100000, gramsField));
     gramsField->setText(m_lastWeightText);
     connect(gramsField, &QLineEdit::textChanged,
@@ -1384,7 +1382,7 @@ void PosPage::startWeightEntry(const core::Product& product)
             this, &PosPage::onWeightSubmitted);
     m_weightInput = gramsField;
     m_emptyTable->setCellWidget(0, 1, gramsField);
-    m_emptyTable->setColumnWidth(1, 110);
+    m_emptyTable->setColumnWidth(1, 90);
 
     auto* priceItem = new QTableWidgetItem(
         tr("%1 / كغ").arg(formatMoney(product.salePriceCents)));
