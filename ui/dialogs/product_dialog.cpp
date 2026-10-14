@@ -169,11 +169,13 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     openingStock->setRange(0, 1000000000);
     openingStock->setValue(initial.id == 0 ? 0 : static_cast<int>(initial.quantity));
     auto* package = new QSpinBox;
+    package->setObjectName(QStringLiteral("pieces_per_package"));
     package->setRange(1, 1000000);
     package->setValue(initial.piecesPerPackage > 0 ? initial.piecesPerPackage : 1);
     // Editable so a shop whose packaging has a local name not in the list can
     // type it and keep it. The list is a starting point, not a closed set.
     auto* packageName = new QComboBox();
+    packageName->setObjectName(QStringLiteral("package_name"));
     packageName->setEditable(true);
     packageName->addItems({QCoreApplication::translate("ProductDialog", "كرتونة"),
                            QCoreApplication::translate("ProductDialog", "غاجو"),
@@ -213,23 +215,6 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     soldByWeight->setChecked(initial.soldByWeight);
     form->addRow(soldByWeight);
 
-    QLabel* saleLabel = qobject_cast<QLabel*>(form->labelForField(sale));
-    QLabel* costLabel = qobject_cast<QLabel*>(form->labelForField(cost));
-    auto updateWeightLabels = [saleLabel, costLabel, soldByWeight]() {
-        const bool on = soldByWeight->isChecked();
-        if (saleLabel) {
-            saleLabel->setText(on ? QCoreApplication::translate("ProductDialog", "سعر الكيلوغرام")
-                                  : QCoreApplication::translate("ProductDialog", "سعر البيع"));
-        }
-        if (costLabel) {
-            costLabel->setText(on ? QCoreApplication::translate("ProductDialog", "تكلفة الكيلوغرام")
-                                  : QCoreApplication::translate("ProductDialog", "سعر التكلفة"));
-        }
-    };
-    QObject::connect(soldByWeight, &QCheckBox::toggled, &dialog,
-                     [updateWeightLabels](bool) { updateWeightLabels(); });
-    updateWeightLabels();
-
     form->addRow(QCoreApplication::translate("ProductDialog", "الكمية الافتتاحية"), openingStock);
     form->addRow(QCoreApplication::translate("ProductDialog", "الوحدة"), unit);
     form->addRow(QCoreApplication::translate("ProductDialog", "عدد الحبات في العلبة"), package);
@@ -246,6 +231,50 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
             "الكمية الافتتاحية تُسجَّل مرة واحدة عند إنشاء المنتج. لتعديل المخزون لاحقاً، "
             "استخدم صفحة المخزون."));
     }
+
+    // The weight flag does two things at once: it rewrites the two price captions
+    // and it takes the two carton rows off the form. A weight product is priced and
+    // counted by the kilogram, and a "Nombre de pièces par conditionnement" beside
+    // it would invite a number no reader of the row ever divides out. The values
+    // are left where they are rather than cleared, so a shopkeeper who toggles the
+    // box twice finds their digits again.
+    QLabel* saleLabel = qobject_cast<QLabel*>(form->labelForField(sale));
+    QLabel* costLabel = qobject_cast<QLabel*>(form->labelForField(cost));
+    QLabel* packageLabel = qobject_cast<QLabel*>(form->labelForField(package));
+    QLabel* packageNameLabel = qobject_cast<QLabel*>(form->labelForField(packageName));
+    auto updateWeightLabels = [saleLabel, costLabel, soldByWeight, package, packageName, packageLabel,
+                               packageNameLabel, unit]() {
+        const bool on = soldByWeight->isChecked();
+        if (saleLabel) {
+            saleLabel->setText(on ? QCoreApplication::translate("ProductDialog", "سعر الكيلوغرام")
+                                  : QCoreApplication::translate("ProductDialog", "سعر البيع"));
+        }
+        if (costLabel) {
+            costLabel->setText(on ? QCoreApplication::translate("ProductDialog", "تكلفة الكيلوغرام")
+                                  : QCoreApplication::translate("ProductDialog", "سعر التكلفة"));
+        }
+        const bool weight = soldByWeight->isChecked();
+        package->setVisible(!weight);
+        packageName->setVisible(!weight);
+        if (packageLabel) {
+            packageLabel->setVisible(!weight);
+        }
+        if (packageNameLabel) {
+            packageNameLabel->setVisible(!weight);
+        }
+        if (weight) {
+            // A weight product has no carton: the row above said kilograms,
+            // and offering a "Nombre de pièces par conditionnement" here is
+            // inviting the shopkeeper to type a number that will never be read.
+            unit->setText(QStringLiteral("kg"));
+            unit->setEnabled(false);
+        } else {
+            unit->setEnabled(true);
+        }
+    };
+    QObject::connect(soldByWeight, &QCheckBox::toggled, &dialog,
+                     [updateWeightLabels](bool) { updateWeightLabels(); });
+    updateWeightLabels();
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     QPushButton* okBtn = buttons->button(QDialogButtonBox::Ok);
@@ -468,7 +497,15 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     if (initial.id == 0) {
         product.quantity = static_cast<long long>(openingStock->value());
     }
-    product.unit = typedUnit.isEmpty() ? QStringLiteral("piece") : typedUnit;
+    if (soldByWeight->isChecked()) {
+        // "kg" is not a choice for a weight product: its price is per
+        // kilogram, its stock is in grams, and every reader of the row divides
+        // by a thousand. A unit that says "piece" here would contradict the
+        // three places that already know better.
+        product.unit = QStringLiteral("kg");
+    } else {
+        product.unit = typedUnit.isEmpty() ? QStringLiteral("piece") : typedUnit;
+    }
     // package_size and pieces_per_package are written from the same widget so the
     // two columns cannot drift; package_barcode is computed rather than asked for,
     // because a carton's barcode is the piece's plus a marker, and a field would

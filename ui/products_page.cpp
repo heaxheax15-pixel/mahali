@@ -8,6 +8,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -246,7 +247,19 @@ void ProductsPage::refresh()
         put(kColName, displayName, false);
         put(kColCost, formatMoney(product.costPriceCents), true);
         put(kColSale, formatMoney(product.salePriceCents), true);
-        put(kColQuantity, QString::number(product.quantity), true);
+        QString quantityText;
+        if (product.soldByWeight) {
+            // The cell reads in kilograms, the ledger counts grams. The edit
+            // handler swaps to the raw figure while the cell is open, so the
+            // shopkeeper never types "10.00 كغ" into a field that expects an
+            // integer.
+            quantityText = QStringLiteral("%1 %2")
+                               .arg(QLocale().toString(product.quantity / 1000.0, 'f', 2))
+                               .arg(tr("كغ"));
+        } else {
+            quantityText = QString::number(product.quantity);
+        }
+        put(kColQuantity, quantityText, true);
         put(kColUnit, product.unit, false);
 
         for (int column = 0; column < m_table->columnCount(); ++column) {
@@ -363,6 +376,24 @@ void ProductsPage::onNameActivated(int row, int column)
 {
     // Only the name opens the form. The price and quantity cells are editable,
     // and a double click there belongs to the cell editor, not to this.
+    //
+    // The quantity cell is the exception: a weight row shows "10.00 كغ" but the
+    // ledger counts grams. This handler swaps the cell to the raw figure before
+    // the default editor opens (cellDoubleClicked is emitted ahead of edit()), so
+    // the shopkeeper edits "10000", not "10.00 كغ".
+    if (column == kColQuantity) {
+        const int id = productIdAt(row);
+        if (id == 0) {
+            return;
+        }
+        const std::optional<core::Product> product = data::ProductRepository(m_db).findById(id);
+        if (!product || !product->soldByWeight) {
+            return;
+        }
+        const QSignalBlocker blocker(m_table);
+        m_table->item(row, column)->setText(QString::number(product->quantity));
+        return;
+    }
     if (column != kColName) {
         return;
     }
@@ -450,7 +481,13 @@ void ProductsPage::restoreCell(int row, int column)
     } else if (column == kColSale) {
         canonical = formatMoney(product->salePriceCents);
     } else if (column == kColQuantity) {
-        canonical = QString::number(product->quantity);
+        if (product->soldByWeight) {
+            canonical = QStringLiteral("%1 %2")
+                            .arg(QLocale().toString(product->quantity / 1000.0, 'f', 2))
+                            .arg(tr("كغ"));
+        } else {
+            canonical = QString::number(product->quantity);
+        }
     } else {
         return;
     }
@@ -481,6 +518,17 @@ void ProductsPage::onItemChanged(QTableWidgetItem* item)
             return;
         }
         if (applyQuantityEdit(productId, product->quantity, item->text())) {
+            // The edit arrived in grams; the cell goes back to its kilogram
+            // shape now that the movement has landed.
+            if (product->soldByWeight) {
+                const std::optional<core::Product> fresh =
+                    data::ProductRepository(m_db).findById(productId);
+                const long long grams = fresh ? fresh->quantity : product->quantity;
+                const QSignalBlocker blocker(m_table);
+                item->setText(QStringLiteral("%1 %2")
+                                  .arg(QLocale().toString(grams / 1000.0, 'f', 2))
+                                  .arg(tr("كغ")));
+            }
             return;
         }
         restoreCell(row, column);
