@@ -396,14 +396,14 @@ La vente reste visible avec un montant négatif et les produits retournent en st
         <translation>تعديل المنتج</translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+25"/>
         <location line="+5"/>
-        <location line="+180"/>
+        <location line="+207"/>
         <source>كرتونة</source>
         <translation>كرتونة</translation>
     </message>
     <message>
-        <location line="-184"/>
+        <location line="-211"/>
         <source>غاجو</source>
         <translation>غاجو</translation>
     </message>
@@ -429,23 +429,23 @@ La vente reste visible avec un montant négatif et les produits retournent en st
     </message>
     <message>
         <location line="+1"/>
-        <location line="+22"/>
+        <location line="+48"/>
         <source>سعر التكلفة</source>
         <translation>سعر التكلفة</translation>
     </message>
     <message>
-        <location line="-21"/>
-        <location line="+17"/>
+        <location line="-47"/>
+        <location line="+43"/>
         <source>سعر البيع</source>
         <translation>سعر البيع</translation>
     </message>
     <message>
-        <location line="-11"/>
+        <location line="-37"/>
         <source>يُباع بالميزان (بالكيلوغرام)</source>
         <translation>يُباع بالميزان (بالكيلوغرام)</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+36"/>
         <source>سعر الكيلوغرام</source>
         <translation>سعر الكيلوغرام</translation>
     </message>
@@ -455,7 +455,7 @@ La vente reste visible avec un montant négatif et les produits retournent en st
         <translation>تكلفة الكيلوغرام</translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="-35"/>
         <source>الكمية الافتتاحية</source>
         <translation>الكمية الافتتاحية</translation>
     </message>
@@ -470,7 +470,7 @@ La vente reste visible avec un montant négatif et les produits retournent en st
         <translation>مُفعّل</translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location line="+71"/>
         <source>Supprimer</source>
         <translation>Supprimer</translation>
     </message>
@@ -486,15 +486,15 @@ Prix revient : %3
 Stock : %4</translation>
     </message>
     <message>
-        <location line="-205"/>
+        <location line="-234"/>
         <location line="+19"/>
-        <location line="+231"/>
+        <location line="+260"/>
         <location line="+19"/>
         <source>خطأ</source>
         <translation>خطأ</translation>
     </message>
     <message>
-        <location line="-157"/>
+        <location line="-201"/>
         <source>عدد الحبات في العلبة</source>
         <translation>عدد الحبات في العلبة</translation>
     </message>
@@ -509,7 +509,7 @@ Stock : %4</translation>
         <translation>الكمية الافتتاحية تُسجَّل مرة واحدة عند إنشاء المنتج. لتعديل المخزون لاحقاً، استخدم صفحة المخزون.</translation>
     </message>
     <message>
-        <location line="+129"/>
+        <location line="+173"/>
         <source>سعر البيع مطلوب ويجب أن يكون أكبر من صفر</source>
         <translation>سعر البيع مطلوب ويجب أن يكون أكبر من صفر</translation>
     </message>
@@ -2072,12 +2072,12 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+36"/>
-        <location line="+871"/>
+        <location line="+888"/>
         <source>Scannez un produit ou choisissez-en un dans la liste</source>
         <translation>Scannez un produit ou choisissez-en un dans la liste</translation>
     </message>
     <message>
-        <location line="-845"/>
+        <location line="-862"/>
         <location line="+29"/>
         <source>Total</source>
         <translation>الإجمالي</translation>
@@ -2116,12 +2116,12 @@ Stock : %4</translation>
     </message>
     <message>
         <location line="+37"/>
-        <location line="+879"/>
+        <location line="+896"/>
         <source>Ajustement</source>
         <translation>Ajustement</translation>
     </message>
     <message>
-        <location line="-874"/>
+        <location line="-891"/>
         <source>Somme à ajouter (+) ou à retirer (-) sur la facture entière</source>
         <translation>Somme à ajouter (+) ou à retirer (-) sur la facture entière</translation>
     </message>
@@ -2133,18 +2133,18 @@ Stock : %4</translation>
     <message>
         <location line="+4"/>
         <location line="+1"/>
-        <location line="+760"/>
+        <location line="+777"/>
         <location line="+157"/>
         <source>Valider la vente (Entrée)</source>
         <translation>Valider la vente (Entrée)</translation>
     </message>
     <message>
-        <location line="-868"/>
+        <location line="-885"/>
         <source>طبع الإيصال</source>
         <translation>طبع الإيصال</translation>
     </message>
     <message>
-        <location line="+307"/>
+        <location line="+324"/>
         <location line="+45"/>
         <source>Impossible de chiffrer « %1 »</source>
         <translation>تعذّر تحويل « %1 » إلى رقم</translation>
@@ -2260,13 +2260,13 @@ Stock : %4</translation>
         <translation>قطعة</translation>
     </message>
     <message>
-        <location line="-1018"/>
+        <location line="-1035"/>
         <location filename="../ui/printing/receipt.cpp" line="-195"/>
         <source>كرتونة</source>
         <translation>كرتونة</translation>
     </message>
     <message>
-        <location line="+1123"/>
+        <location line="+1140"/>
         <source>À CRÉDIT : %1 · Solde : %2</source>
         <translation>À CRÉDIT : %1 · Solde : %2</translation>
     </message>
@@ -2314,7 +2314,7 @@ Stock : %4</translation>
 <context>
     <name>app::ui::ProductsPage</name>
     <message>
-        <location filename="../ui/products_page.cpp" line="+63"/>
+        <location filename="../ui/products_page.cpp" line="+64"/>
         <source>Produits</source>
         <translation>Produits</translation>
     </message>
@@ -2389,30 +2389,37 @@ Stock : %4</translation>
         <translation>Catalogue</translation>
     </message>
     <message>
-        <location line="+97"/>
+        <location line="+96"/>
+        <location line="+229"/>
+        <location line="+43"/>
+        <source>كغ</source>
+        <translation>كغ</translation>
+    </message>
+    <message>
+        <location line="-259"/>
         <source>Total : %1 produits · %2 actifs · %3 stock bas</source>
         <translation>Total : %1 produits · %2 actifs · %3 stock bas</translation>
     </message>
     <message>
         <location line="+63"/>
-        <location line="+66"/>
-        <location line="+100"/>
+        <location line="+84"/>
+        <location line="+117"/>
         <location line="+8"/>
         <source>Erreur</source>
         <translation>Erreur</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-208"/>
         <source>Impossible d&apos;enregistrer le produit — code-barres déjà utilisé ou données incomplètes</source>
         <translation>Impossible d&apos;enregistrer le produit — code-barres déjà utilisé ou données incomplètes</translation>
     </message>
     <message>
-        <location line="+66"/>
+        <location line="+84"/>
         <source>Impossible d&apos;enregistrer la modification — code-barres déjà utilisé</source>
         <translation>Impossible d&apos;enregistrer la modification — code-barres déjà utilisé</translation>
     </message>
     <message>
-        <location line="+99"/>
+        <location line="+116"/>
         <source>Quantité invalide — l&apos;ancien stock a été restauré.</source>
         <translation>Quantité invalide — l&apos;ancien stock a été restauré.</translation>
     </message>
