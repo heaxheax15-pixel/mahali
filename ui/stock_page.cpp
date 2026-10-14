@@ -7,6 +7,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTimer>
@@ -119,7 +120,7 @@ StockPage::StockPage(app::data::Database& db, QWidget* parent)
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setShowGrid(true);
     m_table->setColumnCount(5);
-    m_table->setHorizontalHeaderLabels({tr("Qté"), tr("Nom"), tr("Code-barres"),
+    m_table->setHorizontalHeaderLabels({tr("Qté (كغ للميزان)"), tr("Nom"), tr("Code-barres"),
                                         tr("Unité"), tr("Valeur")});
     // The order is the order an operator reads this page in: how many, what, then
     // how it is identified and what it is worth. Unchanged from before, but the
@@ -204,16 +205,30 @@ void StockPage::refresh()
         // the two multiply straight. packageSize is left out on purpose: nothing
         // in the till or in a stock movement applies it to a count, so a value
         // that included it would be larger than the stock it describes.
-        totalValueCents += product.quantity * product.costPriceCents;
+        long long value = product.quantity * product.costPriceCents;
+        if (product.soldByWeight) {
+            // Same thousand as the report service, because this column and the
+            // stock value figure in the P&L are the same number on two screens.
+            value /= 1000;
+        }
+        totalValueCents += value;
 
         const int row = m_table->rowCount();
         m_table->insertRow(row);
-        m_table->setItem(row, kColQuantity, new QTableWidgetItem(QString::number(product.quantity)));
+        QString quantityText;
+        if (product.soldByWeight) {
+            // 10000 grams reads as 10.00 kg on the shelf. The column stays a
+            // right-aligned number; only its unit changes, and the header says so.
+            quantityText = QStringLiteral("%1 كغ")
+                               .arg(QLocale().toString(product.quantity / 1000.0, 'f', 2));
+        } else {
+            quantityText = QString::number(product.quantity);
+        }
+        m_table->setItem(row, kColQuantity, new QTableWidgetItem(quantityText));
         m_table->setItem(row, kColName, new QTableWidgetItem(product.name));
         m_table->setItem(row, kColBarcode, new QTableWidgetItem(product.barcode));
         m_table->setItem(row, kColUnit, new QTableWidgetItem(product.unit));
-        m_table->setItem(row, kColValue,
-                         new QTableWidgetItem(formatMoney(product.quantity * product.costPriceCents)));
+        m_table->setItem(row, kColValue, new QTableWidgetItem(formatMoney(value)));
         for (int column = 0; column < m_table->columnCount(); ++column) {
             m_table->item(row, column)->setData(Qt::UserRole, product.id);
         }

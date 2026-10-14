@@ -161,7 +161,7 @@ long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines,
 long long stockValueCents(Database& db)
 {
     QSqlQuery query(db.handle());
-    query.prepare(QStringLiteral("SELECT id, quantity, sale_price_cents FROM products "
+    query.prepare(QStringLiteral("SELECT id, quantity, sale_price_cents, sold_by_weight FROM products "
                                  "WHERE active = 1 AND quantity > 0"));
     if (!query.exec()) {
         db.recordError(query.lastError(), QStringLiteral("ReportService::stockValueCents"));
@@ -178,7 +178,15 @@ long long stockValueCents(Database& db)
                        << "left out, its quantity times its sale price overflows";
             continue;
         }
-        const long long term = quantity * price;
+        long long term = quantity * price;
+        // A weight product's quantity is in grams and its price is per
+        // kilogram. Multiplying them directly values a kilogram of almonds at
+        // a thousand times its shelf price, and the zakat base that follows
+        // would be wrong by the same factor. Every kilogram division in the
+        // app lives in the three money readers plus this one.
+        if (query.value(3).toBool()) {
+            term /= 1000;
+        }
         if (total > ceiling - term) {
             qWarning() << "stock value: stopped at product" << query.value(0).toInt()
                        << ", the running total would overflow";

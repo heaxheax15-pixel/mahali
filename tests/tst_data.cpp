@@ -40,6 +40,7 @@
 #include "device_repository.h"
 #include "audit_log_repository.h"
 #include "report_service.h"
+#include "daily_report_service.h"
 #include "setting_repository.h"
 #include "zakat_history_repository.h"
 #include "occasion_repository.h"
@@ -180,6 +181,9 @@ private slots:
     void totalCentsFor_divides_weight_quantity_by_a_thousand();
     void record_sale_of_a_weight_line_uses_grams_for_stock();
     void reverse_sale_of_a_weight_line_returns_the_same_grams();
+    void stockValueCents_divides_weight_products_by_a_thousand();
+    void stockValueCents_zero_when_only_an_empty_weight_product();
+    void daily_report_uses_grams_for_a_weight_line();
 
 private:
     QTemporaryDir m_dir;
@@ -5349,4 +5353,102 @@ void DataLayerTest::reverse_sale_of_a_weight_line_returns_the_same_grams()
     data::SaleItemRepository itemsRepo(db);
     // reversal creates a reversal sale; check pieces_consumed on items of the reversed sale
     // stock restored is the main check
+}
+
+void DataLayerTest::stockValueCents_divides_weight_products_by_a_thousand()
+{
+    const QString path = m_dir.filePath(QStringLiteral("stock_value_weight.sqlite"));
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product piece;
+    piece.barcode = QStringLiteral("P001");
+    piece.name = QStringLiteral("piece");
+    piece.salePriceCents = 6000;
+    const int pieceId = products.save(piece);
+    QVERIFY(pieceId > 0);
+    products.adjustStock(pieceId, +10, QStringLiteral("opening"));
+
+    core::Product weight;
+    weight.barcode = QStringLiteral("W001");
+    weight.name = QStringLiteral("weight");
+    weight.salePriceCents = 120000;
+    weight.soldByWeight = true;
+    const int weightId = products.save(weight);
+    QVERIFY(weightId > 0);
+    products.adjustStock(weightId, +10000, QStringLiteral("opening"));
+
+    const QDate day = QDate::currentDate();
+    const data::StoreReport report = data::ReportService(db).build(
+        QDateTime(day, QTime(0, 0, 0)), QDateTime(day, QTime(23, 59, 59)));
+
+    // 10 * 6000 + 10000 * 120000 / 1000 == 60000 + 1200000 == 1260000
+    QCOMPARE(report.stockValueCents, 1260000LL);
+}
+
+void DataLayerTest::stockValueCents_zero_when_only_an_empty_weight_product()
+{
+    const QString path = m_dir.filePath(QStringLiteral("stock_value_empty_weight.sqlite"));
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product weight;
+    weight.barcode = QStringLiteral("W002");
+    weight.name = QStringLiteral("weight");
+    weight.salePriceCents = 120000;
+    weight.soldByWeight = true;
+    const int weightId = products.save(weight);
+    QVERIFY(weightId > 0);
+
+    const QDate day = QDate::currentDate();
+    const data::StoreReport report = data::ReportService(db).build(
+        QDateTime(day, QTime(0, 0, 0)), QDateTime(day, QTime(23, 59, 59)));
+
+    QCOMPARE(report.stockValueCents, 0LL);
+}
+
+void DataLayerTest::daily_report_uses_grams_for_a_weight_line()
+{
+    const QString path = m_dir.filePath(QStringLiteral("daily_weight.sqlite"));
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product weight;
+    weight.barcode = QStringLiteral("W003");
+    weight.name = QStringLiteral("لوز");
+    weight.salePriceCents = 120000;
+    weight.costPriceCents = 100000;
+    weight.soldByWeight = true;
+    const int productId = products.save(weight);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, +10000, QStringLiteral("opening"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 250;
+    item.unitKind = QStringLiteral("weight");
+    item.unitPriceCents = 120000;
+
+    data::SaleService saleService(db);
+    const data::SaleRecordResult sold = saleService.recordSale({item}, sessionId, QStringLiteral("dev"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    data::SaleRepository sales(db);
+    data::ExpenseRepository expenses(db);
+    data::OwnerDrawingRepository drawings(db);
+    data::CustomerTransactionRepository customerTx(db);
+    const data::DailyReport report = data::DailyReportService(
+        db, sales, expenses, drawings, customerTx, sessions)
+        .forDay(QDate::currentDate().toString(Qt::ISODate));
+
+    // 250 g at 1200 DA/kg is 300 DA, not 300000 DA; cost is 250 DA, not 250000 DA.
+    QCOMPARE(report.salesTotalCents, 30000LL);
+    QCOMPARE(report.cogsTotalCents, 25000LL);
+    QCOMPARE(report.grossProfitCents, 5000LL);
+    QVERIFY(!report.topProducts.isEmpty());
+    QCOMPARE(report.topProducts.front().revenueCents, 30000LL);
 }

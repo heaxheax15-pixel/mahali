@@ -47,8 +47,14 @@ DailyReport DailyReportService::forDay(const QString& dayIso) const
     // Cost of goods comes off the cost frozen on each line, not off the product's
     // current average cost: a sale made last month at yesterday's price must not
     // be restated at today's.
+    //
+    // A weight line stores grams in quantity and a per-kilogram figure in
+    // unit_cost_cents. The thousand that separates them is divided out
+    // here for the same reason it is in the sale's own total.
     query.prepare(QStringLiteral(
-        "SELECT COALESCE(SUM(si.unit_cost_cents * si.quantity), 0) "
+        "SELECT COALESCE(SUM(CASE WHEN si.unit_kind = 'weight' "
+        "THEN (si.unit_cost_cents * si.quantity) / 1000 "
+        "ELSE si.unit_cost_cents * si.quantity END), 0) "
         "FROM sale_items si "
         "JOIN sales s ON s.id = si.sale_id "
         "WHERE s.created_at >= ? AND s.created_at <= ?"));
@@ -106,8 +112,15 @@ DailyReport DailyReportService::forDay(const QString& dayIso) const
 
     // Best sellers by units, five of them. sale_items stores no line total, so
     // revenue is worked out from the quantity and the price the line was sold at.
+    //
+    // A weight line stores grams in quantity and a per-kilogram figure in
+    // unit_price_cents. The thousand that separates them is divided out
+    // here for the same reason it is in the sale's own total.
     query.prepare(QStringLiteral(
-        "SELECT si.product_id, p.name, SUM(si.quantity), SUM(si.quantity * si.unit_price_cents) "
+        "SELECT si.product_id, p.name, SUM(si.quantity), "
+        "SUM(CASE WHEN si.unit_kind = 'weight' "
+        "THEN (si.unit_price_cents * si.quantity) / 1000 "
+        "ELSE si.unit_price_cents * si.quantity END) "
         "FROM sale_items si "
         "JOIN sales s ON s.id = si.sale_id "
         "JOIN products p ON p.id = si.product_id "

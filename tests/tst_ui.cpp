@@ -80,6 +80,7 @@
 #include "ui/sales_page.h"
 #include "ui/server_controller.h"
 #include "ui/settings_page.h"
+#include "ui/stock_page.h"
 #include "ui/suppliers_page.h"
 #include "ui/main_window.h"
 #include "ui/printing/receipt_printer.h"
@@ -147,6 +148,8 @@ private slots:
     void pos_weight_over_two_kilos_asks_confirmation();
     void pos_two_weight_products_in_a_row();
     void pos_weight_line_keeps_its_unit_after_a_carton_toggle_attempt();
+    void stock_page_shows_kilograms_for_a_weight_product();
+    void stock_page_valeur_column_divides_weight_products();
     void receipt_uses_the_paper_from_settings();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
@@ -4009,4 +4012,102 @@ void UiTest::pos_weight_line_keeps_its_unit_after_a_carton_toggle_attempt()
     QVERIFY(unitLabel->text().contains(grams) || unitLabel->text() == grams);
     QVERIFY(qobject_cast<QComboBox*>(unitWidget) == nullptr);
     QCOMPARE(page.totalCents(), 9600LL);
+}
+
+void UiTest::stock_page_shows_kilograms_for_a_weight_product()
+{
+    const QString path = m_dir.filePath(QStringLiteral("stock_kg_weight.sqlite"));
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product weight;
+    weight.barcode = QStringLiteral("5");
+    weight.name = QStringLiteral("لوز");
+    weight.salePriceCents = 120000;
+    weight.soldByWeight = true;
+    const int weightId = products.save(weight);
+    QVERIFY(weightId > 0);
+    products.adjustStock(weightId, +10000, QStringLiteral("opening"));
+
+    core::Product piece;
+    piece.barcode = QStringLiteral("1");
+    piece.name = QStringLiteral("عسل");
+    piece.salePriceCents = 4800;
+    const int pieceId = products.save(piece);
+    QVERIFY(pieceId > 0);
+    products.adjustStock(pieceId, +7, QStringLiteral("opening"));
+
+    ui::StockPage page(db);
+    page.show();
+    page.refresh();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table != nullptr);
+
+    QString weightQty;
+    QString pieceQty;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QString name = table->item(row, 1) ? table->item(row, 1)->text() : QString();
+        if (name == QStringLiteral("لوز")) {
+            weightQty = table->item(row, 0) ? table->item(row, 0)->text() : QString();
+        } else if (name == QStringLiteral("عسل")) {
+            pieceQty = table->item(row, 0) ? table->item(row, 0)->text() : QString();
+        }
+    }
+
+    const QString kg = QStringLiteral("كغ");
+    QVERIFY2(weightQty.contains(QStringLiteral("10")) && weightQty.contains(kg),
+             qPrintable(QStringLiteral("weight qty was: %1").arg(weightQty)));
+    QVERIFY2(pieceQty.contains(QStringLiteral("7")) && !pieceQty.contains(kg),
+             qPrintable(QStringLiteral("piece qty was: %1").arg(pieceQty)));
+}
+
+void UiTest::stock_page_valeur_column_divides_weight_products()
+{
+    const QString path = m_dir.filePath(QStringLiteral("stock_valeur_weight.sqlite"));
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product weight;
+    weight.barcode = QStringLiteral("5");
+    weight.name = QStringLiteral("لوز");
+    weight.salePriceCents = 120000;
+    weight.costPriceCents = 100000;
+    weight.soldByWeight = true;
+    const int weightId = products.save(weight);
+    QVERIFY(weightId > 0);
+    products.adjustStock(weightId, +10000, QStringLiteral("opening"));
+
+    core::Product piece;
+    piece.barcode = QStringLiteral("1");
+    piece.name = QStringLiteral("xse");
+    piece.salePriceCents = 4800;
+    piece.costPriceCents = 1400;
+    const int pieceId = products.save(piece);
+    QVERIFY(pieceId > 0);
+    products.adjustStock(pieceId, +22, QStringLiteral("opening"));
+
+    ui::StockPage page(db);
+    page.show();
+    page.refresh();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table != nullptr);
+
+    QString weightValue;
+    QString pieceValue;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QString name = table->item(row, 1) ? table->item(row, 1)->text() : QString();
+        if (name == QStringLiteral("لوز")) {
+            weightValue = table->item(row, 4) ? table->item(row, 4)->text() : QString();
+        } else if (name == QStringLiteral("xse")) {
+            pieceValue = table->item(row, 4) ? table->item(row, 4)->text() : QString();
+        }
+    }
+
+    // 100000 * 10000 / 1000 == 1000000 (10000 DA); 1400 * 22 == 30800 (308 DA).
+    QVERIFY2(weightValue.contains(app::ui::formatMoney(1000000)),
+             qPrintable(QStringLiteral("weight valeur was: %1").arg(weightValue)));
+    QVERIFY2(pieceValue.contains(app::ui::formatMoney(30800)),
+             qPrintable(QStringLiteral("piece valeur was: %1").arg(pieceValue)));
 }
