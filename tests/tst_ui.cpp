@@ -141,6 +141,7 @@ private slots:
     void product_dialog_reveals_the_weight_checkbox();
     void product_dialog_saves_the_weight_flag();
     void products_page_marks_weight_products();
+    void receipt_renders_a_weight_line_with_grams();
     void receipt_uses_the_paper_from_settings();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
@@ -3749,3 +3750,49 @@ void UiTest::products_page_marks_weight_products()
 
 QTEST_MAIN(UiTest)
 #include "tst_ui.moc"
+
+void UiTest::receipt_renders_a_weight_line_with_grams()
+{
+    const QString path = m_dir.filePath(QStringLiteral("rcpt_w.sqlite"));
+    data::Database db(path);
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("shop_name"), QStringLiteral("Boutique Test"));
+    settings.set(QStringLiteral("currency_symbol"), QStringLiteral("DA"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("W123");
+    product.name = QStringLiteral("لوز");
+    product.costPriceCents = 100000;
+    product.salePriceCents = 120000;
+    product.piecesPerPackage = 1;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 10000, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 250;
+    item.unitKind = QStringLiteral("weight");
+    item.unitPriceCents = 120000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold = service.recordSale({item}, sessionId, QStringLiteral("desktop"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    const ui::ReceiptData data = ui::buildReceiptForSale(db, sold.saleId);
+    QTextDocument* doc = ui::renderReceipt(data, ui::ReceiptPaper::Thermal80);
+    const QString text = doc->toPlainText();
+
+    const QString grams = QCoreApplication::translate("app::ui::Receipt", "غرام");
+    QVERIFY(text.contains(grams));
+    QVERIFY(text.contains(QStringLiteral("250")));
+    QVERIFY(text.contains(app::ui::formatMoney(30000, QStringLiteral("DA"))));
+    QVERIFY(!text.contains(QStringLiteral("1 ")));
+    delete doc;
+}

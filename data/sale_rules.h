@@ -130,6 +130,9 @@ inline QVector<core::SaleItem> resolveSaleItems(ProductRepository& products,
         }
         item.unitCostCents = product->costPriceCents;
 
+        // Grams against grams on a weight line: the shelf is counted in the
+        // same unit the line was sold in, so the comparison holds without a
+        // conversion.
         // the shelf is counted in pieces, so the guard must be too.
         // Comparing pieces against cartons lets a carton sale of 2 pass when 30
         // pieces are on the shelf.
@@ -167,7 +170,13 @@ inline std::optional<long long> totalCentsFor(const QVector<core::SaleItem>& ite
         if (!detail::productFits(item.unitPriceCents, item.quantity)) {
             return std::nullopt;
         }
-        const long long term = item.unitPriceCents * item.quantity;
+        long long term = item.unitPriceCents * item.quantity;
+        // A weight line stores grams in quantity and a per-kilogram price in
+        // unitPriceCents. The thousand that separates them is divided out
+        // here, once, so no other reader of a sale line has to remember it.
+        if (item.unitKind == QStringLiteral("weight")) {
+            term /= 1000;
+        }
         // Each term being in range is not enough: the running sum can leave it on
         // its own once enough lines are added together.
         if (!detail::sumFits(total, term)) {
@@ -199,7 +208,10 @@ inline std::optional<long long> cogsCentsFor(const QVector<core::SaleItem>& item
         if (!detail::productFits(item.unitCostCents, item.piecesConsumed)) {
             return std::nullopt;
         }
-        const long long term = item.unitCostCents * item.piecesConsumed;
+        long long term = item.unitCostCents * item.piecesConsumed;
+        if (item.unitKind == QStringLiteral("weight")) {
+            term /= 1000;
+        }
         if (!detail::sumFits(cogs, term)) {
             return std::nullopt;
         }
@@ -214,6 +226,8 @@ inline bool insertSaleStockMovements(StockMovementRepository& movements,
     for (const core::SaleItem& item : items) {
         core::StockMovement movement;
         movement.productId = item.productId;
+        // piecesConsumed is already the figure that leaves the shelf: pieces
+        // for a piece or package line, grams for a weight line. No conversion.
         // Stock is counted in pieces, so it takes piecesConsumed and not quantity.
         // The two agree on a piece sale and differ by a factor of pieces_per_package
         // on a carton sale, and stock is the figure that has to be right: counting a

@@ -58,6 +58,9 @@ long long cogsFor(const std::vector<core::SaleItem>& items, bool* overflow)
             continue;
         }
         long long term = item.unitCostCents * item.piecesConsumed;
+        if (item.unitKind == QStringLiteral("weight")) {
+            term /= 1000;
+        }
         // pieces_consumed is always a positive count (it is the number of pieces
         // involved, not a signed amount), so its sign must not be taken from here.
         // The direction of the line lives on quantity: a reversal stores quantity
@@ -117,6 +120,12 @@ long long creditCogsFor(const std::vector<core::CustomerTransactionItem>& lines,
             continue;
         }
         long long term = line.unitCostCents * line.piecesConsumed;
+        if (line.unitKind == QStringLiteral("weight")) {
+            // Same thousand as the sale's own COGS: the report has to mirror the
+            // row, or the P&L would value a kilogram line a thousand times too
+            // high.
+            term /= 1000;
+        }
         // Signed the same way as the cash path above: magnitude from
         // pieces_consumed, direction from quantity. A cancellation on account
         // stores quantity negative and pieces_consumed positive, exactly as a cash

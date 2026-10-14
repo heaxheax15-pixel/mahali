@@ -177,6 +177,9 @@ private slots:
     void receipt_number_mints_sequentially_within_a_year();
     void receipt_number_shared_between_cash_and_credit();
     void receipt_number_not_minted_on_reversal();
+    void totalCentsFor_divides_weight_quantity_by_a_thousand();
+    void record_sale_of_a_weight_line_uses_grams_for_stock();
+    void reverse_sale_of_a_weight_line_returns_the_same_grams();
 
 private:
     QTemporaryDir m_dir;
@@ -5248,3 +5251,102 @@ void DataLayerTest::receipt_number_not_minted_on_reversal()
 
 QTEST_GUILESS_MAIN(DataLayerTest)
 #include "tst_data.moc"
+void DataLayerTest::totalCentsFor_divides_weight_quantity_by_a_thousand()
+{
+    core::SaleItem item;
+    item.unitKind = QStringLiteral("weight");
+    item.quantity = 250;
+    item.piecesConsumed = 250;
+    item.unitPriceCents = 120000; // 1200 DA per kg
+    item.unitCostCents = 100000;
+    auto total = data::totalCentsFor({item});
+    QVERIFY(total.has_value());
+    QCOMPARE(*total, 30000LL); // 300 DA
+    auto cogs = data::cogsCentsFor({item});
+    QVERIFY(cogs.has_value());
+    QCOMPARE(*cogs, 25000LL); // 250 DA
+}
+
+void DataLayerTest::record_sale_of_a_weight_line_uses_grams_for_stock()
+{
+    const QString path = m_dir.filePath(QStringLiteral("weight_sale.sqlite"));
+    data::Database db(path);
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("W001");
+    product.name = QStringLiteral("لوز");
+    product.salePriceCents = 120000;
+    product.costPriceCents = 100000;
+    product.soldByWeight = true;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, +10000, QStringLiteral("opening")); // 10 kg in grams
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 250; // grams
+    item.unitKind = QStringLiteral("weight");
+    item.unitPriceCents = 120000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold = service.recordSale({item}, sessionId, QStringLiteral("dev"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+
+    data::SaleRepository salesRepo(db);
+    const auto sale = salesRepo.findById(sold.saleId);
+    QVERIFY(sale.has_value());
+    QCOMPARE(sale->totalCents, 30000LL);
+
+    data::SaleItemRepository itemsRepo(db);
+    const auto items = itemsRepo.findBySaleId(sold.saleId);
+    QCOMPARE(items.size(), 1);
+    QCOMPARE(items[0].piecesConsumed, 250LL);
+
+    const auto found = products.findById(productId);
+    QVERIFY(found.has_value());
+    QCOMPARE(found->quantity, 9750LL);
+}
+
+void DataLayerTest::reverse_sale_of_a_weight_line_returns_the_same_grams()
+{
+    const QString path = m_dir.filePath(QStringLiteral("weight_rev.sqlite"));
+    data::Database db(path);
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("W002");
+    product.name = QStringLiteral("لوز");
+    product.salePriceCents = 120000;
+    product.costPriceCents = 100000;
+    product.soldByWeight = true;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, +10000, QStringLiteral("opening"));
+
+    data::CashSessionRepository sessions(db);
+    const int sessionId = sessions.open(5000);
+    QVERIFY(sessionId > 0);
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 250;
+    item.unitKind = QStringLiteral("weight");
+    item.unitPriceCents = 120000;
+
+    data::SaleService service(db);
+    const data::SaleRecordResult sold = service.recordSale({item}, sessionId, QStringLiteral("dev"), false);
+    QVERIFY2(sold.ok, qPrintable(sold.error));
+    const data::SaleReverseResult rev = service.reverseSale(sold.saleId, sessionId);
+    QVERIFY2(rev.ok, qPrintable(rev.error));
+
+    const auto found = products.findById(productId);
+    QVERIFY(found.has_value());
+    QCOMPARE(found->quantity, 10000LL);
+
+    data::SaleItemRepository itemsRepo(db);
+    // reversal creates a reversal sale; check pieces_consumed on items of the reversed sale
+    // stock restored is the main check
+}

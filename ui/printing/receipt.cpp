@@ -36,6 +36,9 @@ QString translatedPackageName(const QString& stored)
 
 QString unitLabelFor(const QString& unitKind, const QString& packageName)
 {
+    if (unitKind == QStringLiteral("weight")) {
+        return QCoreApplication::translate("app::ui::Receipt", "غرام");
+    }
     if (unitKind == QStringLiteral("package")) {
         return translatedPackageName(packageName);
     }
@@ -45,12 +48,17 @@ QString unitLabelFor(const QString& unitKind, const QString& packageName)
 // unitPriceCents * quantity, or 0 when the product would not fit in a long
 // long. A receipt is not a place to refuse: an impossible line is dropped to a
 // zero total and the rest of the paper still prints.
-long long lineTotalCentsFor(long long unitPriceCents, long long quantity)
+long long lineTotalCentsFor(long long unitPriceCents, long long quantity,
+                                   const QString& unitKind)
 {
-    if (data::detail::productFits(unitPriceCents, quantity)) {
-        return unitPriceCents * quantity;
+    if (!data::detail::productFits(unitPriceCents, quantity)) {
+        return 0;
     }
-    return 0;
+    long long term = unitPriceCents * quantity;
+    if (unitKind == QStringLiteral("weight")) {
+        term /= 1000;
+    }
+    return term;
 }
 
 QString resolvedProductName(const std::optional<core::Product>& product, int productId)
@@ -108,7 +116,7 @@ ReceiptData buildReceiptForSale(app::data::Database& db, int saleId)
         line.unitLabel = unitLabelFor(item.unitKind, product ? product->packageName : QString());
         line.quantity = item.quantity;
         line.unitPriceCents = item.unitPriceCents;
-        line.lineTotalCents = lineTotalCentsFor(item.unitPriceCents, item.quantity);
+        line.lineTotalCents = lineTotalCentsFor(item.unitPriceCents, item.quantity, item.unitKind);
         linesTotal += line.lineTotalCents;
         receipt.lines.push_back(line);
     }
@@ -156,7 +164,7 @@ ReceiptData buildReceiptForCustomerTransaction(app::data::Database& db, int tran
         line.unitLabel = unitLabelFor(item.unitKind, product ? product->packageName : QString());
         line.quantity = item.quantity;
         line.unitPriceCents = item.unitPriceCents;
-        line.lineTotalCents = lineTotalCentsFor(item.unitPriceCents, item.quantity);
+        line.lineTotalCents = lineTotalCentsFor(item.unitPriceCents, item.quantity, item.unitKind);
         linesTotal += line.lineTotalCents;
         receipt.lines.push_back(line);
     }
