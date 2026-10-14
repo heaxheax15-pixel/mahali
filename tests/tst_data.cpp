@@ -107,6 +107,7 @@ private slots:
     void unique_indexes_never_reject_an_ordinary_row();
     void audit_row_is_written_by_the_service_not_the_caller();
     void audit_row_rolls_back_with_the_movement_it_describes();
+    void recordSale_rolls_back_when_the_price_override_audit_cannot_be_written();
     void migration_skips_the_index_when_the_ledger_holds_a_duplicate();
     void cash_movements_carry_correct_reference();
     void close_validation_detects_violations();
@@ -2128,6 +2129,62 @@ void DataLayerTest::audit_row_rolls_back_with_the_movement_it_describes()
                  .size(),
              std::size_t(0));
     QCOMPARE(data::CashMovementRepository(db).sumBySessionId(sessionId), 0LL);
+}
+
+// A cashier editing a line's price is a movement of its own, and the row that
+// records it has to commit or roll back with the sale it explains. If that row
+// cannot be written -- a locked table, a full disk -- the sale must not be kept:
+// money moved at a price nobody wrote down is the one thing an override log exists
+// to prevent. The failure is forced with a trigger that refuses that one action and
+// leaves every other write of the sale alone, so what the test sees is the rollback
+// rather than a database that never worked.
+void DataLayerTest::recordSale_rolls_back_when_the_price_override_audit_cannot_be_written()
+{
+    AdjustmentFixture f(m_dir.filePath(QStringLiteral("override_audit_failure.sqlite")));
+    QVERIFY(f.sessionId > 0);
+
+    data::ProductRepository products(f.db);
+    const long long quantityBefore = products.findById(f.productId)->quantity;
+
+    QSqlQuery trigger(f.db.handle());
+    QVERIFY2(trigger.exec(QStringLiteral(
+                 "CREATE TRIGGER fail_price_override_audit BEFORE INSERT ON audit_log "
+                 "WHEN NEW.action = 'price_override' "
+                 "BEGIN SELECT RAISE(ABORT, 'forced price override audit failure'); END")),
+             qPrintable(trigger.lastError().text()));
+
+    data::PriceOverride priceOverride;
+    priceOverride.productId = f.productId;
+    priceOverride.productName = QStringLiteral("منتج-أج");
+    priceOverride.originalPriceCents = 100;
+    priceOverride.overridePriceCents = 75;
+
+    data::SaleService sales(f.db);
+    const data::SaleRecordResult recorded =
+        sales.recordSale({f.one()}, f.sessionId, QStringLiteral("actor"),
+                         /*allowOversold=*/false, /*applyToken=*/nullptr, /*adjustmentCents=*/0,
+                         {priceOverride});
+
+    QVERIFY(!recorded.ok);
+    QVERIFY(!recorded.error.isEmpty());
+    QVERIFY2(recorded.error.contains(QStringLiteral("audit")), qPrintable(recorded.error));
+
+    // Nothing the sale would have written survives the refusal: no row to sell, no
+    // goods off the shelf, and no override row to explain a movement that did not
+    // happen.
+    QSqlQuery salesCount(f.db.handle());
+    QVERIFY(salesCount.exec(QStringLiteral("SELECT COUNT(*) FROM sales")));
+    QVERIFY(salesCount.next());
+    QCOMPARE(salesCount.value(0).toInt(), 0);
+    QCOMPARE(products.findById(f.productId)->quantity, quantityBefore);
+
+    int overrides = 0;
+    for (const auto& entry : data::AuditLogRepository(f.db).findAll()) {
+        if (entry.action == QLatin1String("price_override")) {
+            ++overrides;
+        }
+    }
+    QCOMPARE(overrides, 0);
 }
 
 void DataLayerTest::customer_balance_uses_opening_and_transactions()

@@ -17,7 +17,6 @@
 #include <set>
 #include <vector>
 
-#include "core/audit_log_entry.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/payment_repository.h"

@@ -19,6 +19,24 @@
 
 namespace app::data {
 
+// A cashier changing a line's price at the till. Carried from the screen into the
+// sale's own transaction so the audit row that says so is written or rolled back
+// with the sale it describes: an override audit that lands after the money moved
+// cannot be trusted, and one that is dropped leaves an edited price with nothing
+// to explain it.
+//
+// The name and the barcode travel with it because the service cannot reach the
+// product row the cashier was looking at -- by the time it runs, the line has been
+// resolved against the product as it is now, not as it was on screen -- and an
+// audit row that says "product 5" is worth less than one that names what it was.
+struct PriceOverride {
+    int productId = 0;
+    QString productName;
+    QString productBarcode;
+    long long originalPriceCents = 0;
+    long long overridePriceCents = 0;
+};
+
 struct SaleRecordResult {
     bool ok = false;
     bool alreadyApplied = false;
@@ -49,14 +67,20 @@ public:
     // It is the last parameter and it defaults to 0 so that every existing caller —
     // the sync processor, the dialogs, the tests — keeps recording exactly what it
     // recorded before, with no adjustment and no adjustment on the row.
+    //
+    // overrides is what the cashier changed on individual lines, written to the
+    // audit log inside the same transaction: the entry and the money it explains
+    // commit together or not at all. It is defaulted last so that the callers above
+    // are untouched.
     SaleRecordResult recordSale(const QVector<core::SaleItem>& items, int cashSessionId, const QString& deviceId,
                                 bool allowOversold, const core::SyncApplyToken* applyToken = nullptr,
-                                long long adjustmentCents = 0);
+                                long long adjustmentCents = 0, const QVector<PriceOverride>& overrides = {});
 
     SaleRecordResult recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
                                         const QString& deviceId, bool allowOversold,
                                         const core::SyncApplyToken* applyToken = nullptr,
-                                        long long adjustmentCents = 0);
+                                        long long adjustmentCents = 0,
+                                        const QVector<PriceOverride>& overrides = {});
 
     SaleReverseResult reverseSale(int saleId, int cashSessionId);
 

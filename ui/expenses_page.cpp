@@ -11,7 +11,6 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
-#include "core/audit_log_entry.h"
 #include "data/cash_entry_service.h"
 #include "data/cash_session_repository.h"
 #include "data/expense_repository.h"

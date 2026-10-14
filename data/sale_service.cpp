@@ -31,6 +31,30 @@ bool writeSaleAudit(Database& db, const QString& action, const QString& target, 
     return false;
 }
 
+// The audit rows for a cashier's price edits, written into whatever transaction the
+// caller already has open -- never after it. saleLabel names the movement ("sale 42"
+// for a till sale, "transaction 7" for a credit one) and the two prices are the raw
+// ledger figures rather than formatted money: the service has no formatter, and the
+// row should hold the same number the money was recorded against, not a second
+// rendering of it to keep in step. A false return is fatal to the caller: an
+// override that moved money without being written down cannot be reconstructed
+// afterwards, so the sale it belonged to is rolled back rather than kept.
+bool writeOverrideAudits(Database& db, const QString& saleLabel, const QVector<PriceOverride>& overrides)
+{
+    for (const PriceOverride& priceOverride : overrides) {
+        const QString target = QStringLiteral("%1, %2 (%3): %4 -> %5")
+                                   .arg(saleLabel)
+                                   .arg(priceOverride.productName)
+                                   .arg(priceOverride.productBarcode)
+                                   .arg(priceOverride.originalPriceCents)
+                                   .arg(priceOverride.overridePriceCents);
+        if (!writeSaleAudit(db, QStringLiteral("price_override"), target)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 
@@ -85,7 +109,8 @@ bool SaleService::insertAppliedOp(const core::SyncApplyToken& token, core::SyncO
 SaleRecordResult SaleService::recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
                                                  const QString& deviceId, bool allowOversold,
                                                  const core::SyncApplyToken* applyToken,
-                                                 long long adjustmentCents)
+                                                 long long adjustmentCents,
+                                                 const QVector<PriceOverride>& overrides)
 {
     SaleRecordResult result;
     if (items.isEmpty()) {
@@ -206,6 +231,14 @@ QString error;
         return result;
     }
 
+    // Same rule as the till sale: a price the cashier edited on a credit line is
+    // written down inside this transaction or the whole entry is refused.
+    if (!writeOverrideAudits(m_db, QStringLiteral("transaction %1").arg(transactionId), overrides)) {
+        m_db.rollback();
+        result.error = QStringLiteral("recordCustomerDebt: price override audit could not be written");
+        return result;
+    }
+
     if (!m_db.commit()) {
         result.error = m_db.lastError();
         return result;
@@ -221,7 +254,8 @@ QString error;
 SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, int cashSessionId,
                                          const QString& deviceId, bool allowOversold,
                                          const core::SyncApplyToken* applyToken,
-                                         long long adjustmentCents)
+                                         long long adjustmentCents,
+                                         const QVector<PriceOverride>& overrides)
 {
     SaleRecordResult result;
     if (items.isEmpty()) {
@@ -360,6 +394,15 @@ SaleRecordResult SaleService::recordSale(const QVector<core::SaleItem>& items, i
         result.error = m_db.lastError().isEmpty()
             ? QStringLiteral("the sale could not be recorded in the audit log")
             : m_db.lastError();
+        return result;
+    }
+
+    // A cashier's price edit is written here, in the sale's transaction and before
+    // it commits, so that a sale with an unrecorded override is refused rather than
+    // kept: the alternative is money moved at a price nobody wrote down.
+    if (!writeOverrideAudits(m_db, QStringLiteral("sale %1").arg(saleId), overrides)) {
+        m_db.rollback();
+        result.error = QStringLiteral("recordSale: price override audit could not be written");
         return result;
     }
 

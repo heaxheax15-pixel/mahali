@@ -30,7 +30,6 @@
 #include "core/barcode_utils.h"
 #include "core/sale_item.h"
 #include "core/session.h"
-#include "data/audit_log_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/customer_repository.h"
 #include "data/setting_repository.h"
@@ -1260,8 +1259,7 @@ void PosPage::completeSale()
     }
 
     QVector<core::SaleItem> items;
-    QVector<core::AuditLogEntry> priceOverrides;
-    data::AuditLogRepository audit(m_db);
+    QVector<data::PriceOverride> priceOverrides;
     for (const PosLine& line : m_lines) {
         core::SaleItem item;
         item.productId = line.productId;
@@ -1275,15 +1273,18 @@ void PosPage::completeSale()
         item.unitKind = line.unitKind;
         items.append(item);
 
+        // What the cashier edited, handed to the service rather than written here:
+        // the audit row belongs in the sale's transaction, where a failure rolls
+        // the money back with it. The name and barcode travel with the row because
+        // the service never saw the screen this line was typed on.
         if (line.unitPriceCents != line.basePriceCents) {
-            core::AuditLogEntry entry;
-            entry.actor = app::core::Session::instance().actorName();
-            entry.action = QStringLiteral("price_override");
-            entry.target = QStringLiteral("%1 (%2): %3 -> %4")
-                           .arg(line.name, line.barcode, formatMoney(line.basePriceCents),
-                                formatMoney(line.unitPriceCents));
-            entry.createdAt = QDateTime::currentDateTime();
-            priceOverrides.append(entry);
+            data::PriceOverride priceOverride;
+            priceOverride.productId = line.productId;
+            priceOverride.productName = line.name;
+            priceOverride.productBarcode = line.barcode;
+            priceOverride.originalPriceCents = line.basePriceCents;
+            priceOverride.overridePriceCents = line.unitPriceCents;
+            priceOverrides.append(priceOverride);
         }
     }
 
@@ -1295,17 +1296,13 @@ void PosPage::completeSale()
     if (m_creditCustomerId > 0) {
         const data::SaleRecordResult result = service.recordCustomerDebt(
             m_creditCustomerId, items, app::core::Session::instance().actorName(),
-            /*allowOversold=*/false, /*applyToken=*/nullptr, adjustmentCents);
+            /*allowOversold=*/false, /*applyToken=*/nullptr, adjustmentCents, priceOverrides);
         if (!result.ok) {
             setNotice(tr("تعذر تسجيل الدين: %1").arg(result.error), false);
             return;
         }
         // m_lastSaleId is left alone on purpose: what came back is a ledger
         // transaction id, and lastSaleId() is read as a row of the sales table.
-        // An overridden price is still an overridden price, on this side too.
-        for (const core::AuditLogEntry& entry : priceOverrides) {
-            audit.insert(entry);
-        }
         setNotice(tr("تم تسجيل الدين : %1").arg(formatMoney(result.totalCents)), true);
         clearCreditMode();
         // The adjustment belongs to the invoice that was just recorded, not to the
@@ -1319,16 +1316,13 @@ void PosPage::completeSale()
 
     const data::SaleRecordResult result = service.recordSale(
         items, session->id, app::core::Session::instance().actorName(), /*allowOversold=*/false,
-        /*applyToken=*/nullptr, adjustmentCents);
+        /*applyToken=*/nullptr, adjustmentCents, priceOverrides);
     if (!result.ok) {
         setNotice(tr("تعذر حفظ البيع: %1").arg(result.error), false);
         return;
     }
 
     m_lastSaleId = result.saleId;
-    for (const core::AuditLogEntry& entry : priceOverrides) {
-        audit.insert(entry);
-    }
     // Kept in Arabic on purpose: tst_ui asserts this exact string.
     setNotice(tr("تم البيع: %1").arg(formatMoney(result.totalCents)), true);
     m_adjustment->clear();
