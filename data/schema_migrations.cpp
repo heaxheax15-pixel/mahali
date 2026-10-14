@@ -804,6 +804,43 @@ void migrateReceiptNumbering(const QSqlDatabase& db)
     }
 }
 
+// 16 — clear the carton fields a weight product should never have carried
+//
+// Before B4 the dialog wrote the package fields whether or not the
+// product was sold by weight, so every weight product carries a
+// carton barcode ("5c"), a carton name and a carton size that no
+// reader ever wanted. A later scan of "5c" would have read as a
+// package line. Nothing reads these fields on a weight product now,
+// but a row that holds a value a future reader might trust is worth
+// clearing while the meaning is fresh.
+void migrateWeightProductsDropPackageFields(const QSqlDatabase& db)
+{
+    const QStringList columns = tableColumns(db, QStringLiteral("products"));
+    // The columns arrived with migration 13, which runs before this one; a
+    // database restored without all of them has nothing for this UPDATE to clear,
+    // so it is skipped rather than warned about.
+    if (!columns.contains(QStringLiteral("package_barcode"))
+        || !columns.contains(QStringLiteral("package_name"))
+        || !columns.contains(QStringLiteral("pieces_per_package"))
+        || !columns.contains(QStringLiteral("package_cost_cents"))
+        || !columns.contains(QStringLiteral("sold_by_weight"))) {
+        return;
+    }
+
+    // Idempotent on its own: the WHERE only matches a row that still holds one of
+    // the four values, so a second run has nothing left to change.
+    run(db,
+        QStringLiteral("UPDATE products "
+                       "SET package_barcode = NULL, package_name = '', "
+                       "pieces_per_package = 1, package_cost_cents = 0 "
+                       "WHERE sold_by_weight = 1 "
+                       "AND (package_barcode IS NOT NULL "
+                       "OR package_name <> '' "
+                       "OR pieces_per_package <> 1 "
+                       "OR package_cost_cents <> 0)"),
+        QStringLiteral("clear package fields on weight products"));
+}
+
 // ---------------------------------------------------------------------------
 // The table below is keyed by schema version, and runSchemaMigrations() walks it
 // so a database that has already run it never runs it twice. Every entry is
@@ -865,6 +902,11 @@ const std::pair<int, std::function<void(const QSqlDatabase&)>> kMigrations[] = {
     // sale; the counter is seeded from the highest number issued so the next sale
     // continues rather than restarts.
     {15, migrateReceiptNumbering},
+    // The dialog used to write a carton barcode, name and size onto every product
+    // whether or not it was sold by weight, so weight products carry a "5c" code
+    // no reader ever wanted. Clear the four fields on those rows so nothing a
+    // future reader might trust is left behind.
+    {16, migrateWeightProductsDropPackageFields},
 };
 
 } // namespace

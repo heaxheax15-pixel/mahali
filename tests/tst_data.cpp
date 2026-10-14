@@ -95,6 +95,7 @@ private slots:
     void adjustment_migration_adds_the_column_to_a_legacy_ledger();
     void product_packages_migration_adds_columns_to_a_legacy_ledger();
     void migration_14_backfills_pieces_per_package_from_package_size();
+    void weight_products_migration_drops_the_package_fields();
     void customer_balance_uses_opening_and_transactions();
     void reverse_customer_debt_offsets_the_ledger_and_returns_stock();
     void reverse_customer_debt_touches_no_cash();
@@ -1461,7 +1462,7 @@ void DataLayerTest::product_packages_migration_adds_columns_to_a_legacy_ledger()
         // assertion true whatever the stamp was and stop it testing anything. The
         // figure moves with every new migration, which is the whole point: a bump
         // that forgot to actually stamp this database would leave it one short.
-        QCOMPARE(data::readSchemaVersion(migratedDb), 15);
+        QCOMPARE(data::readSchemaVersion(migratedDb), 16);
         migratedDb.close();
     }
     QSqlDatabase::removeDatabase(connectionName);
@@ -1530,7 +1531,7 @@ void DataLayerTest::migration_14_backfills_pieces_per_package_from_package_size(
 
         // Pinned to the literal for the same reason as the package migration test:
         // it must move with each new migration, or it stops testing the stamp.
-        QCOMPARE(data::readSchemaVersion(legacyDb), 15);
+        QCOMPARE(data::readSchemaVersion(legacyDb), 16);
 
         // A second run changes nothing. The first run moved row 1's new column off
         // the default, so the guard's WHERE clause no longer matches it, and the two
@@ -1547,7 +1548,102 @@ void DataLayerTest::migration_14_backfills_pieces_per_package_from_package_size(
         }
         QVERIFY(!again.next());
         // Still stamped after the second, idempotent run.
-        QCOMPARE(data::readSchemaVersion(legacyDb), 15);
+        QCOMPARE(data::readSchemaVersion(legacyDb), 16);
+
+        legacyDb.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+}
+
+
+// Before B4 the product dialog wrote the carton fields whether or not the product
+// was sold by weight, so a product priced and stocked by the kilogram still
+// carried a carton barcode ("5c"), a carton name and a carton size. Nothing reads
+// those fields on a weight product now, but a row that holds a value a future
+// reader might trust has to be cleared. The three rows below are the cases that
+// have to be told apart: a weight product carrying all four stale values, a piece
+// product that must be left exactly as it is, and a weight product already at the
+// defaults, which the guard's WHERE excludes so a second run changes nothing.
+void DataLayerTest::weight_products_migration_drops_the_package_fields()
+{
+    const QString path = m_dir.filePath(QStringLiteral("weight_products_drop_package.sqlite"));
+    QFile::remove(path);
+    const QString connectionName = QStringLiteral("weight_products_drop_package_test");
+    {
+        QSqlDatabase legacyDb = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacyDb.setDatabaseName(path);
+        QVERIFY(legacyDb.open());
+        QSqlQuery legacy(legacyDb);
+        // The post-migration-13 shape: this migration has nothing to add, only
+        // rows to clean.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "CREATE TABLE products (id INTEGER PRIMARY KEY, barcode TEXT UNIQUE, "
+            "name TEXT NOT NULL, cost_price_cents INTEGER NOT NULL DEFAULT 0, "
+            "sale_price_cents INTEGER NOT NULL DEFAULT 0, quantity INTEGER NOT NULL DEFAULT 0, "
+            "unit TEXT NOT NULL DEFAULT '', package_size INTEGER NOT NULL DEFAULT 1, "
+            "active INTEGER NOT NULL DEFAULT 1, sold_by_weight INTEGER NOT NULL DEFAULT 0, "
+            "package_name TEXT NOT NULL DEFAULT 'كرتونة', "
+            "pieces_per_package INTEGER NOT NULL DEFAULT 1, package_barcode TEXT, "
+            "package_cost_cents INTEGER NOT NULL DEFAULT 0)")));
+        // A: a weight product carrying every stale carton value.
+        // B: a piece product, whose carton is real and must survive untouched.
+        // C: a weight product already clean, so there is nothing to write.
+        QVERIFY(legacy.exec(QStringLiteral(
+            "INSERT INTO products (id, name, sold_by_weight, package_name, "
+            "pieces_per_package, package_barcode, package_cost_cents) VALUES "
+            "(1, 'لوز', 1, 'كرتونة', 12, '5c', 500), "
+            "(2, 'زيت', 0, 'كرتونة', 24, '7c', 1200), "
+            "(3, 'فستق', 1, '', 1, NULL, 0)")));
+        QVERIFY(legacy.exec(QStringLiteral("PRAGMA user_version = 15")));
+
+        data::runSchemaMigrations(legacyDb);
+
+        QSqlQuery after(legacyDb);
+        QVERIFY(after.exec(QStringLiteral(
+            "SELECT id, sold_by_weight, package_barcode, package_name, "
+            "pieces_per_package, package_cost_cents FROM products ORDER BY id")));
+        // Cleared: the carton barcode, name, size and cost are all gone.
+        QVERIFY(after.next());
+        QCOMPARE(after.value(1).toInt(), 1);
+        QVERIFY(after.value(2).isNull());
+        QCOMPARE(after.value(3).toString(), QString());
+        QCOMPARE(after.value(4).toInt(), 1);
+        QCOMPARE(after.value(5).toInt(), 0);
+        // Untouched: sold_by_weight is 0, so the WHERE never matched it.
+        QVERIFY(after.next());
+        QCOMPARE(after.value(1).toInt(), 0);
+        QCOMPARE(after.value(2).toString(), QStringLiteral("7c"));
+        QCOMPARE(after.value(3).toString(), QStringLiteral("كرتونة"));
+        QCOMPARE(after.value(4).toInt(), 24);
+        QCOMPARE(after.value(5).toInt(), 1200);
+        // Untouched: already at the defaults, so there was nothing to clear.
+        QVERIFY(after.next());
+        QCOMPARE(after.value(1).toInt(), 1);
+        QVERIFY(after.value(2).isNull());
+        QCOMPARE(after.value(3).toString(), QString());
+        QCOMPARE(after.value(4).toInt(), 1);
+        QCOMPARE(after.value(5).toInt(), 0);
+        QVERIFY(!after.next());
+
+        // Pinned to the literal for the same reason as the other migration tests:
+        // it must move with each new migration, or it stops testing the stamp.
+        QCOMPARE(data::readSchemaVersion(legacyDb), 16);
+
+        // A second run changes nothing. Row 1 no longer matches the guard because
+        // its values are already the defaults, and the rows it does not match were
+        // never in scope.
+        data::runSchemaMigrations(legacyDb);
+
+        QSqlQuery again(legacyDb);
+        QVERIFY(again.exec(QStringLiteral(
+            "SELECT package_barcode, package_name, pieces_per_package, package_cost_cents "
+            "FROM products WHERE id = 1")));
+        QVERIFY(again.next());
+        QVERIFY(again.value(0).isNull());
+        QCOMPARE(again.value(1).toString(), QString());
+        QCOMPARE(again.value(2).toInt(), 1);
+        QCOMPARE(again.value(3).toInt(), 0);
+        QCOMPARE(data::readSchemaVersion(legacyDb), 16);
 
         legacyDb.close();
     }

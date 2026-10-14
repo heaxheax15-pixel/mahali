@@ -31,6 +31,7 @@
 #include <QTimer>
 #include <QPushButton>
 #include <QLabel>
+#include <QLocale>
 #include <QListWidget>
 #include <QMessageBox>
 #include "ui/dialogs/language_dialog.h"
@@ -141,13 +142,17 @@ private slots:
     void receipt_printer_writes_a_pdf();
     void product_dialog_reveals_the_weight_checkbox();
     void product_dialog_saves_the_weight_flag();
+    void product_dialog_hides_package_fields_for_a_weight_product();
     void products_page_marks_weight_products();
+    void products_page_shows_kilograms_for_a_weight_product();
+    void products_page_quantity_edit_accepts_grams_for_a_weight_product();
     void receipt_renders_a_weight_line_with_grams();
     void pos_weight_product_opens_the_entry_panel();
     void pos_weight_submission_adds_a_weight_line();
     void pos_weight_over_two_kilos_asks_confirmation();
     void pos_two_weight_products_in_a_row();
     void pos_weight_line_keeps_its_unit_after_a_carton_toggle_attempt();
+    void scanning_a_c_suffix_on_a_weight_product_adds_a_piece();
     void stock_page_shows_kilograms_for_a_weight_product();
     void stock_page_valeur_column_divides_weight_products();
     void receipt_uses_the_paper_from_settings();
@@ -3756,8 +3761,199 @@ void UiTest::products_page_marks_weight_products()
     }
 }
 
+void UiTest::product_dialog_hides_package_fields_for_a_weight_product()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("w4.sqlite")));
+
+    ui::ProductsPage page(db);
+    page.show();
+    QCoreApplication::processEvents();
+
+    bool modalOpened = false;
+    bool watchdogFired = false;
+
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, [&]() {
+        watchdogFired = true;
+        if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            modal->reject();
+        }
+    });
+    watchdog.start(3000);
+
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) {
+            return;
+        }
+        modalOpened = true;
+        QCoreApplication::processEvents();
+
+        auto* weight = modal->findChild<QCheckBox*>(QStringLiteral("soldByWeight"));
+        auto* pieces = modal->findChild<QSpinBox*>(QStringLiteral("pieces_per_package"));
+        auto* packageName = modal->findChild<QComboBox*>(QStringLiteral("package_name"));
+        QVERIFY(weight != nullptr);
+        QVERIFY(pieces != nullptr);
+        QVERIFY(packageName != nullptr);
+
+        QVERIFY(pieces->isVisible());
+        QVERIFY(packageName->isVisible());
+
+        auto* unitField =
+            qobject_cast<QLineEdit*>(fieldLabelled(modal, QStringLiteral("الوحدة")));
+        QVERIFY(unitField != nullptr);
+        QVERIFY(unitField->isEnabled());
+
+        weight->setChecked(true);
+        QCoreApplication::processEvents();
+        QVERIFY(!pieces->isVisible());
+        QVERIFY(!packageName->isVisible());
+        QCOMPARE(unitField->text(), QStringLiteral("kg"));
+        QVERIFY(!unitField->isEnabled());
+
+        weight->setChecked(false);
+        QCoreApplication::processEvents();
+        QVERIFY(pieces->isVisible());
+        QVERIFY(packageName->isVisible());
+        QVERIFY(unitField->isEnabled());
+
+        modal->reject();
+    });
+
+    QPushButton* addBtn = page.findChild<QPushButton*>(QStringLiteral("primary"));
+    QVERIFY(addBtn != nullptr);
+    addBtn->click();
+
+    QVERIFY2(!watchdogFired, "the product dialog had to be closed by the watchdog");
+    QVERIFY2(modalOpened, "the add-product button did not open the product dialog");
+}
+
+void UiTest::products_page_shows_kilograms_for_a_weight_product()
+{
+    const QString path = m_dir.filePath(QStringLiteral("products-kg.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository repo(db);
+
+    core::Product weight;
+    weight.barcode = QStringLiteral("5");
+    weight.name = QStringLiteral("لوز");
+    weight.salePriceCents = 120000;
+    weight.soldByWeight = true;
+    const int weightId = repo.save(weight);
+    QVERIFY(weightId > 0);
+    repo.adjustStock(weightId, 10000, QStringLiteral("opening"));
+
+    core::Product piece;
+    piece.barcode = QStringLiteral("1");
+    piece.name = QStringLiteral("xse");
+    piece.salePriceCents = 4800;
+    piece.soldByWeight = false;
+    const int pieceId = repo.save(piece);
+    QVERIFY(pieceId > 0);
+    repo.adjustStock(pieceId, 22, QStringLiteral("opening"));
+
+    ui::ProductsPage page(db);
+    page.show();
+    page.refresh();
+    QCoreApplication::processEvents();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table != nullptr);
+
+    QString weightQty;
+    QString pieceQty;
+    bool sawWeight = false;
+    bool sawPiece = false;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const int id = table->item(row, 1) ? table->item(row, 1)->data(Qt::UserRole).toInt() : 0;
+        if (id == weightId) {
+            weightQty = table->item(row, 5) ? table->item(row, 5)->text() : QString();
+            sawWeight = true;
+        } else if (id == pieceId) {
+            pieceQty = table->item(row, 5) ? table->item(row, 5)->text() : QString();
+            sawPiece = true;
+        }
+    }
+    QVERIFY(sawWeight);
+    QVERIFY(sawPiece);
+    QVERIFY2(weightQty.contains(QStringLiteral("10")) && weightQty.contains(QStringLiteral("كغ")),
+             qPrintable(QStringLiteral("weight qty was: %1").arg(weightQty)));
+    QCOMPARE(pieceQty, QStringLiteral("22"));
+    QVERIFY(!pieceQty.contains(QStringLiteral("كغ")));
+}
+
+void UiTest::products_page_quantity_edit_accepts_grams_for_a_weight_product()
+{
+    const QString path = m_dir.filePath(QStringLiteral("products-kg-edit.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository repo(db);
+
+    // The page formats the count with QLocale, so the decimal separator follows
+    // the machine (ar_DZ here uses a comma). Pinned to C for the length of the
+    // test so the expected text is the same everywhere.
+    const QLocale previousLocale = QLocale();
+    QLocale::setDefault(QLocale::c());
+
+    core::Product weight;
+    weight.barcode = QStringLiteral("5");
+    weight.name = QStringLiteral("لوز");
+    weight.salePriceCents = 120000;
+    weight.soldByWeight = true;
+    const int weightId = repo.save(weight);
+    QVERIFY(weightId > 0);
+    repo.adjustStock(weightId, 10000, QStringLiteral("opening"));
+
+    core::Product piece;
+    piece.barcode = QStringLiteral("1");
+    piece.name = QStringLiteral("xse");
+    piece.salePriceCents = 4800;
+    piece.soldByWeight = false;
+    const int pieceId = repo.save(piece);
+    QVERIFY(pieceId > 0);
+    repo.adjustStock(pieceId, 22, QStringLiteral("opening"));
+
+    ui::ProductsPage page(db);
+    page.show();
+    page.refresh();
+    QCoreApplication::processEvents();
+
+    QTableWidget* table = page.table();
+    QVERIFY(table != nullptr);
+
+    int row = -1;
+    for (int r = 0; r < table->rowCount(); ++r) {
+        const int id = table->item(r, 1) ? table->item(r, 1)->data(Qt::UserRole).toInt() : 0;
+        if (id == weightId) {
+            row = r;
+            break;
+        }
+    }
+    QVERIFY2(row >= 0, "the weight product was not on the page");
+
+    // Opened the way a double click opens it: the handler swaps the cell to the
+    // raw gram figure so the editor does not load "10.00 كغ".
+    QVERIFY(QMetaObject::invokeMethod(&page, "onNameActivated", Q_ARG(int, row),
+                                      Q_ARG(int, 5)));
+    QCOMPARE(table->item(row, 5)->text(), QStringLiteral("10000"));
+
+    // Typed in grams and committed: setText fires itemChanged, the path a
+    // finished edit takes.
+    table->item(row, 5)->setText(QStringLiteral("15000"));
+
+    const auto stored = repo.findById(weightId);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->quantity, 15000LL);
+    QCOMPARE(table->item(row, 5)->text(), QStringLiteral("15.00 كغ"));
+
+    QLocale::setDefault(previousLocale);
+}
+
 QTEST_MAIN(UiTest)
 #include "tst_ui.moc"
+
 
 void UiTest::receipt_renders_a_weight_line_with_grams()
 {
@@ -4012,6 +4208,89 @@ void UiTest::pos_weight_line_keeps_its_unit_after_a_carton_toggle_attempt()
     QVERIFY(unitLabel->text().contains(grams) || unitLabel->text() == grams);
     QVERIFY(qobject_cast<QComboBox*>(unitWidget) == nullptr);
     QCOMPARE(page.totalCents(), 9600LL);
+}
+
+void UiTest::scanning_a_c_suffix_on_a_weight_product_adds_a_piece()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos_wcarton.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product weight;
+    weight.barcode = QStringLiteral("5");
+    weight.name = QStringLiteral("لوز");
+    weight.salePriceCents = 120000;
+    weight.soldByWeight = true;
+    const int weightId = products.save(weight);
+    QVERIFY(weightId > 0);
+
+    // The row the old dialog left behind: a weight product carrying the carton
+    // barcode the package widget computed from its piece barcode. Written by hand
+    // because the point is that a future reader must not turn it into a package.
+    QSqlQuery stale(db.handle());
+    stale.prepare(QStringLiteral("UPDATE products SET package_barcode = '5c' WHERE id = ?"));
+    stale.addBindValue(weightId);
+    QVERIFY(stale.exec());
+
+    // The weight panel opens before unitKind is read, so this test does not
+    // distinguish the fixed findProduct from the old one. What it does is
+    // pin the observable behaviour: a scan that ends in 'c' on a product
+    // sold by weight must not become a package line, whatever the loader
+    // says about the unit. The piece control proves carton scanning still
+    // works for the products that have a carton.
+    ui::PosPage page(db);
+    page.show();
+    page.setEntryText(QStringLiteral("5c"));
+    page.addEntry();
+
+    QTableWidget* empty = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(empty != nullptr);
+    QCOMPARE(page.lineCount(), 0);
+    QCOMPARE(empty->rowCount(), 1);
+    QVERIFY(empty->item(0, 0)->text().contains(QStringLiteral("لوز")));
+
+    QWidget* cell = empty->cellWidget(0, 1);
+    QLineEdit* w = qobject_cast<QLineEdit*>(cell);
+    if (!w) w = cell->findChild<QLineEdit*>();
+    QVERIFY(w != nullptr);
+    w->setText(QStringLiteral("250"));
+    QMetaObject::invokeMethod(w, "returnPressed");
+
+    QCOMPARE(page.lineCount(), 1);
+    QCOMPARE(page.lineQuantityAt(0), 250LL);
+    QCOMPARE(page.linePriceAt(0), 120000LL);
+    // A weight line, not a package line: the unit cell is the grams label, not
+    // the piece/package dropdown.
+    QWidget* unitWidget = page.table()->cellWidget(0, 2);
+    QLabel* unitLabel = qobject_cast<QLabel*>(unitWidget);
+    QVERIFY(unitLabel != nullptr);
+    const QString grams = QCoreApplication::translate("app::ui::PosPage", "غرام");
+    QVERIFY(unitLabel->text().contains(grams) || unitLabel->text() == grams);
+    QCOMPARE(page.totalCents(), 30000LL);
+
+    // Control: a real carton still scans as one.
+    core::Product carton;
+    carton.barcode = QStringLiteral("9");
+    carton.name = QStringLiteral("زيت");
+    carton.salePriceCents = 60;
+    carton.costPriceCents = 58;
+    carton.packageBarcode = QStringLiteral("9c");
+    carton.piecesPerPackage = 24;
+    QVERIFY(products.save(carton) > 0);
+
+    ui::PosPage second(db);
+    second.show();
+    second.setEntryText(QStringLiteral("9c"));
+    second.addEntry();
+
+    QCOMPARE(second.lineCount(), 1);
+    auto* unitBox = qobject_cast<QComboBox*>(second.table()->cellWidget(0, 2));
+    QVERIFY(unitBox != nullptr);
+    QCOMPARE(unitBox->currentData().toString(), QStringLiteral("package"));
+    QCOMPARE(second.linePriceAt(0), 1440LL);
+
+    QCoreApplication::processEvents();
 }
 
 void UiTest::stock_page_shows_kilograms_for_a_weight_product()

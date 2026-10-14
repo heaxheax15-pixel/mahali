@@ -564,7 +564,17 @@ std::optional<core::Product> PosPage::findProduct(const QString& text, QString* 
         if (const int packageId = productIdForPackageBarcode(text); packageId > 0) {
             if (auto product = products.findById(packageId)) {
                 if (unitKind) {
-                    *unitKind = QStringLiteral("package");
+                    // A weight product has no carton. The 'c' suffix on a barcode
+                    // that happens to end in one of its digits is not a carton
+                    // scan, and treating it as one would add a phantom package
+                    // line at the per-kilogram price. The caller already opens the
+                    // weight panel for such a product, so this only keeps the
+                    // claim honest for a future reader of unitKind.
+                    if (product->soldByWeight) {
+                        *unitKind = QStringLiteral("piece");
+                    } else {
+                        *unitKind = QStringLiteral("package");
+                    }
                 }
                 return product;
             }
@@ -574,7 +584,14 @@ std::optional<core::Product> PosPage::findProduct(const QString& text, QString* 
         // the carton label is printed from the same number.
         if (const auto byPieceBarcode = products.findByBarcode(text.chopped(1))) {
             if (unitKind) {
-                *unitKind = QStringLiteral("package");
+                // Same as the carton-label arm above: a weight product has no
+                // carton, so a scan that reaches it through the suffix is a piece
+                // and not a package.
+                if (byPieceBarcode->soldByWeight) {
+                    *unitKind = QStringLiteral("piece");
+                } else {
+                    *unitKind = QStringLiteral("package");
+                }
             }
             return byPieceBarcode;
         }

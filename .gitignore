@@ -11,3 +11,6 @@ Testing/
 
 # Bare lrelease writes .qm next to the .ts; the build writes to build/
 translations/*.qm
+
+# opencode session state
+.opencode/
