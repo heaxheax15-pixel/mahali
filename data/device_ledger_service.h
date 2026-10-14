@@ -47,8 +47,14 @@ public:
     // Derives the device's identity from its own persistent settings store.
     explicit DeviceLedgerService(Database& db);
 
-    DeviceOpResult recordSale(const QVector<core::SaleItem>& items, int cashSessionId);
-    DeviceOpResult recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items);
+    // adjustmentCents is what the cashier changed by hand on the whole invoice,
+    // carried on the wire so a second device applies the same figure. It joins
+    // the total exactly as SaleService does (lines + adjustment) and is stored
+    // on the sale / customer transaction.
+    DeviceOpResult recordSale(const QVector<core::SaleItem>& items, int cashSessionId,
+                              long long adjustmentCents = 0);
+    DeviceOpResult recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
+                                      long long adjustmentCents = 0);
     DeviceOpResult recordCustomerPayment(int customerId, long long amountCents, int cashSessionId,
                                          const QString& note);
 
@@ -66,7 +72,8 @@ private:
     bool rejectWithoutIdentity(DeviceOpResult* result) const;
 
     int mintAndEnqueue(core::SyncOpType type, int entityId, long long totalCents,
-                       const QVector<core::SaleItem>& resolved, const QString& note, QString* error);
+                       const QVector<core::SaleItem>& resolved, const QString& note, QString* error,
+                       long long adjustmentCents = 0);
 
     Database& m_db;
     QString m_deviceId;

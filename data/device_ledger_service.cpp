@@ -59,7 +59,7 @@ bool DeviceLedgerService::rejectWithoutIdentity(DeviceOpResult* result) const
 
 int DeviceLedgerService::mintAndEnqueue(core::SyncOpType type, int entityId, long long totalCents,
                                         const QVector<core::SaleItem>& resolved, const QString& note,
-                                        QString* error)
+                                        QString* error, long long adjustmentCents)
 {
     const int opId = m_syncSequence.nextOpId();
     if (opId == 0) {
@@ -74,6 +74,7 @@ int DeviceLedgerService::mintAndEnqueue(core::SyncOpType type, int entityId, lon
     op.type = type;
     op.entityId = entityId;
     op.amountCents = totalCents;
+    op.adjustmentCents = adjustmentCents;
     op.occurredAt = QDateTime::currentDateTime();
     op.note = note;
     op.deviceId = m_deviceId;
@@ -84,6 +85,11 @@ int DeviceLedgerService::mintAndEnqueue(core::SyncOpType type, int entityId, lon
         syncItem.productId = item.productId;
         syncItem.quantity = item.quantity;
         syncItem.unitPriceCents = item.unitPriceCents;
+        // Carried so the receiving device consumes the same stock as this one;
+        // resolveSaleItems already filled both, and dropping them made a weight
+        // line arrive as a piece line.
+        syncItem.unitKind = item.unitKind;
+        syncItem.piecesConsumed = item.piecesConsumed;
         op.items.append(syncItem);
     }
 
@@ -98,7 +104,8 @@ int DeviceLedgerService::mintAndEnqueue(core::SyncOpType type, int entityId, lon
     return opId;
 }
 
-DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& items, int cashSessionId)
+DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& items, int cashSessionId,
+                                               long long adjustmentCents)
 {
     DeviceOpResult result;
     if (rejectWithoutIdentity(&result)) {
@@ -137,6 +144,14 @@ DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& it
         return result;
     }
 
+    // The adjustment joins the total exactly as SaleService joins it: lines +
+    // adjustment is the amount owed, while the cost stays at the line prices.
+    if (!detail::sumFits(*totalOpt, adjustmentCents)) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
     const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
     if (!cogsOpt.has_value()) {
         m_db.rollback();
@@ -144,12 +159,13 @@ DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& it
         return result;
     }
 
-    const long long total = *totalOpt;
+    const long long total = *totalOpt + adjustmentCents;
     const long long cogs = *cogsOpt;
 
     core::Sale sale;
     sale.createdAt = QDateTime::currentDateTime();
     sale.totalCents = total;
+    sale.adjustmentCents = adjustmentCents;
     sale.deviceId = m_deviceId;
     sale.oversold = false;
     // Stamped with whatever occasion is running, exactly as the server-side sale
@@ -196,7 +212,7 @@ DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& it
 
     QString error;
     const int opId = mintAndEnqueue(core::SyncOpType::Sale, saleId, total, resolved, QStringLiteral(""),
-                                    &error);
+                                    &error, adjustmentCents);
     if (opId == 0) {
         m_db.rollback();
         result.error = error;
@@ -224,7 +240,8 @@ DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& it
     return result;
 }
 
-DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items)
+DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVector<core::SaleItem>& items,
+                                                       long long adjustmentCents)
 {
     DeviceOpResult result;
     if (rejectWithoutIdentity(&result)) {
@@ -260,6 +277,13 @@ DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVe
         return result;
     }
 
+    // The adjustment joins the total exactly as SaleService joins it.
+    if (!detail::sumFits(*totalOpt, adjustmentCents)) {
+        m_db.rollback();
+        result.error = QStringLiteral("the sale total is too large to record");
+        return result;
+    }
+
     const std::optional<long long> cogsOpt = cogsCentsFor(resolved);
     if (!cogsOpt.has_value()) {
         m_db.rollback();
@@ -267,12 +291,13 @@ DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVe
         return result;
     }
 
-    const long long total = *totalOpt;
+    const long long total = *totalOpt + adjustmentCents;
     const long long cogs = *cogsOpt;
 
     core::CustomerTransaction transaction;
     transaction.customerId = customerId;
     transaction.amountCents = total;
+    transaction.adjustmentCents = adjustmentCents;
     transaction.createdAt = QDateTime::currentDateTime();
     const int transactionId = m_customerTransactions.insert(transaction);
     if (transactionId == 0) {
@@ -308,7 +333,7 @@ DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVe
 
     QString error;
     const int opId = mintAndEnqueue(core::SyncOpType::CustomerDebt, customerId, total, resolved,
-                                    QStringLiteral(""), &error);
+                                    QStringLiteral(""), &error, adjustmentCents);
     if (opId == 0) {
         m_db.rollback();
         result.error = error;

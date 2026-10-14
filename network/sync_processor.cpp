@@ -250,6 +250,19 @@ SyncAppliedOp SyncProcessor::applySale(const QJsonObject& json, int cashSessionI
         return applied;
     }
 
+    // Optional on the wire: a batch from a build that predates the field omits
+    // it, and a missing adjustment is simply zero. A present but malformed value
+    // is refused, like every other integer here.
+    long long adjustmentCents = 0;
+    QString adjustmentReason;
+    if (json.contains(QStringLiteral("adjustmentCents"))
+        && !app::core::SyncOpCodec::readExactInteger(json.value(QStringLiteral("adjustmentCents")),
+                                                     QStringLiteral("adjustmentCents of sale"),
+                                                     &adjustmentCents, &adjustmentReason)) {
+        *error = adjustmentReason;
+        return applied;
+    }
+
     QVector<app::core::SaleItem> items;
     for (int index = 0; index < itemsJson.size(); ++index) {
         const QJsonValue value = itemsJson.at(index);
@@ -277,6 +290,17 @@ SyncAppliedOp SyncProcessor::applySale(const QJsonObject& json, int cashSessionI
             *error = reason;
             return applied;
         }
+        // Optional, as above. resolveSaleItems decides the effective kind and
+        // count from the central product, so these reach it as the device's
+        // claim and are confirmed (or corrected) against the shared definition.
+        item.unitKind = itemJson.value(QStringLiteral("unitKind")).toString();
+        if (itemJson.contains(QStringLiteral("piecesConsumed"))
+            && !app::core::SyncOpCodec::readExactInteger(
+                itemJson.value(QStringLiteral("piecesConsumed")),
+                QStringLiteral("piecesConsumed of sale item %1").arg(index), &item.piecesConsumed, &reason)) {
+            *error = reason;
+            return applied;
+        }
         items.append(item);
     }
 
@@ -284,8 +308,8 @@ SyncAppliedOp SyncProcessor::applySale(const QJsonObject& json, int cashSessionI
     app::core::SyncApplyToken token;
     token.opId = applied.opId;
     token.deviceId = deviceId;
-    const app::data::SaleRecordResult result =
-        m_sales.recordSale(items, cashSessionId, deviceId, /*allowOversold=*/false, &token);
+    const app::data::SaleRecordResult result = m_sales.recordSale(
+        items, cashSessionId, deviceId, /*allowOversold=*/false, &token, adjustmentCents);
     if (!result.ok) {
         *error = result.error;
         return applied;
@@ -315,6 +339,17 @@ SyncAppliedOp SyncProcessor::applyDebt(const QJsonObject& json, QString* error)
         return applied;
     }
 
+    // Optional on the wire, exactly as in applySale.
+    long long adjustmentCents = 0;
+    QString adjustmentReason;
+    if (json.contains(QStringLiteral("adjustmentCents"))
+        && !app::core::SyncOpCodec::readExactInteger(json.value(QStringLiteral("adjustmentCents")),
+                                                     QStringLiteral("adjustmentCents of customer_debt"),
+                                                     &adjustmentCents, &adjustmentReason)) {
+        *error = adjustmentReason;
+        return applied;
+    }
+
     QVector<app::core::SaleItem> items;
     for (int index = 0; index < itemsJson.size(); ++index) {
         const QJsonValue value = itemsJson.at(index);
@@ -340,6 +375,17 @@ SyncAppliedOp SyncProcessor::applyDebt(const QJsonObject& json, QString* error)
             *error = reason;
             return applied;
         }
+        // Optional, as above; resolveSaleItems confirms the kind and count
+        // against the central product.
+        item.unitKind = itemJson.value(QStringLiteral("unitKind")).toString();
+        if (itemJson.contains(QStringLiteral("piecesConsumed"))
+            && !app::core::SyncOpCodec::readExactInteger(
+                itemJson.value(QStringLiteral("piecesConsumed")),
+                QStringLiteral("piecesConsumed of customer_debt item %1").arg(index), &item.piecesConsumed,
+                &reason)) {
+            *error = reason;
+            return applied;
+        }
         items.append(item);
     }
 
@@ -347,8 +393,8 @@ SyncAppliedOp SyncProcessor::applyDebt(const QJsonObject& json, QString* error)
     app::core::SyncApplyToken token;
     token.opId = applied.opId;
     token.deviceId = deviceId;
-    const app::data::SaleRecordResult result =
-        m_sales.recordCustomerDebt(customerId, items, deviceId, /*allowOversold=*/false, &token);
+    const app::data::SaleRecordResult result = m_sales.recordCustomerDebt(
+        customerId, items, deviceId, /*allowOversold=*/false, &token, adjustmentCents);
     if (!result.ok) {
         *error = result.error;
         return applied;

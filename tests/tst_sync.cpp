@@ -1,5 +1,6 @@
 #include <QtTest/QtTest>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -14,6 +15,8 @@ private slots:
     void hmacSha256IsDeterministic();
     void hmacSha256DiffersAcrossKeys();
     void serializeDeserializeRoundTrip();
+    void codec_carries_adjustment_unit_and_pieces();
+    void codec_decodes_a_payload_without_the_new_fields();
     void deserializeLegacyNumericAmount();
     void rejectInvalidLegacyNumericAmounts();
     void batchSizeLimits();
@@ -62,6 +65,68 @@ void SyncTest::serializeDeserializeRoundTrip()
     QCOMPARE(restored->occurredAt, op.occurredAt);
     QCOMPARE(restored->note, QStringLiteral("debt note"));
     QCOMPARE(restored->deviceId, QStringLiteral("device-1"));
+}
+
+void SyncTest::codec_carries_adjustment_unit_and_pieces()
+{
+    app::core::SyncOperation op;
+    op.opId = 9;
+    op.type = app::core::SyncOpType::Sale;
+    op.entityId = 3;
+    op.amountCents = 5000;
+    op.adjustmentCents = -1000;
+    op.occurredAt = QDateTime::currentDateTimeUtc();
+    op.deviceId = QStringLiteral("phone-1");
+
+    app::core::SyncItem item;
+    item.productId = 11;
+    item.quantity = 2;
+    item.unitPriceCents = 1440;
+    item.unitKind = QStringLiteral("package");
+    item.piecesConsumed = 48;
+    op.items.append(item);
+
+    const QByteArray payload = app::core::SyncOpCodec::serialize(op);
+    const QJsonObject object = QJsonDocument::fromJson(payload).object();
+
+    QString error;
+    const auto restored = app::core::SyncOpCodec::deserialize(object, &error);
+    QVERIFY2(restored.has_value(), qPrintable(error));
+    QCOMPARE(restored->adjustmentCents, -1000LL);
+    QCOMPARE(restored->items.size(), 1);
+    QCOMPARE(restored->items.at(0).unitKind, QStringLiteral("package"));
+    QCOMPARE(restored->items.at(0).piecesConsumed, 48LL);
+}
+
+void SyncTest::codec_decodes_a_payload_without_the_new_fields()
+{
+    // Exactly what a build before the three fields emitted: no adjustmentCents,
+    // and an item with only productId, quantity and unitPriceCents. It must
+    // still decode, or that device's outbox would be stuck on the server.
+    QJsonObject item;
+    item.insert(QStringLiteral("productId"), 3);
+    item.insert(QStringLiteral("quantity"), QStringLiteral("2"));
+    item.insert(QStringLiteral("unitPriceCents"), QStringLiteral("1000"));
+
+    QJsonObject legacy;
+    legacy.insert(QStringLiteral("opId"), 1);
+    legacy.insert(QStringLiteral("type"), static_cast<int>(app::core::SyncOpType::Sale));
+    legacy.insert(QStringLiteral("entityId"), 0);
+    legacy.insert(QStringLiteral("amountCents"), QStringLiteral("2000"));
+    legacy.insert(QStringLiteral("occurredAt"),
+                  QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+    legacy.insert(QStringLiteral("note"), QStringLiteral("old"));
+    legacy.insert(QStringLiteral("deviceId"), QStringLiteral("old-device"));
+    legacy.insert(QStringLiteral("items"), QJsonArray{ item });
+
+    QString error;
+    const auto restored = app::core::SyncOpCodec::deserialize(legacy, &error);
+    QVERIFY2(restored.has_value(), qPrintable(error));
+    QVERIFY(error.isEmpty());
+    QCOMPARE(restored->adjustmentCents, 0LL);
+    QCOMPARE(restored->items.size(), 1);
+    QVERIFY(restored->items.at(0).unitKind.isEmpty());
+    QCOMPARE(restored->items.at(0).piecesConsumed, 0LL);
 }
 
 void SyncTest::deserializeLegacyNumericAmount()

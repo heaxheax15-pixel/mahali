@@ -29,6 +29,11 @@ QByteArray SyncOpCodec::serialize(const SyncOperation& op)
     // cents is 9,223,372,036,854,775,807, far above that limit, so we serialise
     // them as JSON strings and parse them back as long long on the other end.
     json[QStringLiteral("amountCents")] = QString::number(op.amountCents);
+    // The three new keys below (adjustmentCents here, unitKind and
+    // piecesConsumed on each item) are optional on the wire so a new device
+    // keeps syncing with an old one. adjustmentCents and piecesConsumed are
+    // 64-bit integers, so they use the same string form as amountCents.
+    json[QStringLiteral("adjustmentCents")] = QString::number(op.adjustmentCents);
     json[QStringLiteral("occurredAt")] = op.occurredAt.toUTC().toString(Qt::ISODateWithMs);
     json[QStringLiteral("note")] = op.note;
     json[QStringLiteral("deviceId")] = op.deviceId;
@@ -39,6 +44,9 @@ QByteArray SyncOpCodec::serialize(const SyncOperation& op)
         itemJson[QStringLiteral("productId")] = item.productId;
         itemJson[QStringLiteral("quantity")] = QString::number(item.quantity);
         itemJson[QStringLiteral("unitPriceCents")] = QString::number(item.unitPriceCents);
+        // Optional, as above; an empty unitKind means a bare piece line.
+        itemJson[QStringLiteral("unitKind")] = item.unitKind;
+        itemJson[QStringLiteral("piecesConsumed")] = QString::number(item.piecesConsumed);
         items.append(itemJson);
     }
     json[QStringLiteral("items")] = items;
@@ -122,6 +130,17 @@ std::optional<SyncOperation> SyncOpCodec::deserialize(const QJsonObject& json, Q
         return std::nullopt;
     }
 
+    // The three new keys are optional: a payload from a build that predates
+    // them omits them, and refusing it would leave that device's outbox stuck
+    // forever. Missing means an unadjusted piece line, one piece per unit,
+    // which is what every sale before them meant. A key that is present but
+    // malformed is still refused, the same as amountCents above.
+    if (json.contains(QStringLiteral("adjustmentCents"))
+        && !readExactInteger(json.value(QStringLiteral("adjustmentCents")),
+                             QStringLiteral("adjustmentCents"), &op.adjustmentCents, error)) {
+        return std::nullopt;
+    }
+
     op.occurredAt =
         QDateTime::fromString(json.value(QStringLiteral("occurredAt")).toString(), Qt::ISODateWithMs);
     op.note = json.value(QStringLiteral("note")).toString();
@@ -145,6 +164,14 @@ std::optional<SyncOperation> SyncOpCodec::deserialize(const QJsonObject& json, Q
         if (!readExactInteger(itemJson.value(QStringLiteral("unitPriceCents")),
                               QStringLiteral("unitPriceCents of item %1").arg(index), &item.unitPriceCents,
                               error)) {
+            return std::nullopt;
+        }
+        // Optional, as above; a missing unitKind is an empty (piece) line.
+        item.unitKind = itemJson.value(QStringLiteral("unitKind")).toString();
+        if (itemJson.contains(QStringLiteral("piecesConsumed"))
+            && !readExactInteger(itemJson.value(QStringLiteral("piecesConsumed")),
+                                 QStringLiteral("piecesConsumed of item %1").arg(index),
+                                 &item.piecesConsumed, error)) {
             return std::nullopt;
         }
         op.items.append(item);
