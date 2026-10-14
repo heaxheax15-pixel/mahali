@@ -203,6 +203,33 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     form->addRow(QCoreApplication::translate("ProductDialog", "الاسم"), name);
     form->addRow(QCoreApplication::translate("ProductDialog", "سعر التكلفة"), cost);
     form->addRow(QCoreApplication::translate("ProductDialog", "سعر البيع"), sale);
+
+    // A weight product is priced per kilogram and its stock is stored in
+    // grams; every reader (POS, stock page, reports) divides by 1000 to
+    // show kilos. The flag is the only thing that tells them apart from a
+    // piece product with the same shape.
+    auto* soldByWeight = new QCheckBox(QCoreApplication::translate("ProductDialog", "يُباع بالميزان (بالكيلوغرام)"));
+    soldByWeight->setObjectName(QStringLiteral("soldByWeight"));
+    soldByWeight->setChecked(initial.soldByWeight);
+    form->addRow(soldByWeight);
+
+    QLabel* saleLabel = qobject_cast<QLabel*>(form->labelForField(sale));
+    QLabel* costLabel = qobject_cast<QLabel*>(form->labelForField(cost));
+    auto updateWeightLabels = [saleLabel, costLabel, soldByWeight]() {
+        const bool on = soldByWeight->isChecked();
+        if (saleLabel) {
+            saleLabel->setText(on ? QCoreApplication::translate("ProductDialog", "سعر الكيلوغرام")
+                                  : QCoreApplication::translate("ProductDialog", "سعر البيع"));
+        }
+        if (costLabel) {
+            costLabel->setText(on ? QCoreApplication::translate("ProductDialog", "تكلفة الكيلوغرام")
+                                  : QCoreApplication::translate("ProductDialog", "سعر التكلفة"));
+        }
+    };
+    QObject::connect(soldByWeight, &QCheckBox::toggled, &dialog,
+                     [updateWeightLabels](bool) { updateWeightLabels(); });
+    updateWeightLabels();
+
     form->addRow(QCoreApplication::translate("ProductDialog", "الكمية الافتتاحية"), openingStock);
     form->addRow(QCoreApplication::translate("ProductDialog", "الوحدة"), unit);
     form->addRow(QCoreApplication::translate("ProductDialog", "عدد الحبات في العلبة"), package);
@@ -457,6 +484,7 @@ std::optional<core::Product> showProductDialog(QWidget* parent, app::data::Datab
     product.packageBarcode =
         trimmedBarcode.isEmpty() ? QString() : trimmedBarcode + QStringLiteral("c");
     product.active = active->isChecked();
+    product.soldByWeight = soldByWeight->isChecked();
     return product;
 }
 

@@ -236,7 +236,14 @@ void ProductsPage::refresh()
             m_table->setItem(row, column, cell);
         };
         put(kColBarcode, product.barcode, false);
-        put(kColName, product.name, false);
+        QString displayName = product.name;
+        if (product.soldByWeight) {
+            // The scale character is the only signal that a product is priced
+            // per kilogram; a full column would cost a slot for a flag that half
+            // the rows never carry.
+            displayName = QStringLiteral("⚖ ") + displayName;
+        }
+        put(kColName, displayName, false);
         put(kColCost, formatMoney(product.costPriceCents), true);
         put(kColSale, formatMoney(product.salePriceCents), true);
         put(kColQuantity, QString::number(product.quantity), true);

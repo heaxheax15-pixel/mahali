@@ -138,6 +138,9 @@ private slots:
     void settings_page_saves_and_restores_receipt_printing();
     void settings_page_saves_auto_print();
     void receipt_printer_writes_a_pdf();
+    void product_dialog_reveals_the_weight_checkbox();
+    void product_dialog_saves_the_weight_flag();
+    void products_page_marks_weight_products();
     void receipt_uses_the_paper_from_settings();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
@@ -3562,6 +3565,186 @@ void UiTest::receipt_printer_writes_a_pdf()
     QVERIFY(first == "%PDF");
     f.close();
     delete doc;
+}
+
+
+void UiTest::product_dialog_reveals_the_weight_checkbox()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("w1.sqlite")));
+    data::ProductRepository repo(db);
+
+    ui::ProductsPage page(db);
+    page.show();
+    QCoreApplication::processEvents();
+
+    const QString saleLabelBefore = QCoreApplication::translate("ProductDialog", "سعر البيع");
+
+    bool modalOpened = false;
+    bool ok1 = false;
+    bool ok2 = false;
+    bool ok3 = false;
+    bool watchdogFired = false;
+
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, [&]() {
+        watchdogFired = true;
+        if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            modal->reject();
+        }
+    });
+    watchdog.start(3000);
+
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) return;
+        modalOpened = true;
+        QCoreApplication::processEvents();
+        auto* weight = modal->findChild<QCheckBox*>(QStringLiteral("soldByWeight"));
+        QVERIFY(weight != nullptr);
+        QVERIFY(!weight->isChecked());
+        auto* saleEdit = modal->findChild<QLineEdit*>(QStringLiteral("salePrice"));
+        if (!saleEdit) {
+            const auto edits2 = modal->findChildren<QLineEdit*>();
+            if (edits2.size() > 3) saleEdit = edits2[3];
+        }
+        QVERIFY(saleEdit != nullptr);
+        auto* form = modal->findChild<QFormLayout*>();
+        if (!form && modal->layout()) form = qobject_cast<QFormLayout*>(modal->layout());
+        QVERIFY(form != nullptr);
+        auto* saleLabel = qobject_cast<QLabel*>(form->labelForField(saleEdit));
+        if (!saleLabel) {
+            // try to find by scanning form rows
+            for (int i = 0; i < form->rowCount(); ++i) {
+                auto* fi = form->itemAt(i, QFormLayout::FieldRole); if (fi && fi->widget() == saleEdit) {
+                    auto* li = form->itemAt(i, QFormLayout::LabelRole); saleLabel = li ? qobject_cast<QLabel*>(li->widget()) : nullptr;
+                    break;
+                }
+            }
+        }
+        if (!saleLabel) {
+            const auto labels = modal->findChildren<QLabel*>();
+            for (auto* l : labels) {
+                const QString t = l->text();
+                if (t.contains(QStringLiteral("سعر البيع")) || t.contains(QStringLiteral("سعر الكيلوغرام"))) { saleLabel = l; break; }
+            }
+        }
+        QVERIFY(saleLabel != nullptr);
+        if (saleLabel->text().contains(QStringLiteral("سعر البيع"))) ok1 = true;
+        weight->setChecked(true); QCoreApplication::processEvents();
+        if (saleLabel->text().contains(QStringLiteral("سعر الكيلوغرام"))) ok2 = true;
+        weight->setChecked(false); QCoreApplication::processEvents();
+        if (saleLabel->text().contains(QStringLiteral("سعر البيع"))) ok3 = true;
+        modal->reject();
+    });
+
+    QPushButton* addBtn = page.findChild<QPushButton*>(QStringLiteral("primary"));
+    QVERIFY(addBtn != nullptr);
+    addBtn->click();
+
+    QVERIFY2(!watchdogFired, "the product dialog had to be closed by the watchdog");
+    QVERIFY2(modalOpened, "the add-product button did not open the product dialog");
+    QVERIFY2(ok1 && ok2 && ok3, "label toggle did not behave as expected");
+}
+
+void UiTest::product_dialog_saves_the_weight_flag()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("w2.sqlite")));
+    data::ProductRepository repo(db);
+
+    ui::ProductsPage page(db);
+    page.show();
+    QCoreApplication::processEvents();
+
+    bool modalOpened = false;
+    bool watchdogFired = false;
+
+    QTimer watchdog;
+    watchdog.setSingleShot(true);
+    QObject::connect(&watchdog, &QTimer::timeout, [&]() {
+        watchdogFired = true;
+        if (auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            modal->reject();
+        }
+    });
+    watchdog.start(3000);
+
+    QTimer::singleShot(0, [&]() {
+        auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (!modal) return;
+        modalOpened = true;
+        const auto edits = modal->findChildren<QLineEdit*>();
+        if (edits.size() > 0) edits[0]->setText(QStringLiteral("5"));
+        if (edits.size() > 1) edits[1]->setText(QStringLiteral("لوز"));
+        if (edits.size() > 2) edits[2]->setText(QStringLiteral("1000")); // cost
+        if (edits.size() > 3) edits[3]->setText(QStringLiteral("1200")); // sale
+
+        auto* weight = modal->findChild<QCheckBox*>(QStringLiteral("soldByWeight"));
+        if (weight) weight->setChecked(true);
+
+        auto* box = modal->findChild<QDialogButtonBox*>();
+        if (box) {
+            auto* ok = box->button(QDialogButtonBox::Ok);
+            if (ok) ok->click();
+        } else {
+            modal->accept();
+        }
+    });
+
+    QPushButton* addBtn = page.findChild<QPushButton*>(QStringLiteral("primary"));
+    QVERIFY(addBtn != nullptr);
+    addBtn->click();
+
+    QVERIFY2(!watchdogFired, "the product dialog had to be closed by the watchdog");
+    QVERIFY2(modalOpened, "the add-product button did not open the product dialog");
+
+    const auto found = repo.findByBarcode(QStringLiteral("5"));
+    QVERIFY(found.has_value());
+    QVERIFY(found->soldByWeight);
+    QVERIFY(found->salePriceCents == 120000);
+}
+
+void UiTest::products_page_marks_weight_products()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("w3.sqlite")));
+
+
+    data::ProductRepository repo(db);
+    core::Product p1;
+    p1.barcode = QStringLiteral("1");
+    p1.name = QStringLiteral("لحم");
+    p1.soldByWeight = true;
+    p1.salePriceCents = 1000;
+    const int id1 = repo.save(p1);
+    QVERIFY(id1 > 0);
+
+    core::Product p2;
+    p2.barcode = QStringLiteral("2");
+    p2.name = QStringLiteral("أرز");
+    p2.soldByWeight = false;
+    p2.salePriceCents = 500;
+    const int id2 = repo.save(p2);
+    QVERIFY(id2 > 0);
+
+    ui::ProductsPage page(db);
+    page.show();
+    QCoreApplication::processEvents();
+
+    // Find rows
+    const QTableWidget* table = page.findChild<QTableWidget*>(QStringLiteral("productTable"));
+    QVERIFY(table != nullptr);
+    QVERIFY(table->rowCount() >= 2);
+
+    for (int r = 0; r < table->rowCount(); ++r) {
+        const auto* cell = table->item(r, 1); // name column
+        if (!cell) continue;
+        const int pid = cell->data(Qt::UserRole).toInt();
+        if (pid == id1) {
+            QVERIFY(cell->text().startsWith(QStringLiteral("⚖ ")));
+        } else if (pid == id2) {
+            QVERIFY(!cell->text().contains(QStringLiteral("⚖ ")));
+        }
+    }
 }
 
 QTEST_MAIN(UiTest)
