@@ -142,6 +142,10 @@ private slots:
     void product_dialog_saves_the_weight_flag();
     void products_page_marks_weight_products();
     void receipt_renders_a_weight_line_with_grams();
+    void pos_weight_product_opens_the_entry_panel();
+    void pos_weight_submission_adds_a_weight_line();
+    void pos_weight_over_two_kilos_asks_confirmation();
+    void pos_two_weight_products_in_a_row();
     void receipt_uses_the_paper_from_settings();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
@@ -3795,4 +3799,174 @@ void UiTest::receipt_renders_a_weight_line_with_grams()
     QVERIFY(text.contains(app::ui::formatMoney(30000, QStringLiteral("DA"))));
     QVERIFY(!text.contains(QStringLiteral("1 ")));
     delete doc;
+}
+
+void UiTest::pos_weight_product_opens_the_entry_panel()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos_w.sqlite"));
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("5");
+    product.name = QStringLiteral("لوز");
+    product.salePriceCents = 120000;
+    product.soldByWeight = true;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+
+    ui::PosPage page(db);
+    page.show();
+    page.setEntryText("5");
+    page.addEntry();
+
+    QCOMPARE(page.table()->rowCount(), 0);
+    QTableWidget* empty = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(empty != nullptr);
+    QVERIFY(empty->rowCount() == 1);
+    QVERIFY(empty->item(0, 0)->text().contains(QStringLiteral("لوز")));
+    QLineEdit* w = empty->cellWidget(0, 1)->findChild<QLineEdit*>();
+    QVERIFY(w != nullptr || empty->cellWidget(0, 1) != nullptr);
+    if (empty->cellWidget(0, 1)) {
+        // it's the lineedit itself
+    }
+    QVERIFY(empty->item(0, 2)->text().contains(QStringLiteral("1200.00")));
+    QCoreApplication::processEvents();
+}
+
+void UiTest::pos_weight_submission_adds_a_weight_line()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos_w2.sqlite"));
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("5");
+    product.name = QStringLiteral("لوز");
+    product.salePriceCents = 120000;
+    product.soldByWeight = true;
+    products.save(product);
+
+    ui::PosPage page(db);
+    page.show();
+    page.setEntryText("5");
+    page.addEntry();
+
+    QTableWidget* empty = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(empty != nullptr);
+    QWidget* cell = empty->cellWidget(0, 1);
+    QLineEdit* w = qobject_cast<QLineEdit*>(cell);
+    if (!w) {
+        // maybe wrapped
+        w = cell->findChild<QLineEdit*>();
+    }
+    QVERIFY(w != nullptr);
+    w->setText("250");
+    QMetaObject::invokeMethod(w, "returnPressed");
+
+    QVERIFY(page.lineCount() == 1);
+    QCOMPARE(page.lineQuantityAt(0), 250LL);
+    QCOMPARE(page.linePriceAt(0), 120000LL);
+    QVERIFY(empty->rowCount() == 0);
+    QCOMPARE(page.totalCents(), 30000LL);
+    QCoreApplication::processEvents();
+}
+
+void UiTest::pos_weight_over_two_kilos_asks_confirmation()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos_w3.sqlite"));
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("5");
+    product.name = QStringLiteral("لوز");
+    product.salePriceCents = 120000;
+    product.soldByWeight = true;
+    products.save(product);
+
+    ui::PosPage page(db);
+    page.show();
+    page.setEntryText("5");
+    page.addEntry();
+
+    QTableWidget* empty = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(empty != nullptr);
+    QWidget* cell = empty->cellWidget(0, 1);
+    QLineEdit* w = qobject_cast<QLineEdit*>(cell);
+    if (!w) w = cell->findChild<QLineEdit*>();
+    QVERIFY(w != nullptr);
+    w->setText("2500");
+    // Simulate No on confirmation
+    QTimer::singleShot(0, [&] {
+        QList<QWidget*> widgets = QApplication::topLevelWidgets();
+        for (auto* wid : widgets) {
+            if (auto* box = qobject_cast<QMessageBox*>(wid)) {
+                box->button(QMessageBox::No)->click();
+                break;
+            }
+        }
+    });
+    QMetaObject::invokeMethod(w, "returnPressed");
+
+    QVERIFY(page.lineCount() == 0);
+    QVERIFY(empty->rowCount() == 1);
+    QVERIFY(w->text() == QStringLiteral("2500"));
+    QCoreApplication::processEvents();
+}
+
+void UiTest::pos_two_weight_products_in_a_row()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos_wtwo.sqlite"));
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product p5;
+    p5.barcode = QStringLiteral("5");
+    p5.name = QStringLiteral("لوز");
+    p5.salePriceCents = 120000;
+    p5.soldByWeight = true;
+    products.save(p5);
+
+    core::Product p6;
+    p6.barcode = QStringLiteral("6");
+    p6.name = QStringLiteral("فستق");
+    p6.salePriceCents = 200000;
+    p6.soldByWeight = true;
+    products.save(p6);
+
+    ui::PosPage page(db);
+    page.show();
+
+    // first weight
+    page.setEntryText("5");
+    page.addEntry();
+    QTableWidget* empty = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(empty != nullptr);
+    QWidget* cell = empty->cellWidget(0, 1);
+    QLineEdit* w = qobject_cast<QLineEdit*>(cell);
+    if (!w) w = cell->findChild<QLineEdit*>();
+    QVERIFY(w != nullptr);
+    w->setText("250");
+    QMetaObject::invokeMethod(w, "returnPressed");
+
+    // second weight
+    page.setEntryText("6");
+    page.addEntry();
+    empty = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(empty != nullptr);
+    cell = empty->cellWidget(0, 1);
+    w = qobject_cast<QLineEdit*>(cell);
+    if (!w) w = cell->findChild<QLineEdit*>();
+    QVERIFY(w != nullptr);
+    w->setText("100");
+    QMetaObject::invokeMethod(w, "returnPressed");
+
+    QCOMPARE(page.lineCount(), 2);
+    QCOMPARE(page.lineQuantityAt(0), 250LL);
+    QCOMPARE(page.linePriceAt(0), 120000LL);
+    QCOMPARE(page.lineQuantityAt(1), 100LL);
+    QCOMPARE(page.linePriceAt(1), 200000LL);
+    QCOMPARE(page.totalCents(), 30000LL + 20000LL);
+    QCoreApplication::processEvents();
 }

@@ -6,6 +6,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QIntValidator>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
@@ -198,7 +199,7 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     m_emptyTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_emptyTable->setColumnCount(5);
     m_emptyTable->setHorizontalHeaderLabels(
-        {tr("Produit"), tr("Qté"), tr("Prix"), tr("Total"), QString()});
+        {tr("Produit"), tr("Poids (g)"), tr("Prix/kg"), tr("Total"), QString()});
     m_emptyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_emptyTable->horizontalHeader()->setFixedHeight(34);
     m_emptyTable->verticalHeader()->hide();
@@ -349,6 +350,14 @@ PosPage::PosPage(app::data::Database& db, QWidget* parent)
     connect(m_entry, &QLineEdit::returnPressed, this, &PosPage::addEntry);
     connect(m_entry, &QLineEdit::textChanged, this, &PosPage::onBarcodeTextChanged);
     connect(m_adjustment, &QLineEdit::textChanged, this, &PosPage::onAdjustmentChanged);
+    m_weightInput = new QLineEdit;
+    m_weightInput->setObjectName(QStringLiteral("posWeightField"));
+    m_weightInput->setPlaceholderText(tr("أدخل الوزن بالغرام"));
+    m_weightInput->setValidator(new QIntValidator(1, 100000, m_weightInput));
+    connect(m_weightInput, &QLineEdit::textChanged,
+            this, &PosPage::onWeightChanged);
+    connect(m_weightInput, &QLineEdit::returnPressed,
+            this, &PosPage::onWeightSubmitted);
     connect(m_save, &QPushButton::clicked, this, &PosPage::completeSale);
     connect(clearButton, &QPushButton::clicked, this, &PosPage::onClearCart);
     connect(removeButton, &QPushButton::clicked, this, &PosPage::onRemoveLine);
@@ -439,7 +448,11 @@ long long PosPage::totalCents() const
 {
     long long total = 0;
     for (const PosLine& line : m_lines) {
-        total += line.unitPriceCents * line.quantity;
+        long long term = line.unitPriceCents * line.quantity;
+        if (line.unitKind == QStringLiteral("weight")) {
+            term /= 1000;
+        }
+        total += term;
     }
     // What the sale would be recorded at, which is what the invoice bar shows and
     // what completeSale() hands to the service. Text that is not money counts as
@@ -747,6 +760,10 @@ void PosPage::addEntry()
         return;
     }
 
+    if (product->soldByWeight) {
+        startWeightEntry(*product);
+        return;
+    }
     addProductToCart(*product, 1, unitKind);
     m_entry->setFocus();
 }
@@ -972,7 +989,11 @@ void PosPage::refreshTotals()
 {
     long long total = 0;
     for (const PosLine& line : m_lines) {
-        total += line.unitPriceCents * line.quantity;
+        long long term = line.unitPriceCents * line.quantity;
+        if (line.unitKind == QStringLiteral("weight")) {
+            term /= 1000;
+        }
+        total += term;
     }
     const long long adjustment = m_adjustmentCents;
     // The hero figure is what the customer is charged, so the adjustment is inside
@@ -1342,4 +1363,76 @@ void PosPage::onPrintLastSale()
     setNotice(tr("تم حفظ الإيصال في %1").arg(saved), true);
 }
 
+void PosPage::startWeightEntry(const core::Product& product)
+{
+    m_weightProduct = product;
+    m_hasWeightProduct = true;
+
+    m_emptyTable->clearContents();
+    m_emptyTable->setRowCount(1);
+
+    auto* nameItem = new QTableWidgetItem(product.name.isEmpty() ? product.barcode
+                                                                     : product.name);
+    nameItem->setFlags(nameItem->flags() & ~Qt::ItemIsEditable);
+    m_emptyTable->setItem(0, 0, nameItem);
+
+    auto* gramsField = new QLineEdit;
+    gramsField->setObjectName(QStringLiteral("posWeightField"));
+    gramsField->setPlaceholderText(tr("أدخل الوزن بالغرام"));
+    gramsField->setValidator(new QIntValidator(1, 100000, gramsField));
+    gramsField->setText(m_lastWeightText);
+    connect(gramsField, &QLineEdit::textChanged,
+            this, &PosPage::onWeightChanged);
+    connect(gramsField, &QLineEdit::returnPressed,
+            this, &PosPage::onWeightSubmitted);
+    m_weightInput = gramsField;
+    m_emptyTable->setCellWidget(0, 1, gramsField);
+
+    auto* priceItem = new QTableWidgetItem(
+        tr("%1 / كغ").arg(formatMoney(product.salePriceCents)));
+    priceItem->setFlags(priceItem->flags() & ~Qt::ItemIsEditable);
+    m_emptyTable->setItem(0, 2, priceItem);
+
+    auto* totalItem = new QTableWidgetItem(formatMoney(0));
+    totalItem->setFlags(totalItem->flags() & ~Qt::ItemIsEditable);
+    m_emptyTable->setItem(0, 3, totalItem);
+
+    m_weightInput->setFocus();
+}
+
+void PosPage::onWeightChanged(const QString& text)
+{
+    if (!m_hasWeightProduct || m_weightInput == nullptr) { return; }
+    m_lastWeightText = text;
+    const long long grams = m_weightInput->text().toLongLong();
+    const long long total = m_weightProduct.salePriceCents * grams / 1000;
+    if (auto* item = m_emptyTable->item(0, 3)) {
+        item->setText(formatMoney(total));
+    }
+}
+
+void PosPage::onWeightSubmitted()
+{
+    if (!m_hasWeightProduct || m_weightInput == nullptr) { return; }
+    const long long grams = m_weightInput->text().toLongLong();
+    if (grams <= 0) { return; }
+
+    if (grams > 2000) {
+        const auto answer = QMessageBox::question(
+            this, tr("تأكيد الوزن"),
+            tr("هل الوزن %1 غرام صحيح ؟").arg(grams),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (answer != QMessageBox::Yes) { return; }
+    }
+
+    addProductToCart(m_weightProduct, grams, QStringLiteral("weight"));
+
+    m_emptyTable->clearContents();
+    m_emptyTable->setRowCount(0);
+    m_weightInput = nullptr;
+    m_hasWeightProduct = false;
+    m_weightProduct = {};
+    m_lastWeightText.clear();
+    m_entry->setFocus();
+}
 } // namespace app::ui

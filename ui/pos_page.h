@@ -101,6 +101,8 @@ private slots:
     void onQuickItemClicked(int productId);
     void onAddQuickProduct();
     void onAdjustmentChanged(const QString& text);
+    void onWeightChanged(const QString& text);
+    void onWeightSubmitted();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -154,6 +156,7 @@ private:
     // pieces and as a carton is two lines, because one number cannot be both.
     void addProductToCart(const core::Product& product, long long quantity,
                           const QString& unitKind = QStringLiteral("piece"));
+    void startWeightEntry(const core::Product& product);
     // Repaints one line's price cell after repriceLine(), without rebuilding the
     // table: the cell being edited is the one a rebuild would delete, and a combo
     // deleting itself inside its own signal is not something to walk into.
@@ -200,6 +203,11 @@ private:
     QFrame* m_creditBar = nullptr;
     QLabel* m_creditLabel = nullptr;
     bool m_updating = false;
+
+    QLineEdit* m_weightInput = nullptr;
+    core::Product m_weightProduct;
+    bool m_hasWeightProduct = false;
+    QString m_lastWeightText;
 };
 
 } // namespace app::ui
