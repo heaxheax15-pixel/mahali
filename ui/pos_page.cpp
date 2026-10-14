@@ -1008,6 +1008,7 @@ void PosPage::refreshTotals()
     QHash<QString, long long> byPackageName;
     QStringList packageOrder;
     long long pieceQty = 0;
+    long long weightQty = 0;
     for (const PosLine& line : m_lines) {
         if (line.unitKind == QStringLiteral("package")) {
             const QString name = displayPackageName(line.packageName);
@@ -1015,6 +1016,8 @@ void PosPage::refreshTotals()
                 packageOrder.append(name);
             }
             byPackageName[name] += line.quantity;
+        } else if (line.unitKind == QStringLiteral("weight")) {
+            weightQty += line.quantity;
         } else {
             pieceQty += line.quantity;
         }
@@ -1024,6 +1027,9 @@ void PosPage::refreshTotals()
     parts.reserve(packageOrder.size() + 1);
     for (const QString& name : packageOrder) {
         parts.append(QStringLiteral("%1 %2").arg(byPackageName.value(name)).arg(name));
+    }
+    if (weightQty > 0) {
+        parts.append(QStringLiteral("%1 %2").arg(weightQty).arg(tr("غرام")));
     }
     if (pieceQty > 0) {
         parts.append(QStringLiteral("%1 %2").arg(pieceQty).arg(tr("قطعة")));
@@ -1071,36 +1077,27 @@ void PosPage::rebuildTable()
         readOnly(barcodeItem);
         m_table->setItem(row, BarcodeColumn, barcodeItem);
 
-        // The unit is a dropdown rather than a cell of text: it is the one thing on
-        // a line that is chosen from a list rather than typed, because a unit typed
-        // as a free word is a unit that can be wrong. Two entries, so nothing can
-        // be a typo, and the carton is named the way this product names it — "باكت"
-        // on one shelf and "كرتونة" on the next, so a fixed label would read as a
-        // different product to the person using it.
-        auto* unitCombo = new QComboBox;
-        unitCombo->addItem(tr("قطعة"), QStringLiteral("piece"));
-        unitCombo->addItem(displayPackageName(line.packageName),
-                           QStringLiteral("package"));
-        const int unitIndex = unitCombo->findData(line.unitKind);
-        // An unknown unit can only arrive from a caller that predates the field, and
-        // showing it as a piece is what it would be recorded as.
-        unitCombo->setCurrentIndex(unitIndex >= 0 ? unitIndex : 0);
-        connect(unitCombo, &QComboBox::currentIndexChanged, this, [this, row](int index) {
-            if (auto* combo = qobject_cast<QComboBox*>(sender())) {
-                onUnitKindChanged(row, combo->itemData(index).toString());
-            }
-        });
-        m_table->setCellWidget(row, UnitColumn, unitCombo);
-
-        // The unit column is a fixed 80px and a QComboBox asks for Preferred, so
-        // the combo was squeezed into the cell and its own size hint — which the
-        // package name drives — went unread: "Carton" elided its last letter. The
-        // widest label it can be asked to show is the package one, so that one
-        // sets the floor: its advance plus 48 for the drop-down arrow and the
-        // theme's horizontal padding. Measured after setCellWidget, because the
-        // cell widget only inherits the grid's 14pt font once it is parented.
-        unitCombo->setMinimumWidth(
-            unitCombo->fontMetrics().horizontalAdvance(unitCombo->itemText(1)) + 48);
+        if (line.unitKind == QStringLiteral("weight")) {
+            auto* label = new QLabel(tr("غرام"));
+            label->setObjectName(QStringLiteral("posUnitWeight"));
+            label->setAlignment(Qt::AlignCenter);
+            m_table->setCellWidget(row, UnitColumn, label);
+        } else {
+            auto* unitCombo = new QComboBox;
+            unitCombo->addItem(tr("قطعة"), QStringLiteral("piece"));
+            unitCombo->addItem(displayPackageName(line.packageName),
+                               QStringLiteral("package"));
+            const int unitIndex = unitCombo->findData(line.unitKind);
+            unitCombo->setCurrentIndex(unitIndex >= 0 ? unitIndex : 0);
+            connect(unitCombo, &QComboBox::currentIndexChanged, this, [this, row](int index) {
+                if (auto* combo = qobject_cast<QComboBox*>(sender())) {
+                    onUnitKindChanged(row, combo->itemData(index).toString());
+                }
+            });
+            m_table->setCellWidget(row, UnitColumn, unitCombo);
+            unitCombo->setMinimumWidth(
+                unitCombo->fontMetrics().horizontalAdvance(unitCombo->itemText(1)) + 48);
+        }
 
         auto* qtyItem = new QTableWidgetItem(QString::number(line.quantity));
         qtyItem->setTextAlignment(Qt::AlignCenter);
@@ -1387,9 +1384,11 @@ void PosPage::startWeightEntry(const core::Product& product)
             this, &PosPage::onWeightSubmitted);
     m_weightInput = gramsField;
     m_emptyTable->setCellWidget(0, 1, gramsField);
+    m_emptyTable->setColumnWidth(1, 110);
 
     auto* priceItem = new QTableWidgetItem(
         tr("%1 / كغ").arg(formatMoney(product.salePriceCents)));
+    m_emptyTable->setColumnWidth(2, 160);
     priceItem->setFlags(priceItem->flags() & ~Qt::ItemIsEditable);
     m_emptyTable->setItem(0, 2, priceItem);
 

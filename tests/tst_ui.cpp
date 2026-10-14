@@ -146,6 +146,7 @@ private slots:
     void pos_weight_submission_adds_a_weight_line();
     void pos_weight_over_two_kilos_asks_confirmation();
     void pos_two_weight_products_in_a_row();
+    void pos_weight_line_keeps_its_unit_after_a_carton_toggle_attempt();
     void receipt_uses_the_paper_from_settings();
     void barcode_dialog_does_not_close();
     void product_dialog_writes_package_fields_from_the_shared_widget();
@@ -3969,4 +3970,43 @@ void UiTest::pos_two_weight_products_in_a_row()
     QCOMPARE(page.linePriceAt(1), 200000LL);
     QCOMPARE(page.totalCents(), 30000LL + 20000LL);
     QCoreApplication::processEvents();
+}
+
+void UiTest::pos_weight_line_keeps_its_unit_after_a_carton_toggle_attempt()
+{
+    const QString path = m_dir.filePath(QStringLiteral("pos_wunit.sqlite"));
+    data::Database db(path);
+
+    data::ProductRepository products(db);
+    core::Product p5;
+    p5.barcode = QStringLiteral("5");
+    p5.name = QStringLiteral("لوز");
+    p5.salePriceCents = 320000;
+    p5.soldByWeight = true;
+    products.save(p5);
+
+    ui::PosPage page(db);
+    page.show();
+
+    page.setEntryText("5");
+    page.addEntry();
+    QTableWidget* empty = page.findChild<QTableWidget*>(QStringLiteral("posEmptyTable"));
+    QVERIFY(empty != nullptr);
+    QWidget* cell = empty->cellWidget(0, 1);
+    QLineEdit* w = qobject_cast<QLineEdit*>(cell);
+    if (!w) w = cell->findChild<QLineEdit*>();
+    QVERIFY(w != nullptr);
+    w->setText("30");
+    QMetaObject::invokeMethod(w, "returnPressed");
+
+    QCOMPARE(page.lineCount(), 1);
+    QCOMPARE(page.totalCents(), 9600LL);
+    // in table: NameColumn=0, BarcodeColumn=1, UnitColumn=2, QuantityColumn=3, PriceColumn=4
+    QWidget* unitWidget = page.table()->cellWidget(0, 2);
+    QLabel* unitLabel = qobject_cast<QLabel*>(unitWidget);
+    QVERIFY(unitLabel != nullptr);
+    const QString grams = QCoreApplication::translate("app::ui::PosPage", "غرام");
+    QVERIFY(unitLabel->text().contains(grams) || unitLabel->text() == grams);
+    QVERIFY(qobject_cast<QComboBox*>(unitWidget) == nullptr);
+    QCOMPARE(page.totalCents(), 9600LL);
 }
