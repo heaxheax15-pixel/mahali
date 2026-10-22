@@ -1,5 +1,7 @@
 build/
 build-*/
+# Typo'd build dirs (e.g. biuld-android) so a mistyped -B never shows as untracked
+biuld-*/
 *.user
 *.suo
 .cache/
@@ -14,3 +16,6 @@ translations/*.qm
 
 # opencode session state
 .opencode/
+
+# Editor state (Qt Creator writes *.user above; VS Code writes here)
+.vscode/
