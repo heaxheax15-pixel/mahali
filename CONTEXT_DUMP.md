@@ -758,8 +758,9 @@ prose comments that explain *why*, often including the failure mode being preven
 2. ~~`README.md` says "10 اختبارات"~~ **Fixed** — README documents 16.
 3. ~~Tracked build artefacts~~ **Fixed** — `build.log`, `Testing/`, `biuld-*/`,
    `.vscode/` are all ignored now; nothing build-shaped is tracked.
-4. **Hardcoded default sync HMAC key** (`apps/desktop/main.cpp:72`, value redacted).
-   Shops that never open Settings share one signing key.
+4. ~~Hardcoded default sync HMAC key~~ **Fixed (G1, 2026-10-22)** — minted
+   random by `data/sync_key.cpp` on first launch; the literal survives only in
+   the tests that assert it can never come back.
 5. ~~`verifyMaster` compares hashes with `==`~~ **Fixed** — `constantTimeEquals`
    in `data/admin_secret_repository.cpp:45`.
 6. **`translations/mahali_en.ts` has 292 `unfinished` entries.** fr and ar are at

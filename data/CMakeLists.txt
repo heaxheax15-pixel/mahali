@@ -58,6 +58,7 @@ target_sources(mahali-data PRIVATE
     sale_repository.cpp
     sale_service.cpp
     setting_repository.cpp
+    sync_key.cpp
     stock_movement_repository.cpp
     supplier_repository.cpp
     supplier_payment_repository.cpp

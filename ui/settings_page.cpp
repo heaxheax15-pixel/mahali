@@ -16,6 +16,7 @@
 #include "core/i18n.h"
 #include "core/update_checker.h"
 #include "data/setting_repository.h"
+#include "data/sync_key.h"
 
 #include "format_utils.h"
 #include "theme.h"
@@ -285,7 +286,10 @@ void SettingsPage::refresh()
     data::SettingRepository settings(m_db);
     m_shopName->setText(settings.value(QStringLiteral("shop_name")).value_or(QString()));
     m_currency->setText(settings.value(QStringLiteral("currency_symbol")).value_or(QString()));
-    m_syncKey->setText(settings.value(QStringLiteral("sync_hmac_key")).value_or(QStringLiteral("mahali-local-key")));
+    // ensure() rather than value_or(): the field must show the key the process
+    // actually signs with. On a first launch that mints and persists it right
+    // here; on every later launch main() already did, so this reads back.
+    m_syncKey->setText(QString::fromUtf8(data::SyncKey::ensure(m_db)));
     // Blocked for the same reason as the language below: restoring the stored
     // value is not a change the operator made, and letting the handler run would
     // re-apply the theme and re-announce it every time the page is opened.

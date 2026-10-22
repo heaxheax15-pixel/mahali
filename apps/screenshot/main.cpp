@@ -25,6 +25,7 @@
 
 #include "data/database.h"
 #include "data/setting_repository.h"
+#include "data/sync_key.h"
 #include "core/format_utils.h"
 #include "core/i18n.h"
 #include "core/session.h"
@@ -187,9 +188,9 @@ int main(int argc, char* argv[])
     }
 
     app::data::SettingRepository settings(*db);
-    const QByteArray hmacKey = settings.value(QStringLiteral("sync_hmac_key"))
-                                   .value_or(QStringLiteral("mahali-local-key"))
-                                   .toUtf8();
+    // Same call as the desktop entry point: a rendered shot of the settings
+    // page shows the key the build would really use, never a default literal.
+    const QByteArray hmacKey = app::data::SyncKey::ensure(*db);
     app::ui::setCurrencySymbol(settings.value(QStringLiteral("currency_symbol")).value_or(QString()));
     QElapsedTimer themeTimer;
     themeTimer.start();

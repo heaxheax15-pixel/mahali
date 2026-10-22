@@ -13,10 +13,6 @@
 
 ## 🔴 مفتوح — موثَّق
 
-- [ ] **G1: مفتاح HMAC افتراضي ثابت** `mahali-local-key` في ثلاثة مواقع —
-      `apps/desktop/main.cpp:73`، `ui/settings_page.cpp:288`،
-      `apps/screenshot/main.cpp:191`. الإصلاح: توليد عشوائي عند أول تشغيل
-      (معتمد — بلا ارتداد للافتراضي). — آخر تحقق: 2026-10-22
 - [ ] **G2: `DeviceLedgerService` لا ي廉ّن رقم فاتورة** — لا استدعاء
       `mintReceiptNumber` في `recordSale` (`data/device_ledger_service.cpp:161`)
       ولا `recordCustomerDebt` (`:289`)، فالمقابل `data/sale_service.cpp:167,332`
@@ -66,6 +62,10 @@
 - [x] تنظيف: `TASKES.md/`، `DECISION.md/`، `biuld-android/`،
       `.vscode/launch.json` + تجاهل `biuld-*/` و`.vscode/` — دليل: `da19a9a`
 - [x] بوابة Android بمتغيّر الـkit وإلغاء `MAHALI_ANDROID` الميت — دليل: `49056d5`
+- [x] **G1**: مفتاح HMAC عشوائي عند أول تشغيل عبر `data/sync_key.{h,cpp}` +
+      إعادة كتابة المواقع الثلاثة؛ `mahali-local-key` لم يعد يظهر في كود الإنتاج —
+      دليل: `data/sync_key.cpp` + `tests/tst_data.cpp` (3 اختبارات) —
+      أُغلق: 2026-10-22
 
 ## 🪦 سجل الإغلاقات (دائم)
 

@@ -10,6 +10,7 @@
 #include "core/session.h"
 #include "data/database.h"
 #include "data/setting_repository.h"
+#include "data/sync_key.h"
 #include "data/user_repository.h"
 #include "core/format_utils.h"
 #include "dialogs/language_dialog.h"
@@ -67,11 +68,11 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // The sync key is set once in Settings (Phase 14); default for first launch.
+    // The sync key is minted random on first launch and read back on every
+    // launch after (SyncKey::ensure); Settings shows the very value the server
+    // signs with, so pairing a second machine is a copy from that field.
     app::data::SettingRepository settings(*db);
-    const QByteArray hmacKey = settings.value(QStringLiteral("sync_hmac_key"))
-                                   .value_or(QStringLiteral("mahali-local-key"))
-                                   .toUtf8();
+    const QByteArray hmacKey = app::data::SyncKey::ensure(*db);
 
     // Language: on a first launch, ask. The dialog must be shown before any
     // catalogue is loaded, because the question is which catalogue to load.

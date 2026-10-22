@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QList>
 #include <QSqlQuery>
+#include <QRegularExpression>
 #include <QTime>
 
 #include "barcode_utils.h"
@@ -50,6 +51,7 @@
 #include "sync_outbox_repository.h"
 #include "device_ledger_service.h"
 #include "device_identity.h"
+#include "sync_key.h"
 #include "date_utils.h"
 #include "sale_rules.h"
 
@@ -186,6 +188,9 @@ private slots:
     void stockValueCents_divides_weight_products_by_a_thousand();
     void stockValueCents_zero_when_only_an_empty_weight_product();
     void daily_report_uses_grams_for_a_weight_line();
+    void sync_key_mints_random_on_absent();
+    void sync_key_keeps_existing_value();
+    void sync_key_remints_on_empty_value();
 
 private:
     QTemporaryDir m_dir;
@@ -5604,4 +5609,65 @@ void DataLayerTest::daily_report_uses_grams_for_a_weight_line()
     QCOMPARE(report.grossProfitCents, 5000LL);
     QVERIFY(!report.topProducts.isEmpty());
     QCOMPARE(report.topProducts.front().revenueCents, 30000LL);
+}
+
+void DataLayerTest::sync_key_mints_random_on_absent()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("sync-key-absent.sqlite")));
+    QVERIFY2(db.lastError().isEmpty(), qPrintable(db.lastError()));
+
+    const QByteArray key = data::SyncKey::ensure(db);
+    QVERIFY(!key.isEmpty());
+    // The whole point of the fix: the shipped default must never come back.
+    QVERIFY(key != QByteArrayLiteral("mahali-local-key"));
+    // 32 random bytes hex-encoded: 64 lowercase hex characters, hand-copyable
+    // into the settings field of a second machine without base64 punctuation.
+    const QRegularExpression hex64(QStringLiteral("^[0-9a-f]{64}$"));
+    QVERIFY2(hex64.match(QString::fromLatin1(key)).hasMatch(),
+             qPrintable(QStringLiteral("not a 64-char lowercase hex string: %1")
+                            .arg(QString::fromLatin1(key))));
+
+    // Persisted, not re-rolled per call: the server reads this key once at
+    // startup, and a key that changed between two reads would sign with one
+    // value and verify with another.
+    QCOMPARE(data::SyncKey::ensure(db), key);
+
+    data::SettingRepository settings(db);
+    QCOMPARE(settings.value(QStringLiteral("sync_hmac_key")),
+             QString::fromLatin1(key));
+}
+
+void DataLayerTest::sync_key_keeps_existing_value()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("sync-key-present.sqlite")));
+    QVERIFY2(db.lastError().isEmpty(), qPrintable(db.lastError()));
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("sync_hmac_key"), QStringLiteral("peer-shared-secret"));
+
+    // An operator-paired key must survive every subsequent launch untouched:
+    // rotating it silently would sign with the new value while the peer still
+    // verifies with the old one, and every batch would fail forever.
+    QCOMPARE(data::SyncKey::ensure(db),
+             QByteArrayLiteral("peer-shared-secret"));
+    QCOMPARE(data::SyncKey::ensure(db),
+             QByteArrayLiteral("peer-shared-secret"));
+}
+
+void DataLayerTest::sync_key_remints_on_empty_value()
+{
+    data::Database db(m_dir.filePath(QStringLiteral("sync-key-empty.sqlite")));
+    QVERIFY2(db.lastError().isEmpty(), qPrintable(db.lastError()));
+
+    data::SettingRepository settings(db);
+    settings.set(QStringLiteral("sync_hmac_key"), QString());
+
+    // An empty stored key would sign with zero bytes of secret. Treated as
+    // absent so the first ensure() repairs it.
+    const QByteArray key = data::SyncKey::ensure(db);
+    QVERIFY(!key.isEmpty());
+    QVERIFY(key != QByteArrayLiteral("mahali-local-key"));
+    QCOMPARE(data::SyncKey::ensure(db), key);
+    QCOMPARE(settings.value(QStringLiteral("sync_hmac_key")),
+             QString::fromLatin1(key));
 }
