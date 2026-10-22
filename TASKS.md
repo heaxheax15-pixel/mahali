@@ -13,10 +13,6 @@
 
 ## 🔴 مفتوح — موثَّق
 
-- [ ] **G2: `DeviceLedgerService` لا ي廉ّن رقم فاتورة** — لا استدعاء
-      `mintReceiptNumber` في `recordSale` (`data/device_ledger_service.cpp:161`)
-      ولا `recordCustomerDebt` (`:289`)، فالمقابل `data/sale_service.cpp:167,332`
-      ي廉ّن دائماً → صفوف `receipt_number = NULL` على الطرفية. — آخر تحقق: 2026-10-22
 - [ ] **G8: CI لا يشغّل الاختبارات** — `.github/workflows/build-windows.yml`
       يبني فقط؛ لا `ctest` في أي workflow. — آخر تحقق: 2026-10-22
 - [ ] **G9: انحراف `piecesConsumed` يمرّ صامتاً** — `resolveSaleItems`
@@ -66,6 +62,10 @@
       إعادة كتابة المواقع الثلاثة؛ `mahali-local-key` لم يعد يظهر في كود الإنتاج —
       دليل: `data/sync_key.cpp` + `tests/tst_data.cpp` (3 اختبارات) —
       أُغلق: 2026-10-22
+- [x] **G2**: رقم فاتورة للطرفية في `recordSale` و`recordCustomerDebt` داخل
+      نفس الـtransaction + التفاوت مع السيرفر موثَّق — دليل:
+      `data/device_ledger_service.cpp`، `tests/tst_device.cpp` (3 اختبارات)،
+      قرار **D26** — أُغلق: 2026-10-22
 
 ## 🪦 سجل الإغلاقات (دائم)
 

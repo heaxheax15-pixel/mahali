@@ -1,12 +1,14 @@
 #include <QtTest/QtTest>
 
 #include <QTemporaryDir>
+#include <QDate>
 #include <QSqlQuery>
 
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
 #include "data/audit_log_repository.h"
 #include "data/customer_repository.h"
+#include "data/customer_transaction_repository.h"
 #include "data/device_ledger_service.h"
 #include "data/product_repository.h"
 #include "data/payment_repository.h"
@@ -29,6 +31,8 @@ private slots:
     void debtQueuesWithoutCashMovement();
     void paymentRequiresOpenSession();
     void device_audit_actor_uses_device_id();
+    void recordSaleMintsAReceiptNumber();
+    void recordCustomerDebtMintsAReceiptNumber();
     void cleanup();
 
 private:
@@ -161,6 +165,14 @@ void DeviceLedgerTest::failedSaleRollsBackEverythingIncludingSequence()
     const data::DeviceOpResult ok = service.recordSale({ okItem }, m_openSessionId);
     QVERIFY2(ok.ok, qPrintable(ok.error));
     QCOMPARE(ok.opId, 1);
+
+    // The receipt counter lives in the same rule: a mint inside the failed
+    // transaction must roll back with it, or the first receipt of the year
+    // would silently start at 0002 after every rejected sale.
+    const auto saved = sales.findById(ok.entityId);
+    QVERIFY(saved.has_value());
+    QCOMPARE(saved->receiptNumber,
+             QStringLiteral("A-%1-0001").arg(QDate::currentDate().year()));
 }
 
 void DeviceLedgerTest::durableOpIdSurvivesReopen()
@@ -262,6 +274,62 @@ void DeviceLedgerTest::device_audit_actor_uses_device_id()
     for (const core::AuditLogEntry& entry : entries) {
         QCOMPARE(entry.actor, m_deviceId);
     }
+}
+
+void DeviceLedgerTest::recordSaleMintsAReceiptNumber()
+{
+    data::Database db(m_dbPath);
+    data::DeviceLedgerService service(db, m_deviceId);
+
+    core::SaleItem item;
+    item.productId = m_productId;
+    item.quantity = 2;
+    item.unitPriceCents = 12000;
+
+    const data::DeviceOpResult result =
+        service.recordSale({ item }, m_openSessionId);
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    // The device mints its own receipt exactly as SaleService does on the
+    // central machine: without this the sales row keeps receipt_number NULL
+    // and "WHERE receipt_number IS NULL" (the unreceipted-row query) matches
+    // every device sale forever.
+    const auto sale = data::SaleRepository(db).findById(result.entityId);
+    QVERIFY(sale.has_value());
+    QCOMPARE(sale->receiptNumber,
+             QStringLiteral("A-%1-0001").arg(QDate::currentDate().year()));
+
+    // The counter moved with the sale, inside its transaction.
+    QSqlQuery seq(db.handle());
+    QVERIFY(seq.exec(QStringLiteral(
+        "SELECT last_number FROM receipt_sequences WHERE year = %1")
+                         .arg(QDate::currentDate().year())));
+    QVERIFY(seq.next());
+    QCOMPARE(seq.value(0).toInt(), 1);
+}
+
+void DeviceLedgerTest::recordCustomerDebtMintsAReceiptNumber()
+{
+    data::Database db(m_dbPath);
+    data::DeviceLedgerService service(db, m_deviceId);
+
+    core::SaleItem item;
+    item.productId = m_productId;
+    item.quantity = 1;
+    item.unitPriceCents = 12000;
+
+    const data::DeviceOpResult result =
+        service.recordCustomerDebt(m_customerId, { item });
+    QVERIFY2(result.ok, qPrintable(result.error));
+
+    // Credit sales are receipts too: SaleService::recordCustomerDebt mints
+    // one on the central machine, and the device must not be the path that
+    // writes NULL.
+    const auto transaction =
+        data::CustomerTransactionRepository(db).findById(result.entityId);
+    QVERIFY(transaction.has_value());
+    QCOMPARE(transaction->receiptNumber,
+             QStringLiteral("A-%1-0001").arg(QDate::currentDate().year()));
 }
 
 QTEST_GUILESS_MAIN(DeviceLedgerTest)

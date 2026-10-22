@@ -6,6 +6,7 @@
 #include "audit_log_repository.h"
 #include "cash_drawer.h"
 #include "device_identity.h"
+#include "receipt_number_service.h"
 #include "sale_rules.h"
 
 namespace app::data {
@@ -176,6 +177,17 @@ DeviceOpResult DeviceLedgerService::recordSale(const QVector<core::SaleItem>& it
     if (const std::optional<core::Occasion> occasion = m_occasionService.current()) {
         sale.occasionId = occasion->id;
     }
+    // Same mint as SaleService::recordSale, inside the same transaction as the
+    // sale row: the counter bump and the number commit together, so a rollback
+    // after this point gives the number back and a crash cannot leave a sale
+    // with a NULL receipt for the unreceipted-row query to find forever.
+    const QString receiptNumber = mintReceiptNumber(m_db);
+    if (receiptNumber.isEmpty()) {
+        m_db.rollback();
+        result.error = QStringLiteral("recordSale: receipt number could not be minted");
+        return result;
+    }
+    sale.receiptNumber = receiptNumber;
     const int saleId = m_sales.insert(sale);
     if (saleId == 0) {
         m_db.rollback();
@@ -299,6 +311,15 @@ DeviceOpResult DeviceLedgerService::recordCustomerDebt(int customerId, const QVe
     transaction.amountCents = total;
     transaction.adjustmentCents = adjustmentCents;
     transaction.createdAt = QDateTime::currentDateTime();
+    // Same rule as the sale path above and as SaleService::recordCustomerDebt:
+    // a credit sale is a receipt too, minted and consumed together.
+    const QString receiptNumber = mintReceiptNumber(m_db);
+    if (receiptNumber.isEmpty()) {
+        m_db.rollback();
+        result.error = QStringLiteral("recordCustomerDebt: receipt number could not be minted");
+        return result;
+    }
+    transaction.receiptNumber = receiptNumber;
     const int transactionId = m_customerTransactions.insert(transaction);
     if (transactionId == 0) {
         m_db.rollback();
