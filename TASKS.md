@@ -13,10 +13,6 @@
 
 ## 🔴 مفتوح — موثَّق
 
-- [ ] **G9: انحراف `piecesConsumed` يمرّ صامتاً** — `resolveSaleItems`
-      (`data/sale_rules.h:104,116`) تعيد كتابة القيمة بلا قراءتها، و`SyncProcessor`
-      لا يقارن أبداً. النطاق المعتمد: تحذير عند اختلاف فعلي فقط. الحل الكامل
-      مؤجل تحت D33. — آخر تحقق: 2026-10-22
 - [ ] **مراجعة سلوكية لـ`13cba43` "WIP: audit fixes (unverified)"** — commit
       `13cba43`؛ المراجعة بالدليل السلوكي (الاختبارات + المسارات المالية) لا
       بمراجعة الـdiff القديم. — آخر تحقق: 2026-10-22
@@ -64,8 +60,11 @@
       نفس الـtransaction + التفاوت مع السيرفر موثَّق — دليل:
       `data/device_ledger_service.cpp`، `tests/tst_device.cpp` (3 اختبارات)،
       قرار **D26** — أُغلق: 2026-10-22
-- [x] **G8**: CI يشغّل الاختبارات — `.github/workflows/test-ubuntu.yml`
-      (Ubuntu + Qt 6.5.3 + `ctest` كامل بـ`offscreen`) — أُغلق: 2026-10-22
+- [x] **G9**: تحذير عند اختلاف فعلي بين `claimed piecesConsumed` و`resolved`
+      في `resolveSaleItems` (`data/sale_rules.h`) — صامت عندما يطابق أو
+      `claimed == 0` (بيع محلي)؛ يفوز الاشتقاق دائماً — دليل:
+      `data/sale_rules.h`، `tests/tst_data.cpp` (اختباران)، قرار **D33**
+      (التسجيل المبكر) — أُغلق: 2026-10-22
 
 ## 🪦 سجل الإغلاقات (دائم)
 

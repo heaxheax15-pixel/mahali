@@ -4,6 +4,7 @@
 #include <optional>
 #include <QString>
 #include <QVector>
+#include <QDebug>
 
 #include "product_repository.h"
 #include "stock_movement_repository.h"
@@ -88,6 +89,8 @@ inline QVector<core::SaleItem> resolveSaleItems(ProductRepository& products,
             item.unitKind = QStringLiteral("piece");
         }
 
+        const long long claimedPiecesConsumed = item.piecesConsumed;
+
         if (item.unitKind == QStringLiteral("package")) {
             // The carton price is the piece price times the count, and the caller
             // is allowed to know it already. When it does not, we compute it here
@@ -123,6 +126,16 @@ inline QVector<core::SaleItem> resolveSaleItems(ProductRepository& products,
             // as it was typed rather than folded into 'piece', because 'kg' says
             // something a reader of the ledger needs to know.
             item.piecesConsumed = item.quantity;
+        }
+
+        if (claimedPiecesConsumed != 0 && claimedPiecesConsumed != item.piecesConsumed) {
+            // The definition of the product (pieces_per_package) is the authority
+            // here; the device's claim only needs to be observed. We warn without
+            // changing arithmetic because silently trusting either side would hide
+            // a real definition drift between machines (D33 / TASKS G9).
+            qWarning() << "sync drift: product" << item.productId
+                       << "claimed piecesConsumed" << claimedPiecesConsumed
+                       << "derived" << item.piecesConsumed;
         }
 
         if (item.unitPriceCents <= 0) {

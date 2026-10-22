@@ -1,11 +1,13 @@
 #include <QtTest/QtTest>
 
+#include <QApplication>
 #include <limits>
 #include <optional>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QList>
 #include <QSqlQuery>
+#include <QMessageLogContext>
 #include <QRegularExpression>
 #include <QTime>
 
@@ -191,6 +193,8 @@ private slots:
     void sync_key_mints_random_on_absent();
     void sync_key_keeps_existing_value();
     void sync_key_remints_on_empty_value();
+    void resolve_sale_items_warns_on_pieces_consumed_drift();
+    void resolve_sale_items_silent_when_claim_matches();
 
 private:
     QTemporaryDir m_dir;
@@ -5412,6 +5416,120 @@ void DataLayerTest::receipt_number_not_minted_on_reversal()
 }
 
 QTEST_GUILESS_MAIN(DataLayerTest)
+
+
+#include <QApplication>
+#include <QMessageLogContext>
+
+namespace {
+
+struct WarningCapture {
+    QtMessageHandler previous = nullptr;
+    QVector<QString> messages;
+};
+
+void captureWarnings(QtMsgType type, const QMessageLogContext& context, const QString& msg)
+{
+    Q_UNUSED(context);
+    if (type == QtWarningMsg) {
+        auto* capture = static_cast<WarningCapture*>(qApp->property("mahali_warning_capture")
+                                                            .value<void*>());
+        if (capture) {
+            capture->messages.append(msg);
+        }
+    }
+}
+
+} // namespace
+
+void DataLayerTest::resolve_sale_items_warns_on_pieces_consumed_drift()
+{
+    const QString path = m_dir.filePath(QStringLiteral("resolve_drift.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product product;
+    product.name = QStringLiteral("قهوة");
+    product.salePriceCents = 100;
+    product.costPriceCents = 80;
+    product.piecesPerPackage = 10;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 1000, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 2;
+    item.unitKind = QStringLiteral("package");
+    item.unitPriceCents = 0;
+    item.piecesConsumed = 999;
+
+    WarningCapture capture;
+    qApp->setProperty("mahali_warning_capture",
+                      QVariant::fromValue(static_cast<void*>(&capture)));
+    const QtMessageHandler previous = qInstallMessageHandler(captureWarnings);
+    QString error;
+    const QVector<core::SaleItem> resolved =
+        data::resolveSaleItems(products, {item}, /*allowOversold=*/false, &error);
+    qInstallMessageHandler(previous);
+    qApp->setProperty("mahali_warning_capture", QVariant());
+
+    QVERIFY2(!resolved.isEmpty(), qPrintable(error));
+    QCOMPARE(resolved.first().piecesConsumed, 20LL);
+    QVERIFY(!capture.messages.isEmpty());
+    bool matched = false;
+    for (const QString& message : capture.messages) {
+        if (message.contains(QStringLiteral("sync drift")) &&
+            message.contains(QStringLiteral("product %1").arg(productId))) {
+            matched = true;
+            break;
+        }
+    }
+    QVERIFY2(matched, qPrintable(capture.messages.join(QStringLiteral("\n"))));
+}
+
+void DataLayerTest::resolve_sale_items_silent_when_claim_matches()
+{
+    const QString path = m_dir.filePath(QStringLiteral("resolve_no_drift.sqlite"));
+    QFile::remove(path);
+    data::Database db(path);
+    data::ProductRepository products(db);
+
+    core::Product product;
+    product.name = QStringLiteral("سكر");
+    product.salePriceCents = 50;
+    product.costPriceCents = 40;
+    product.piecesPerPackage = 6;
+    const int productId = products.save(product);
+    QVERIFY(productId > 0);
+    products.adjustStock(productId, 100, QStringLiteral("purchase"));
+
+    core::SaleItem item;
+    item.productId = productId;
+    item.quantity = 3;
+    item.unitKind = QStringLiteral("package");
+    item.unitPriceCents = 0;
+    item.piecesConsumed = 18;
+
+    WarningCapture capture;
+    qApp->setProperty("mahali_warning_capture",
+                      QVariant::fromValue(static_cast<void*>(&capture)));
+    const QtMessageHandler previous = qInstallMessageHandler(captureWarnings);
+    QString error;
+    const QVector<core::SaleItem> resolved =
+        data::resolveSaleItems(products, {item}, /*allowOversold=*/false, &error);
+    qInstallMessageHandler(previous);
+    qApp->setProperty("mahali_warning_capture", QVariant());
+
+    QVERIFY2(!resolved.isEmpty(), qPrintable(error));
+    QCOMPARE(resolved.first().piecesConsumed, 18LL);
+    for (const QString& message : capture.messages) {
+        QVERIFY2(!message.contains(QStringLiteral("sync drift")),
+                 qPrintable(QStringLiteral("unexpected drift warning: %1").arg(message)));
+    }
+}
+
 #include "tst_data.moc"
 void DataLayerTest::totalCentsFor_divides_weight_quantity_by_a_thousand()
 {

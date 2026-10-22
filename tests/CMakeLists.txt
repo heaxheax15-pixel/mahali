@@ -15,7 +15,8 @@ add_executable(tst_data tst_data.cpp)
 target_link_libraries(tst_data
     PRIVATE
         mahali-data
-        Qt${QT_VERSION_MAJOR}::Test)
+        Qt${QT_VERSION_MAJOR}::Test
+        Qt${QT_VERSION_MAJOR}::Widgets)
 
 add_test(NAME data COMMAND tst_data)
 
