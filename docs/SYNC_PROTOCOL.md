@@ -24,7 +24,12 @@ The sync protocol allows remote clients to submit batches of operations (sales, 
 
 - Algorithm: HMAC-SHA256 over the raw request body bytes.
 - Implementation (server): `SyncProtocol::hmacSha256(const QByteArray& payload, const QByteArray& key)` uses `QMessageAuthenticationCode::hash(payload, key, QCryptographicHash::Sha256)` (network/sync_protocol.cpp:10-13). The server computes this over the exact raw body bytes and compares to the hex-decoded header value (network/sync_processor.cpp:55-60).
-- Key: taken from settings key `sync_hmac_key` (UTF-8 bytes). Desktop reads it at startup: `settings.value("sync_hmac_key").value_or("mahali-local-key").toUtf8()` (apps/desktop/main.cpp:72-74). Both devices must share the same key.
+- Key: taken from settings key `sync_hmac_key` (UTF-8 bytes). On first
+  launch `data::SyncKey::ensure` mints a random 32-byte key (hex, 64
+  chars) and persists it; `apps/desktop/main.cpp`, `ui/settings_page.cpp`,
+  and `apps/screenshot/main.cpp` call `ensure()` so the server signs with
+  the stored/generated key (never a hardcoded default). Both devices must
+  share the same key (manual copy).
 - Header name (exact): `X-Mahali-Signature` (network/sync_server.cpp:23; network/sync_client.cpp:40).
 - Encoding: hex-encoded bytes. Client sends `signature.toHex()` (lowercase hex from QByteArray::toHex()); server decodes with `QByteArray::fromHex(request.value("X-Mahali-Signature"))` (network/sync_server.cpp:23; network/sync_client.cpp:40).
 - Verification result: if signature does not match, server responds with status 403 Forbidden and body contains `"ok": false` and `"error": "invalid HMAC signature"` (no applied/errors lists returned in that case) (network/sync_server.cpp:64-68; network/sync_processor.cpp:55-60).
