@@ -13,8 +13,6 @@
 
 ## 🔴 مفتوح — موثَّق
 
-- [ ] **G8: CI لا يشغّل الاختبارات** — `.github/workflows/build-windows.yml`
-      يبني فقط؛ لا `ctest` في أي workflow. — آخر تحقق: 2026-10-22
 - [ ] **G9: انحراف `piecesConsumed` يمرّ صامتاً** — `resolveSaleItems`
       (`data/sale_rules.h:104,116`) تعيد كتابة القيمة بلا قراءتها، و`SyncProcessor`
       لا يقارن أبداً. النطاق المعتمد: تحذير عند اختلاف فعلي فقط. الحل الكامل
@@ -66,6 +64,8 @@
       نفس الـtransaction + التفاوت مع السيرفر موثَّق — دليل:
       `data/device_ledger_service.cpp`، `tests/tst_device.cpp` (3 اختبارات)،
       قرار **D26** — أُغلق: 2026-10-22
+- [x] **G8**: CI يشغّل الاختبارات — `.github/workflows/test-ubuntu.yml`
+      (Ubuntu + Qt 6.5.3 + `ctest` كامل بـ`offscreen`) — أُغلق: 2026-10-22
 
 ## 🪦 سجل الإغلاقات (دائم)
 
