@@ -1,60 +1,94 @@
 # TASKS — قائمة العمل
 
-## 🔴 حرجة
-- [ ] **Ajustement + المزامنة**: `SyncOperation` لا يحمل `adjustment_cents`، و`SyncProcessor::applySale` لا يمرّرها. بيع من جهاز مع adjustment يُزامن الإجمالي ويفقد العمود على السيرفر.
-- [ ] **مفتاح HMAC افتراضي ثابت** في `apps/desktop/main.cpp:72`. المحلات التي لم تفتح الإعدادات تشترك في نفس المفتاح.
-- [ ] **`apps/android/main.cpp` مفقود**. `-DMAHALI_ANDROID=ON` مكسور.
+> **قواعد عدم التقادم** (تُطبَّق في كل جلسة تلمس هذا الملف):
+> 1. بند 🔴 بلا دليل `file:line` أو `commit` = يُنقل إلى 🟡 في نفس الجلسة،
+>    ويُحذف من 🟡 بعد جلسة واحدة بلا تحقق.
+> 2. أي إصلاح يُحوّل بندَه إلى ✅/🪦 في **نفس commit** الإصلاح — لا جلسات
+>    توثيق متأخرة.
+> 3. ⏸️ بلا «شرط استئناف صريح» = ليس مؤجلاً، بل فائت — يُنقل إلى 🔴 أو يُحذف.
+> 4. ختم `آخر تحقق` يُحدَّث في كل جلسة؛ ختم قديم > أسبوع = البند غير موثَّق
+>    فعلياً.
+>
+> آخر مراجعة: **2026-10-22**
 
-## 🟡 مهمة
-- [ ] `refreshTotals()` في POS يسجّل "Unités: N" بـ`line.quantity`. الكرتونة تُحسب 1 لا 24. قرار UX مطلوب.
-- [ ] `sync_hmac_key` الافتراضي يُغيَّر عند أول تشغيل.
-- [ ] `13cba43` "WIP: audit fixes (unverified)" — يستحق مراجعة.
-- [ ] `.vscode/launch.json` يشغّل Chrome — مخلّف.
-- [ ] `device_ledger_service.cpp` يستدعي `m_sales.insert` المشترك، فيكتب `receipt_number = NULL`. يحتاج استدعاء `mintReceiptNumber` داخل transaction الخاص به. **يُنفَّذ عند أول زبون بحاسوبين فعليين.**
+## 🔴 مفتوح — موثَّق
 
-## 🟡 مقبولة (لن تُصلَح، موثَّقة)
-- [x] `Q_OBJECT` تحذيرات `lupdate` في ثلاثة ملفات:
-  - `purchase_dialog.cpp:104` و`select_customer_dialog.cpp:58` — **تحذيران كاذبان**: هما namespace + دالة حرّة، لا صنف.
-  - `mini_bar_chart.cpp:19` — صنف حقيقي بلا `Q_OBJECT`، لكنه لا يستخدم signals/slots/qobject_cast. الإصلاح يُغيِّر سياق الترجمة بلا فائدة.
-  - [x] تحذيرات `lupdate` الإضافية: `supplier_dialog.cpp:127` و`supplier_return_dialog.cpp:80`.
+- [ ] **G1: مفتاح HMAC افتراضي ثابت** `mahali-local-key` في ثلاثة مواقع —
+      `apps/desktop/main.cpp:73`، `ui/settings_page.cpp:288`،
+      `apps/screenshot/main.cpp:191`. الإصلاح: توليد عشوائي عند أول تشغيل
+      (معتمد — بلا ارتداد للافتراضي). — آخر تحقق: 2026-10-22
+- [ ] **G2: `DeviceLedgerService` لا ي廉ّن رقم فاتورة** — لا استدعاء
+      `mintReceiptNumber` في `recordSale` (`data/device_ledger_service.cpp:161`)
+      ولا `recordCustomerDebt` (`:289`)، فالمقابل `data/sale_service.cpp:167,332`
+      ي廉ّن دائماً → صفوف `receipt_number = NULL` على الطرفية. — آخر تحقق: 2026-10-22
+- [ ] **G8: CI لا يشغّل الاختبارات** — `.github/workflows/build-windows.yml`
+      يبني فقط؛ لا `ctest` في أي workflow. — آخر تحقق: 2026-10-22
+- [ ] **G9: انحراف `piecesConsumed` يمرّ صامتاً** — `resolveSaleItems`
+      (`data/sale_rules.h:104,116`) تعيد كتابة القيمة بلا قراءتها، و`SyncProcessor`
+      لا يقارن أبداً. النطاق المعتمد: تحذير عند اختلاف فعلي فقط. الحل الكامل
+      مؤجل تحت D33. — آخر تحقق: 2026-10-22
+- [ ] **مراجعة سلوكية لـ`13cba43` "WIP: audit fixes (unverified)"** — commit
+      `13cba43`؛ المراجعة بالدليل السلوكي (الاختبارات + المسارات المالية) لا
+      بمراجعة الـdiff القديم. — آخر تحقق: 2026-10-22
+- [ ] **`CONTEXT_DUMP.md` يحتوي أرقاماً قديمة** — جدول «Code size»
+      (`CONTEXT_DUMP.md:24`) يسبق عدة جلسات؛ الأرقام الحية في `wc -l`.
+      (أُنجزت تصحيحات الـandroid/الأوامر في هذا الجلسة.) — آخر تحقق: 2026-10-22
 
-## 🟡 انحراف محتمل
-- [ ] **Sync drift**: `piecesConsumed` على السيرفر يُعاد حسابه من `products.pieces_per_package` و`sold_by_weight`. لو انحرف تعريف المنتج بين الجهازين (صاحب المحل عدّل الكرتونة على الحاسوب، والهاتف لا يعلم)، القيمة المحسوبة على السيرفر تفوز بصمت. **يُعالَج عند أول زبون بحاسوبين فعليين + هاتف**، بحلّ من ثلاثة: (أ) السيرفر يثق بالمُرسَل، (ب) تنبيه انحراف، (ج) مزامنة تعريفات المنتجات أولاً.
+## 🟡 مفتوح — غير موثَّق
 
-## 🟢 مؤجلة
-- [ ] FIFO للدفعات.
-- [ ] تقييم المخزون بسعر الحبة (لا العلبة) للزكاة — مُتفَق عليه.
-- [ ] تطبيق الهاتف: قارئ فقط، لا كتابة.
-- [ ] حذف `package_size` القديم بعد استقرار `pieces_per_package`.
-- [ ] `mahali_en.ts` كـlocale حقيقي.
-- [ ] LTR (fr/en) — هل جُرِّب فعلاً؟
-- [ ] قناة الإصدار: GitHub Release تلقائي أم يدوي؟
-- [ ] `apps/android/main.cpp`.
-- [ ] الفاتورة المطبوعة (لا كود طباعة/PDF في المشروع).
-- [ ] Code signing لـ`mahali-desktop.exe` (لتفادي حجب Chrome/Windows).
+(لا ادعاءات بلا دليل حالياً — أي بند يُدرج هنا بلا `file:line` أو مصدر يُحذف
+في الجلسة القادمة.)
 
-## ✅ مُنجَز
+## ⏸️ مؤجل — بقرار
 
-### الجلسات السابقة
-- [x] Ajustement (adjustment_cents) end-to-end — `6d32a5d`.
-- [x] Zakat overhaul + credit sale button.
-- [x] fr + ar 606/606.
+- [ ] FIFO للدفعات — قرار: **D27** — شرط: بعد استقرار نموذج التكلفة
+      (`package_cost_cents`) في التشغيل الفعلي.
+- [ ] تقييم المخزون للزكاة بسعر الحبة — قرار: **D23** — شرط: متفق عليه،
+      التطبيق عند مراجعة الزكاة القادمة.
+- [ ] تطبيق الهاتف قارئ فقط (لا كتابة، لا مزامنة صادرة) — قرار: **D14** —
+      شرط: اكتمال تطبيق الحاسوب أولاً.
+- [ ] حذف `package_size` القديم — قرار: **D24** (يبقى حالياً) — شرط: استقرار
+      `pieces_per_package` بلا قارئ قديم.
+- [ ] `mahali_en.ts` كـlocale حقيقي (292 `unfinished`) — قرار: **D28** —
+      شرط: بعد اكتمال en كجمهور مستهدف.
+- [ ] LTR لـ(fr/en) — قرار: **D29** — شرط: تجربة فعلية على الجهاز قبل الإغلاق.
+- [ ] قناة الإصدار (Release تلقائي أم يدوي) — قرار: **D30** — شرط: أول إصدار
+      رسمي موقَّع.
+- [ ] الفاتورة المطبوعة (لا كود طباعة/PDF في المشروع) — قرار: **D31** — شرط:
+      طلب فعلي من مستخدم + اختيار تقنية الطباعة.
+- [ ] Code signing لـ`mahali-desktop.exe` — قرار: **D32** — شرط: شهادة متاحة.
+- [ ] حل جوهر انحراف `piecesConsumed` (ثقة بالمرسل / تنبيه / مزامنة تعريفات
+      المنتجات أولاً) — قرار: **D33** — شرط: أول زبون بحاسوبين فعليين + هاتف.
+      (التسجيل المبكر منفَّذ — G9 أعلاه.)
 
-### هذه الجلسة
-- [x] حقول الحزمة (pieces_per_package, package_name, package_barcode, package_cost_cents).
-- [x] ترحيل 13 + 14 (backfill).
-- [x] `pieces_consumed` في كل مسار المال.
-- [x] `resolveSaleItems` واعية بالوحدة.
-- [x] تقارير COGS على `piecesConsumed`.
-- [x] POS: عمود Unité (قائمة منسدلة) + باركود العلبة.
-- [x] حوار المنتج: اسم العلبة + عدد الحبات + الكمية الافتتاحية.
-- [x] الكمية الافتتاحية تُكتب كحركة `opening`.
-- [x] الحارس `reverse` يرفض `piecesConsumed <= 0`.
-- [x] 16/16 اختبار أخضر.
-- [x] ذاكرة المشروع (CONTEXT/TASKS/DECISIONS/COMMANDS).
-- [x] `constantTimeEquals` لـ`verifyMaster` — commit `59bd395`.
-- [x] تصنيف 1xx/3xx كـPermanent في `errorClassForStatus` — commit `59bd395`.
-- [x] `.gitignore` يشمل `build.log`, `Testing/`, `translations/*.qm` — commit `59bd395`.
-- [x] ترجمة عربية لسلسلة "chiffrer" — commit `59bd395`.
-- [x] تحذير COGS في صفحة التقارير — commit `bd13833`.
-- [x] D25 في `DECISIONS.md` — commit `34f9c47`.
+## ✅ مغلق هذه الجلسة (يُستبعد بعد 7 أيام إلى 🪦)
+
+- [x] تنظيف: `TASKES.md/`، `DECISION.md/`، `biuld-android/`،
+      `.vscode/launch.json` + تجاهل `biuld-*/` و`.vscode/` — دليل: `da19a9a`
+- [x] بوابة Android بمتغيّر الـkit وإلغاء `MAHALI_ANDROID` الميت — دليل: `49056d5`
+
+## 🪦 سجل الإغلاقات (دائم)
+
+- [x] `adjustment_cents` عبر سلك المزامنة end-to-end — دليل:
+      `core/sync_operation.h:36` + `core/sync_operation_codec.cpp:36` +
+      `network/sync_processor.cpp:256` + `tests/tst_sync.cpp:70` — أُغلق قبل
+      2026-10-22.
+- [x] `apps/android/main.cpp` مفقود — دليل: الملف موجود (قشرة QML)، commit
+      `c437038` — أُغلق قبل 2026-10-22.
+- [x] لصقة «Unités» تعدّ الكرتونة 1 — دليل: `ui/pos_page.cpp:1003` تجميع حسب
+      اسم العلبة + وزن + قطع — أُغلق قبل 2026-10-22.
+- [x] `constantTimeEquals` لـ`verifyMaster` — دليل:
+      `data/admin_secret_repository.cpp:45`، commit `59bd395` — أُغلق قبل
+      2026-10-22.
+- [x] تحذيرات `Q_OBJECT` في `lupdate` (خمسة مواقع) — أُغلق **بقرار عدم
+      الإصلاح**: إصلاحها يغيّر سياق الترجمة بلا فائدة، واثنان تحذيران كاذبان —
+      دليل: `ui/dialogs/purchase_dialog.cpp:104`،
+      `ui/dialogs/select_customer_dialog.cpp:58`،
+      `ui/widgets/mini_bar_chart.cpp:19`، `ui/dialogs/supplier_dialog.cpp:127`،
+      `ui/dialogs/supplier_return_dialog.cpp:80` — أُغلق قبل 2026-10-22.
+- [x] حقول الحزمة + ترحيلات 13/14 + `pieces_consumed` في كل مسار المال +
+      `resolveSaleItems` واعية بالوحدة + الحارس `piecesConsumed <= 0` — دليل:
+      16/16 اختبار أخضر، `data/sale_rules.h` — أُغلق قبل 2026-10-22.
+- [x] fr + ar 606/606 مكتمل — دليل: `grep type="unfinished" translations/` = 0
+      لـar/fr — أُغلق قبل 2026-10-22.
+- [x] `.vscode/launch.json` (Chrome) — دليل: `da19a9a` — أُغلق: 2026-10-22.
