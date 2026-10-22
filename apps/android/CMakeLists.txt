@@ -1,7 +1,7 @@
-# Android POS target — guarded by MAHALI_ANDROID (see apps/CMakeLists.txt).
-# Built only with a Qt for Android toolchain; the guard below still trips when
-# the option is enabled on a desktop kit, so a mistaken configure fails here
-# instead of at link time.
+# Android POS target — included by apps/CMakeLists.txt only when the CMake kit
+# sets ANDROID (the Qt-for-Android toolchain always does). The guard below still
+# trips if the directory is ever reached on a desktop kit, so a mistaken
+# configure fails here instead of at link time.
 
 if(NOT ANDROID)
     message(FATAL_ERROR "mahali-android requires an Android toolchain (ANDROID).")

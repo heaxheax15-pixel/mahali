@@ -15,8 +15,6 @@ set(CMAKE_AUTORCC ON)
 # `ui_<name>.h` pattern would misclassify plain headers like "ui_helpers.h".
 set(CMAKE_AUTOUIC OFF)
 
-option(MAHALI_ANDROID "Build the Android POS target (requires Qt for Android toolchain)" OFF)
-
 find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test PrintSupport)
 

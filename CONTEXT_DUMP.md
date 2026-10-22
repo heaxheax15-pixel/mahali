@@ -16,7 +16,7 @@ Nothing in the repository was modified to produce this file (only this file was 
 | **Framework** | Qt 6 — `Core`, `Sql`, `Network`, `Widgets`, `HttpServer`, `Gui` (private), `Test` |
 | **Build** | CMake 3.16+ (using 3.28.3 locally), AUTOMOC/AUTORCC on, AUTOUIC **off** (see comment at `CMakeLists.txt:14-16`) |
 | **DB** | SQLite via QtSql, WAL journal on the server side, DELETE journal on devices |
-| **Platform targets** | Windows desktop (primary, MSVC CI), Linux desktop (dev), Android (scaffold only, `MAHALI_ANDROID=OFF`) |
+| **Platform targets** | Windows desktop (primary, MSVC CI), Linux desktop (dev), Android (scaffold; `apps/CMakeLists.txt` picks the app subdir from the kit's `ANDROID` variable — no flag) |
 | **Local toolchain** | Qt **6.4.2**, GCC 13.3.0, Ubuntu 24.04 |
 | **CI Qt version** | Qt **6.5.3** MSVC 2019 64-bit, modules `qthttpserver qtwebsockets` |
 | **i18n** | `translations/mahali_{ar,fr,en}.ts` → `.qm` embedded in the binary under `:/i18n/` |
@@ -106,8 +106,6 @@ set(CMAKE_AUTORCC ON)
 # `ui_<name>.h` pattern would misclassify plain headers like "ui_helpers.h".
 set(CMAKE_AUTOUIC OFF)
 
-option(MAHALI_ANDROID "Build the Android POS target (requires Qt for Android toolchain)" OFF)
-
 find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core Sql Network Widgets HttpServer Test)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Sql Network HttpServer Test)
 
@@ -155,7 +153,7 @@ mahali-network STATIC → mahali-core, mahali-data, Qt6::Network, Qt6::HttpServe
 mahali-ui     STATIC  → mahali-core, mahali-data, mahali-network, Qt6::Widgets
 mahali-desktop EXE    → mahali-ui, Qt6::Widgets  (qt_add_executable; WIN32_EXECUTABLE on Windows)
 mahali-screenshot EXE → mahali-ui  (only when -DMAHALI_TOOLS=ON)
-mahali-android EXE    → mahali-core/data/network (only when -DMAHALI_ANDROID=ON)
+mahali-android EXE    → mahali-core/data (only when the CMake kit sets ANDROID)
 ```
 
 All four static libs set `POSITION_INDEPENDENT_CODE ON`.
@@ -166,7 +164,7 @@ Qt GUI. `core/i18n.cpp` and `core/zakat_notifier.cpp` are physically in `core/` 
 core, not the reverse).
 
 ### 3.3 Options / caches
-- `MAHALI_ANDROID` (default OFF) — Android target
+- Android target — selected by the kit (`ANDROID` variable), not by an option; `apps/CMakeLists.txt` builds either the desktop app or the phone app, never both
 - `MAHALI_TOOLS` (default OFF, `apps/CMakeLists.txt:3`) — screenshot renderer
 - `CMAKE_BUILD_TYPE`, `MAHALI_LRELEASE` (auto-discovered)
 
@@ -201,7 +199,8 @@ QT_QPA_PLATFORM=offscreen ./build/tests/tst_ui         # UI suite headless (no x
 
 # ---- optional targets ----
 cmake -S . -B build -DMAHALI_TOOLS=ON      # + mahali-screenshot
-cmake -S . -B build -DMAHALI_ANDROID=ON    # Android (needs an Android Qt toolchain)
+# Android: configure with a Qt-for-Android kit (Android build env); the app
+# subdir is selected automatically from the kit's ANDROID variable.
 
 # ---- dev tools (Python 3, stdlib; make_icon.py needs Pillow) ----
 python3 tools/seed_demo.py /tmp/mahali-demo/db.sqlite [dark]
@@ -378,7 +377,7 @@ compile_commands.json
 |---|---|
 | `apps/desktop/main.cpp` (112 lines) | **The** production entry point. `Q_INIT_RESOURCE(app)` → `QApplication` → resolve DB path (argv[1] or `QStandardPaths::AppDataLocation`) → `Database(path, DatabaseMode::Server)` → read HMAC key + language + theme → `LoginDialog::exec()` (blocking gate) → `ServerController::start()` → `MainWindow` → `showMaximized()` → `app.exec()`. Every step carries a paragraph comment explaining *why it is ordered this way* (e.g. the login gate runs before the server starts so fourteen pages are not laid out behind an open dialog; `showMaximized()` happens before first paint so the shell is never seen at minimum size and grown). |
 | `apps/screenshot/main.cpp` | Renders one PNG per page in the stored theme (`-DMAHALI_TOOLS=ON`). |
-| `apps/android/main.cpp` | **Does not exist** — `apps/android/CMakeLists.txt` references it but the file is absent; the target is only configured when `MAHALI_ANDROID=ON`, so the tree still configures. |
+| `apps/android/main.cpp` | QML entry for the phone shell (product list over `AndroidBackend`); built only when the CMake kit sets `ANDROID`. |
 | `ui/main_window.cpp` (1380 lines) | The shell: top bar, grouped right-hand sidebar, `QStackedWidget` of lazily built pages, sync status line, theme/sidebar toggles, update bar. |
 
 `apps/desktop/main.cpp` — key excerpt (auth/redaction applied):
@@ -753,14 +752,16 @@ prose comments that explain *why*, often including the failure mode being preven
 
 ### 9.2 Issues visible in the tree (not marker-based)
 
-1. **`apps/android/main.cpp` is missing.** `apps/android/CMakeLists.txt:11` does
-   `add_executable(mahali-android main.cpp)`. Configures only when `-DMAHALI_ANDROID=ON`,
-   so it is invisible today, but that option is broken.
-2. **`README.md` says "10 اختبارات"** while there are 16 ctest targets.
-3. **Tracked build artefacts:** `build.log`, `Testing/Temporary/*`. Not in `.gitignore`.
+1. ~~`apps/android/main.cpp` is missing.~~ **Fixed** — the file exists (QML shell)
+   and `apps/CMakeLists.txt` selects the subdir from the kit's `ANDROID` variable
+   (`-DMAHALI_ANDROID` no longer exists).
+2. ~~`README.md` says "10 اختبارات"~~ **Fixed** — README documents 16.
+3. ~~Tracked build artefacts~~ **Fixed** — `build.log`, `Testing/`, `biuld-*/`,
+   `.vscode/` are all ignored now; nothing build-shaped is tracked.
 4. **Hardcoded default sync HMAC key** (`apps/desktop/main.cpp:72`, value redacted).
    Shops that never open Settings share one signing key.
-5. **`verifyMaster` compares hashes with `==`** — not constant-time.
+5. ~~`verifyMaster` compares hashes with `==`~~ **Fixed** — `constantTimeEquals`
+   in `data/admin_secret_repository.cpp:45`.
 6. **`translations/mahali_en.ts` has 292 `unfinished` entries.** fr and ar are at
    **0 unfinished (596/596)**; English is essentially untranslated (Arabic source
    strings fall through). It is nevertheless compiled and embedded by the build.
