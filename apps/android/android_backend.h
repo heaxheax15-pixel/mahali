@@ -8,8 +8,6 @@ class Database;
 }
 
 // The entire C++ surface the QML side sees in this phase: the product list.
-// No sale, no printing, no sync — those arrive in later phases as their own
-// properties and invokables.
 class AndroidBackend : public QObject
 {
     Q_OBJECT
@@ -21,11 +19,14 @@ public:
     QVariantList products() const;
 
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void syncProducts(const QString& serverUrl, const QString& key);
 
 signals:
     void productsChanged();
+    void syncStatusChanged(const QString& status);
 
 private:
     app::data::Database& m_db;
     QVariantList m_cache;
 };
+

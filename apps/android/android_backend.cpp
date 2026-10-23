@@ -1,5 +1,14 @@
 #include "android_backend.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QSqlQuery>
+#include <QUrl>
+
 #include "data/database.h"
 #include "data/product_repository.h"
 
@@ -51,4 +60,77 @@ void AndroidBackend::refresh()
 
     m_cache = rows;
     emit productsChanged();
+}
+
+void AndroidBackend::syncProducts(const QString& serverUrl, const QString& key)
+{
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QUrl url(serverUrl + QStringLiteral("/api/products"));
+    QNetworkRequest request(url);
+    request.setRawHeader("X-Mahali-Key", key.toUtf8());
+
+    QNetworkReply* reply = manager->get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, manager]() {
+        reply->deleteLater();
+        manager->deleteLater();
+
+        if (reply->error() != QNetworkReply::NoError) {
+            emit syncStatusChanged(QStringLiteral("Sync failed: ") + reply->errorString());
+            return;
+        }
+
+        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) {
+            emit syncStatusChanged(QStringLiteral("Sync failed: HTTP %1")
+                                       .arg(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()));
+            return;
+        }
+
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (!doc.isArray()) {
+            emit syncStatusChanged(QStringLiteral("Sync failed: invalid response"));
+            return;
+        }
+
+        const QJsonArray arr = doc.array();
+        if (!m_db.beginTransaction()) {
+            emit syncStatusChanged(QStringLiteral("Sync failed: could not start transaction"));
+            return;
+        }
+
+        QSqlQuery clear(m_db.handle());
+        if (!clear.exec(QStringLiteral("DELETE FROM products"))) {
+            m_db.rollback();
+            emit syncStatusChanged(QStringLiteral("Sync failed: clear products"));
+            return;
+        }
+
+        QSqlQuery insert(m_db.handle());
+        insert.prepare(QStringLiteral("INSERT INTO products (id, barcode, name, sale_price_cents, cost_price_cents, quantity, unit, sold_by_weight, pieces_per_package, package_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        for (const QJsonValue& v : arr) {
+            const QJsonObject obj = v.toObject();
+            insert.addBindValue(obj.value(QStringLiteral("id")).toInt());
+            insert.addBindValue(obj.value(QStringLiteral("barcode")).toString());
+            insert.addBindValue(obj.value(QStringLiteral("name")).toString());
+            insert.addBindValue(obj.value(QStringLiteral("salePriceCents")).toVariant().toLongLong());
+            insert.addBindValue(obj.value(QStringLiteral("costPriceCents")).toVariant().toLongLong());
+            insert.addBindValue(obj.value(QStringLiteral("quantity")).toVariant().toLongLong());
+            insert.addBindValue(obj.value(QStringLiteral("unit")).toString());
+            insert.addBindValue(obj.value(QStringLiteral("soldByWeight")).toBool() ? 1 : 0);
+            insert.addBindValue(obj.value(QStringLiteral("piecesPerPackage")).toInt());
+            insert.addBindValue(obj.value(QStringLiteral("packageName")).toString());
+            if (!insert.exec()) {
+                m_db.rollback();
+                emit syncStatusChanged(QStringLiteral("Sync failed: insert product"));
+                return;
+            }
+        }
+
+        if (!m_db.commit()) {
+            emit syncStatusChanged(QStringLiteral("Sync failed: commit"));
+            return;
+        }
+
+        refresh();
+        emit syncStatusChanged(QStringLiteral("Sync successful: %1 products.").arg(arr.size()));
+    });
 }

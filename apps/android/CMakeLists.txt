@@ -23,11 +23,10 @@ qt_add_qml_module(mahali-android
         qml/main.qml
         qml/ProductListPage.qml)
 
-# Gradle package skeleton (AndroidManifest.xml and friends). It is filled in
-# by a later phase, but the property has to point at it before the APK step
-# runs, so it is set now while the target is being wired up.
-set_target_properties(mahali-android PROPERTIES
-    QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
+# No custom Android package source dir yet. Qt for Android will generate
+# a default AndroidManifest.xml internally, so we let it fall back to its
+# built-in defaults instead of pointing at a non-existent directory.
+
 
 # mahali-core / mahali-data are the same libraries the desktop build links, so
 # the phone reads the identical schema and repositories. Qt6::Sql comes with

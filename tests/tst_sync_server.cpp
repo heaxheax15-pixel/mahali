@@ -7,6 +7,8 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QHostAddress>
+#include <QEventLoop>
 
 #include "data/cash_movement_repository.h"
 #include "data/cash_session_repository.h"
@@ -47,6 +49,8 @@ private slots:
     void sync_audit_actor_uses_device_id();
     void processJsonReplayAlreadyApplied();
     void httpPostAppliesBatch();
+    void productsGetRequiresKey();
+    void productsGetWithKeyReturnsCatalog();
     void cleanup();
 
 private:
@@ -700,6 +704,88 @@ void SyncServerTest::duplicateInsideSingleBatchAppliesOnce()
     QCOMPARE(movements.sumByProductId(m_productId), 99);
     data::CashMovementRepository cash(db);
     QCOMPARE(cash.sumBySessionId(m_openSessionId), 12000);
+}
+
+void SyncServerTest::productsGetRequiresKey()
+{
+    QFile::remove(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
+    data::CashSessionRepository sessions(db);
+    sessions.open(5000);
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("123");
+    product.name = QStringLiteral("Test");
+    product.salePriceCents = 1000;
+    product.costPriceCents = 500;
+    products.save(product);
+
+    network::SyncServer server(db, m_key);
+    server.server().listen(QHostAddress::LocalHost, 0);
+    const quint16 port = server.server().serverPorts().isEmpty() ? 0 : server.server().serverPorts().first();
+    QVERIFY(port != 0);
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl(QStringLiteral("http://127.0.0.1:%1/api/products").arg(port)));
+    QNetworkReply* reply = manager.get(request);
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+    QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 403);
+    reply->deleteLater();
+}
+
+void SyncServerTest::productsGetWithKeyReturnsCatalog()
+{
+    QFile::remove(m_dbPath);
+    data::Database db(m_dbPath, data::DatabaseMode::Server);
+    data::CashSessionRepository sessions(db);
+    sessions.open(5000);
+    data::ProductRepository products(db);
+    core::Product product;
+    product.barcode = QStringLiteral("ABC");
+    product.name = QStringLiteral("لبن");
+    product.salePriceCents = 1200;
+    product.costPriceCents = 900;
+    product.unit = QStringLiteral("وحدة");
+    product.soldByWeight = false;
+    product.piecesPerPackage = 1;
+    product.packageName.clear();
+    const int pid = products.save(product);
+    QVERIFY(pid > 0);
+
+    network::SyncServer server(db, m_key);
+    server.server().listen(QHostAddress::LocalHost, 0);
+    const quint16 port = server.server().serverPorts().isEmpty() ? 0 : server.server().serverPorts().first();
+    QVERIFY(port != 0);
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request(QUrl(QStringLiteral("http://127.0.0.1:%1/api/products").arg(port)));
+    request.setRawHeader("X-Mahali-Key", m_key);
+    QNetworkReply* reply = manager.get(request);
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+    QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200);
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    QVERIFY(doc.isArray());
+    const QJsonArray arr = doc.array();
+    QVERIFY(arr.size() >= 1);
+    bool found = false;
+    for (const QJsonValue& v : arr) {
+        const QJsonObject obj = v.toObject();
+        if (obj.value(QStringLiteral("name")).toString() == QStringLiteral("لبن")) {
+            QCOMPARE(obj.value(QStringLiteral("barcode")).toString(), QStringLiteral("ABC"));
+            QCOMPARE(obj.value(QStringLiteral("salePriceCents")).toVariant().toLongLong(), 1200LL);
+            QCOMPARE(obj.value(QStringLiteral("costPriceCents")).toVariant().toLongLong(), 900LL);
+            QCOMPARE(obj.value(QStringLiteral("soldByWeight")).toBool(), false);
+            QCOMPARE(obj.value(QStringLiteral("piecesPerPackage")).toInt(), 1);
+            found = true;
+            break;
+        }
+    }
+    QVERIFY(found);
+    reply->deleteLater();
 }
 
 QTEST_GUILESS_MAIN(SyncServerTest)

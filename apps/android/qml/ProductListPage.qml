@@ -1,12 +1,23 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 Page {
     id: root
 
-    header: TextField {
-        id: searchField
-        placeholderText: qsTr("Code-barres ou nom…")
+    header: RowLayout {
+        spacing: 8
+
+        TextField {
+            id: searchField
+            Layout.fillWidth: true
+            placeholderText: qsTr("Code-barres ou nom…")
+        }
+
+        Button {
+            text: qsTr("Sync")
+            onClicked: syncDialog.open()
+        }
     }
 
     // Filtering is client-side on purpose: the backend hands over at most a
@@ -96,4 +107,60 @@ Page {
             text: qsTr("Vente — à venir")
         }
     }
+
+    Dialog {
+        id: syncDialog
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2)
+        width: 320
+        modal: true
+        focus: true
+        standardButtons: Dialog.Cancel
+        title: qsTr("Synchronisation")
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+
+            TextField {
+                id: serverIpField
+                Layout.fillWidth: true
+                placeholderText: qsTr("Adresse IP du serveur")
+                text: "192.168.1.100"
+            }
+
+            TextField {
+                id: serverKeyField
+                Layout.fillWidth: true
+                placeholderText: qsTr("Clé de synchronisation")
+                echoMode: TextInput.Password
+            }
+
+            Label {
+                id: syncStatusLabel
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: ""
+            }
+
+            Button {
+                text: qsTr("Sync Now")
+                Layout.fillWidth: true
+                onClicked: {
+                    var url = "http://" + serverIpField.text + ":8080"
+                    backend.syncProducts(url, serverKeyField.text)
+                    syncStatusLabel.text = qsTr("Synchronisation en cours...")
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: backend
+        function onSyncStatusChanged(status) {
+            syncStatusLabel.text = status
+        }
+    }
 }
+
